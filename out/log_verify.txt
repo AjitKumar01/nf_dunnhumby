@@ -1,0 +1,26 @@
+[14] data: 2084 users, 560 items, 56 categories
+[14] A. analytic identities
+/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/14_verify_model.py:49: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
+  r["softmax_rows_sum_to_1_max_error"] = float((p.sum(1) - 1).abs().max())
+[14]   softmax_rows_sum_to_1_max_error: 1.788e-07
+[14]   log_prob_matches_softmax_max_error: 4.768e-07
+[14]   kl_closed_form_error: 0.000e+00
+[14]   elbo_gradient_max_abs_error: 7.516e-07
+[14]   elbo_gradient_max_relative_error: 4.175e-05
+[14] B. degenerate cases
+[14]   intercept-only model reproduces empirical within-category shares: corr 0.99501, mean |error| 0.00606
+[14]   homogeneous price coefficient, category 0: scipy MLE 0.74522 vs nf_torch 0.74213  (relative difference 0.41%)
+[14] C. parameter recovery from simulated choices
+[14]   recovery: price coefficient corr 0.416 (slope 0.622, true mean 0.312 vs fitted 0.339); choice probability corr 0.9487
+[14] C2. does recovery scale with sample size?  (a bug would not)
+[14]   recovery: price coefficient corr 0.207 (slope 0.316, true mean 0.312 vs fitted 0.400); choice probability corr 0.8326
+[14]   recovery: price coefficient corr 0.416 (slope 0.622, true mean 0.312 vs fitted 0.339); choice probability corr 0.9487
+[14]   recovery: price coefficient corr 0.485 (slope 0.747, true mean 0.312 vs fitted 0.328); choice probability corr 0.9796
+[14]    n_choices   price-coef corr   slope   choice-prob corr
+[14]       46,431             0.207   0.316   0.833
+[14]      278,586             0.416   0.622   0.949
+[14]    1,392,930             0.485   0.747   0.980
+[14] D. nesting-coefficient recovery
+[14]   nesting coefficient: true 0.700, recovered 0.585
+[14] wrote out/model_verification.json and figures/verification.png

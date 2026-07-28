@@ -1,0 +1,110 @@
+{
+  "assortment": {
+    "retained_items": 560,
+    "stores_in_sample": 339,
+    "stores_with_at_least_50_trips": 111,
+    "median_items_ever_sold_per_store": 373.0,
+    "median_share_of_catalogue_per_store": 0.6660714285714285
+  },
+  "price_deviation": {
+    "store_week_cells": 27087,
+    "median_store_mean_abs_dev": 0.037346014492753626,
+    "p90_store_mean_abs_dev": 0.06788602557356789
+  },
+  "fit_by_store_price_deviation": [
+    {
+      "band": 1,
+      "loglik_per_purchase": -4.199047565460205,
+      "trips": 1421.0,
+      "purchases": 3332.0,
+      "mean_abs_price_dev": 0.019148446736080963
+    },
+    {
+      "band": 2,
+      "loglik_per_purchase": -4.2514848709106445,
+      "trips": 1421.0,
+      "purchases": 3257.0,
+      "mean_abs_price_dev": 0.03147079634661566
+    },
+    {
+      "band": 3,
+      "loglik_per_purchase": -4.219684600830078,
+      "trips": 1421.0,
+      "purchases": 3604.0,
+      "mean_abs_price_dev": 0.04163286083832781
+    },
+    {
+      "band": 4,
+      "loglik_per_purchase": -4.27960205078125,
+      "trips": 1421.0,
+      "purchases": 3539.0,
+      "mean_abs_price_dev": 0.06605864419541159
+    }
+  ],
+  "fit_gap_low_vs_high_deviation": 0.08055448532104492,
+  "fit_by_store_loyalty": [
+    {
+      "band": 1,
+      "loglik_per_purchase": -4.418248176574707,
+      "trips": 1422.0,
+      "purchases": 3362.0,
+      "primary_store_share": 0.4634682860093649
+    },
+    {
+      "band": 2,
+      "loglik_per_purchase": -4.223735809326172,
+      "trips": 1422.0,
+      "purchases": 3484.0,
+      "primary_store_share": 0.6913993094100592
+    },
+    {
+      "band": 3,
+      "loglik_per_purchase": -4.20468807220459,
+      "trips": 1422.0,
+      "purchases": 3540.0,
+      "primary_store_share": 0.8705355543908893
+    },
+    {
+      "band": 4,
+      "loglik_per_purchase": -4.109581470489502,
+      "trips": 1422.0,
+      "purchases": 3350.0,
+      "primary_store_share": 0.9824393897876406
+    }
+  ],
+  "loyalty_summary": {
+    "mean_primary_store_share": 0.7443865756290736,
+    "median_primary_store_share": 0.7777777777777778,
+    "share_of_households_above_80pct": 0.4587628865979381
+  },
+  "fit_by_store_size": [
+    {
+      "band": 1,
+      "loglik_per_purchase": -4.323024272918701,
+      "trips": 1422.0,
+      "purchases": 3314.0,
+      "store_trips": 294.5028129395218
+    },
+    {
+      "band": 2,
+      "loglik_per_purchase": -4.326971054077148,
+      "trips": 1422.0,
+      "purchases": 3468.0,
+      "store_trips": 453.2151898734177
+    },
+    {
+      "band": 3,
+      "loglik_per_purchase": -4.167693138122559,
+      "trips": 1422.0,
+      "purchases": 3366.0,
+      "store_trips": 560.8931082981716
+    },
+    {
+      "band": 4,
+      "loglik_per_purchase": -4.141707897186279,
+      "trips": 1422.0,
+      "purchases": 3588.0,
+      "store_trips": 858.5541490857946
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Everything the pipeline can regenerate from the raw dunnhumby CSVs.
+# `bash scripts/run_all.sh` rebuilds all of it in ~35 minutes.
+# ---------------------------------------------------------------------------
+
+# Stage 01-04 outputs: cleaned transactions, price panels, model input files.
+data/
+model_input/
+model_input_clean/
+
+# Stage 05-17 outputs.  The bulk artefacts (fitted parameters, the 61 MB C++
+# inner-product dump, the elasticity table) are ignored; the small text results
+# that the markdown reports quote are kept so the repo reads without a rerun.
+out/**
+!out/*.md
+!out/*.csv
+!out/*.json
+!out/log_*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Compiled C++ (run_bemb_loc.sh builds this from the authors' source)
+out/emb
+scripts/emb
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp

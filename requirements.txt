@@ -1,0 +1,12 @@
+# Python 3.11+ (developed and verified on 3.13.4).
+#
+# Lower bounds are the versions the pipeline was verified against, not the
+# oldest that would work.  Nothing here is exotic; a recent scientific Python
+# stack will do.
+
+numpy>=2.0
+pandas>=2.2
+pyarrow>=16.0        # parquet engine for the intermediate panels
+scipy>=1.13          # KS test, t distribution, sparse matrices in the placebo tests
+matplotlib>=3.8      # every figure in figures/
+torch>=2.3           # both model stages (CPU is enough; see RUNNING.md)

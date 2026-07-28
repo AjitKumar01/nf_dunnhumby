@@ -1,0 +1,5 @@
+[15] C++ trajectory: 21 evaluations, 13,736 test instances, best test log-lik -1.6856 at iteration 200
+[15] our test set: 13,736 instances  (C++ reports 13,736)
+[15] ours: best test log-lik -1.7421 at iteration 250
+[15] best-value gap: -0.0565 nats; trajectory correlation 0.964
+[15] wrote out/cpp_crosscheck.json and figures/cpp_crosscheck.png

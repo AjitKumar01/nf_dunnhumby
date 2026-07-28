@@ -1,0 +1,27 @@
+[11] 56 categories, 27,833 trips, 86 pair-weeks
+[11]   5/56 categories fitted
+[11]   10/56 categories fitted
+[11]   15/56 categories fitted
+[11]   20/56 categories fitted
+[11]   25/56 categories fitted
+[11]   30/56 categories fitted
+[11]   35/56 categories fitted
+[11]   40/56 categories fitted
+[11]   45/56 categories fitted
+[11]   50/56 categories fitted
+[11]   55/56 categories fitted
+[11]   56/56 categories fitted
+
+                    categories median_coef mean_coef share_p_below_01 share_p_below_05 share_p_below_01_iid_se mean_se_inflation_from_clustering share_negative_and_sig05 median_corr_delta_with_real median_corr_level_with_real ks_stat_vs_uniform ks_pvalue categories_failing_any_placebo_at_1pct categories_failing_backward_only failing_category_names
+actual (all items)        56.0   -0.496385 -0.527126         0.678571             0.75                    0.75                          1.113615                     0.75                         1.0                         1.0           0.755491       0.0                                    NaN                              NaN                    NaN
+actual (single UPC)       56.0   -0.624261 -0.976377         0.428571         0.517857                0.428571                            1.0473                 0.517857                         1.0                         1.0           0.532825       0.0                                    NaN                              NaN                    NaN
+all items backward        56.0    -0.13719 -0.204562         0.339286         0.428571                0.321429                          1.054445                 0.392857                   -0.000027                    0.493884           0.426566       0.0                                    NaN                              NaN                    NaN
+all items forward         56.0     -0.1245 -0.194047         0.285714            0.375                0.303571                          1.042949                 0.339286                   -0.000048                    0.581724           0.400722       0.0                                    NaN                              NaN                    NaN
+all items random          56.0    0.001799 -0.033627         0.107143         0.160714                0.107143                          1.027927                 0.107143                   -0.000039                    0.116369           0.320979  0.000012                                    NaN                              NaN                    NaN
+single UPC backward       56.0    -0.05584 -0.165709         0.142857         0.196429                0.160714                          1.010748                 0.142857                   -0.000119                    0.276363           0.193218   0.02634                                    NaN                              NaN                    NaN
+single UPC forward        56.0   -0.044515 -0.192012         0.071429         0.142857                0.089286                          1.020252                    0.125                   -0.000145                    0.384271           0.209609  0.012299                                    NaN                              NaN                    NaN
+single UPC random         56.0    0.014036   0.19047         0.071429         0.142857                0.089286                          1.013782                 0.053571                   -0.000116                    0.059708           0.122756  0.339509                                    NaN                              NaN                    NaN
+
+categories failing at least one placebo at 1%: 27 of 56
+  BATH TISSUES, BATTERIES, BERRIES, BLEACH, BREAD, BREAKFAST SWEETS, CHICKEN/POULTRY, CITRUS, COCOA MIXES, DRIED FRUIT, EGGS, FROZEN BREAD/DOUGH, LAUNDRY ADDITIVES, MARGARINES, NEWSPAPER, OLIVES, ORGANICS FRUIT & VEGETABLES, PAPER TOWELS, PICKLE/RELISH/PKLD VEG, POPCORN, POTATOES, PROCESSED, SEAFOOD - FROZEN, SEAFOOD - SHELF STABLE, SHORTENING/OIL, VEGETABLES - ALL OTHERS, WATER - CARBONATED/FLVRD DRINK
+[11] wrote out/placebo_tests_paperspec.csv, out/placebo_summary_paperspec.json, figures/placebo_paperspec.png

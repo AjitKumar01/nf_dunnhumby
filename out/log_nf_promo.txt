@@ -1,0 +1,49 @@
+[05] device: cpu   label: nf_promo   extras: ['display', 'mailer', 'coupon']   input: /Users/ajit/Projects/Causal/nf_dunnhumby/scripts/../model_input
+[05] data: 2084 users, 560 items, 56 categories, 172 sessions, 86 pair-weeks
+[05] stage 1: 46,431 training observations, 1,737 of 6,471 validation observations in price-change weeks
+[05]   it    100  elbo/obs -4.7689  val -1.6904  val(price wks) -1.5122  b  0.607  *
+[05]   it    200  elbo/obs -2.9412  val -1.6148  val(price wks) -1.4718  b  0.575  *
+[05]   it    300  elbo/obs -2.3247  val -1.6128  val(price wks) -1.4726  b  0.564
+[05]   it    400  elbo/obs -2.2377  val -1.6140  val(price wks) -1.4690  b  0.557  *
+[05]   it    500  elbo/obs -2.1484  val -1.6169  val(price wks) -1.4725  b  0.548
+[05]   it    600  elbo/obs -2.1720  val -1.6172  val(price wks) -1.4720  b  0.540
+[05]   it    700  elbo/obs -2.1514  val -1.6235  val(price wks) -1.4753  b  0.535
+[05]   it    800  elbo/obs -2.1483  val -1.6284  val(price wks) -1.4808  b  0.529
+[05]   it    900  elbo/obs -2.1468  val -1.6298  val(price wks) -1.4841  b  0.529
+[05]   it   1000  elbo/obs -2.1682  val -1.6366  val(price wks) -1.4822  b  0.525
+[05]   it   1100  elbo/obs -2.1803  val -1.6358  val(price wks) -1.4899  b  0.522
+[05]   it   1200  elbo/obs -2.1536  val -1.6390  val(price wks) -1.4969  b  0.523
+[05]   it   1300  elbo/obs -2.1643  val -1.6430  val(price wks) -1.5082  b  0.520
+[05]   it   1400  elbo/obs -2.1083  val -1.6405  val(price wks) -1.5040  b  0.519
+[05]   it   1500  elbo/obs -2.1341  val -1.6454  val(price wks) -1.5022  b  0.522
+[05]   it   1600  elbo/obs -2.1236  val -1.6462  val(price wks) -1.5105  b  0.520
+[05]   it   1700  elbo/obs -2.1114  val -1.6438  val(price wks) -1.5058  b  0.520
+[05]   it   1800  elbo/obs -2.1355  val -1.6431  val(price wks) -1.5038  b  0.520
+[05]   it   1900  elbo/obs -2.0892  val -1.6518  val(price wks) -1.5070  b  0.526
+[05]   it   2000  elbo/obs -2.1165  val -1.6504  val(price wks) -1.5099  b  0.523
+[05]   it   2100  elbo/obs -2.0826  val -1.6532  val(price wks) -1.5061  b  0.524
+[05]   it   2200  elbo/obs -2.1032  val -1.6559  val(price wks) -1.5138  b  0.524
+[05]   it   2300  elbo/obs -2.0749  val -1.6530  val(price wks) -1.5121  b  0.530
+[05]   it   2400  elbo/obs -2.0811  val -1.6559  val(price wks) -1.5157  b  0.529
+[05]   it   2500  elbo/obs -2.1038  val -1.6590  val(price wks) -1.5162  b  0.524
+[05]   it   2600  elbo/obs -2.1089  val -1.6558  val(price wks) -1.5123  b  0.527
+[05]   it   2700  elbo/obs -2.1146  val -1.6577  val(price wks) -1.5157  b  0.525
+[05]   it   2800  elbo/obs -2.0819  val -1.6578  val(price wks) -1.5205  b  0.526
+[05]   it   2900  elbo/obs -2.1274  val -1.6621  val(price wks) -1.5147  b  0.528
+[05]   it   3000  elbo/obs -2.1133  val -1.6597  val(price wks) -1.5179  b  0.531
+[05] stage 2: computing inclusive values from the stage-1 posterior means ...
+[05]   inclusive values centred by the household-category mean over all sessions (sd of the remaining variation: 0.2070)
+[05]   IV computed for 27,852 trips x 56 categories
+[05]   it    250  elbo/cell -0.17413  val loglik/cell -0.14790  nest  0.675
+[05]   it    500  elbo/cell -0.16292  val loglik/cell -0.14441  nest  0.707
+[05]   it    750  elbo/cell -0.16265  val loglik/cell -0.14337  nest  0.678
+[05]   it   1000  elbo/cell -0.16076  val loglik/cell -0.14294  nest  0.685
+[05]   it   1250  elbo/cell -0.15896  val loglik/cell -0.14261  nest  0.690
+[05]   it   1500  elbo/cell -0.15761  val loglik/cell -0.14268  nest  0.687
+[05]   it   1750  elbo/cell -0.15732  val loglik/cell -0.14276  nest  0.679
+[05]   it   2000  elbo/cell -0.15899  val loglik/cell -0.14293  nest  0.691
+[05]   it   2250  elbo/cell -0.16064  val loglik/cell -0.14280  nest  0.695
+[05]   it   2500  elbo/cell -0.15591  val loglik/cell -0.14257  nest  0.670
+[05]   it   2750  elbo/cell -0.15803  val loglik/cell -0.14256  nest  0.707
+[05]   it   3000  elbo/cell -0.15597  val loglik/cell -0.14260  nest  0.672
+[05] saved nf_promo_stage1.pt / nf_promo_stage2.pt / nf_promo_iv.pt

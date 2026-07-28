@@ -1,0 +1,23 @@
+[09] model nf on cpu
+[09] household x item elasticities: 1,167,040  median -1.213
+
+Realised Sun->Mon demand change per 1,000 trips, test set (paper Figure 6)
+tercile       most elastic  middle  least elastic
+bucket                                           
+> .25 cut            4.000   3.909          2.515
+.10-.25 cut         -0.403  -1.318          0.337
+.01-.10 cut          3.027  -0.950         -1.435
+no change           -0.641  -0.167         -0.618
+.01-.10 rise        -0.518  -0.626         -2.399
+.10-.25 rise         0.234   1.272         -2.208
+> .25 rise          -3.893  -2.196         -3.520
+
+Purchase rate while holding a coupon, by predicted elasticity tercile
+      tercile  rate_with_coupon  rate_without     lift  cells  lift_pct                        sample
+least elastic           0.00774       0.00766  0.00011 1012.0   1.42146                 all campaigns
+       middle           0.00415       0.00430 -0.00015 1011.0  -3.53210                 all campaigns
+ most elastic           0.00401       0.00394  0.00007 1012.0   1.73315                 all campaigns
+least elastic           0.00667       0.00870 -0.00086  142.0  -9.92053 certain eligibility (TypeB/C)
+       middle           0.00332       0.00341  0.00044  141.0  12.96565 certain eligibility (TypeB/C)
+ most elastic           0.00193       0.00284 -0.00003  142.0  -0.98349 certain eligibility (TypeB/C)
+[09] done

@@ -1,0 +1,72 @@
+[07] device cpu;  extras loaded: ['coupon', 'display', 'mailer']
+[07] evaluating nf ...
+[07] evaluating logit ...
+[07] evaluating nf_nopool ...
+[07] evaluating nf_promo ...
+
+    label  K  Kp  homogeneous  pooled                extras  train_loglik  test_loglik  train_mse  test_mse  event_own_price_change_loglik  event_cross_price_change_loglik  cv_upc  cv_category  slope_upc  slope_category  own_elasticity_median  own_elasticity_sd_across_items  own_elasticity_mean_sd_across_users  nesting_coef_mean  crosscond_same_subclass  crosscond_diff_subclass  crosscond_gap_subclass  crosscond_share_cats_higher_inside_subclass  crosscond_gap_manufacturer  crosscond_share_cats_higher_inside_manufacturer  cross_gap_subclass  cross_share_cats_higher_inside_subclass
+       nf 40  20        False    True                     -       -3.4604      -4.2386     0.9017    0.9377                        -3.9631                          -4.2560  2.2229       1.0255     1.1441          1.1477                -1.1817                          1.1078                               0.6380             1.0037                   0.0804                   0.0824                  0.0022                                       0.5556                      0.0061                                           0.6182             -0.0005                                   0.5111
+    logit 40  20         True    True                     -       -4.6071      -4.7145     0.9791    0.9799                        -4.3250                          -4.7557  0.6505       0.1515     0.8286          0.8744                -1.0979                          1.2754                               0.1858             0.7365                   0.1359                   0.1327                  0.0066                                       0.5778                      0.0163                                           0.6545              0.0021                                   0.5778
+nf_nopool 40  20        False   False                     -       -3.5161      -4.2790     0.9048    0.9373                        -3.9254                          -4.3003  2.6693       1.0582     1.1892          1.1448                -1.2788                          1.2969                               0.3468             0.9694                   0.1063                   0.1077                  0.0128                                       0.6889                      0.0158                                           0.6909              0.0025                                   0.5111
+ nf_promo 40  20        False    True display,mailer,coupon       -3.3897      -4.2420     0.8950    0.9353                        -3.8512                          -4.2637  2.5504       1.1224     1.1163          1.1083                -1.0463                          1.0878                               0.6521             0.7021                   0.0692                   0.0668                  0.0022                                       0.6667                      0.0061                                           0.6727             -0.0002                                   0.6222
+
+per-category ranking (paper Table 2)
+           mean_rank_ll  mean_rank_se  best_ll  best_se
+label                                                  
+logit             3.911         3.929    0.018    0.018
+nf                1.714         2.250    0.446    0.179
+nf_nopool         2.482         2.250    0.179    0.232
+nf_promo          1.893         1.571    0.357    0.571
+
+never-bought-this-UPC deciles, nf (top/bottom lift 31.3x)
+ decile  predicted   actual     n
+      0   0.000103 0.000375 89452
+      1   0.000297 0.000609 89451
+      2   0.000490 0.000756 89451
+      3   0.000701 0.000853 89451
+      4   0.000955 0.001390 89452
+      5   0.001286 0.001519 89451
+      6   0.001757 0.001956 89451
+      7   0.002521 0.002719 89451
+      8   0.004080 0.003726 89451
+      9   0.012726 0.011714 89452
+
+never-bought-this-UPC deciles, logit (top/bottom lift 18.2x)
+ decile  predicted   actual     n
+      0   0.000158 0.000588 89452
+      1   0.000515 0.000681 89451
+      2   0.000873 0.000859 89451
+      3   0.001228 0.001074 89451
+      4   0.001640 0.001435 89452
+      5   0.002155 0.001771 89451
+      6   0.002864 0.002207 89451
+      7   0.003983 0.002538 89451
+      8   0.006229 0.003744 89451
+      9   0.019285 0.010718 89452
+
+never-bought-this-UPC deciles, nf_nopool (top/bottom lift 26.4x)
+ decile  predicted   actual     n
+      0   0.000038 0.000444 89452
+      1   0.000169 0.000630 89451
+      2   0.000340 0.000839 89451
+      3   0.000540 0.000963 89451
+      4   0.000783 0.001245 89452
+      5   0.001097 0.001555 89451
+      6   0.001554 0.001929 89451
+      7   0.002317 0.002555 89451
+      8   0.003932 0.003752 89451
+      9   0.014058 0.011705 89452
+
+never-bought-this-UPC deciles, nf_promo (top/bottom lift 30.3x)
+ decile  predicted   actual     n
+      0   0.000071 0.000389 89452
+      1   0.000229 0.000629 89451
+      2   0.000396 0.000720 89451
+      3   0.000584 0.000900 89451
+      4   0.000812 0.001332 89452
+      5   0.001114 0.001462 89451
+      6   0.001549 0.002062 89451
+      7   0.002269 0.002434 89451
+      8   0.003764 0.003882 89451
+      9   0.012659 0.011807 89452
+[07] wrote out/evaluation.json, evaluation_summary.csv, evaluation_by_category.csv

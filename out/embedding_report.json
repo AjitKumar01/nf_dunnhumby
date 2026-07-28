@@ -1,0 +1,171 @@
+{
+  "label": "nf",
+  "K": 40,
+  "Kp": 20,
+  "beta_neighbours": [
+    {
+      "field": "SUB_COMMODITY_DESC",
+      "within_category": true,
+      "k": 1,
+      "items": 560,
+      "neighbour_agreement": 0.5928571428571429,
+      "chance_agreement": 0.48452380952380947,
+      "lift": 1.2235872235872238,
+      "z": 7.095098697827603,
+      "p_value": 1.2925920391538618e-12
+    },
+    {
+      "field": "SUB_COMMODITY_DESC",
+      "within_category": true,
+      "k": 2,
+      "items": 560,
+      "neighbour_agreement": 0.5571428571428572,
+      "chance_agreement": 0.48452380952380947,
+      "lift": 1.14987714987715,
+      "z": 6.7260777263236555,
+      "p_value": 1.7429748374918305e-11
+    },
+    {
+      "field": "BRAND",
+      "within_category": true,
+      "k": 2,
+      "items": 560,
+      "neighbour_agreement": 0.71875,
+      "chance_agreement": 0.6488095238095237,
+      "lift": 1.1077981651376148,
+      "z": 5.9245789380529335,
+      "p_value": 3.1309858508238943e-09
+    },
+    {
+      "field": "MANUFACTURER",
+      "within_category": true,
+      "k": 2,
+      "items": 560,
+      "neighbour_agreement": 0.44642857142857145,
+      "chance_agreement": 0.36269841269841274,
+      "lift": 1.2308533916849014,
+      "z": 6.974492097378055,
+      "p_value": 3.0697779920034814e-12
+    },
+    {
+      "field": "COMMODITY_DESC",
+      "within_category": false,
+      "k": 5,
+      "items": 560,
+      "neighbour_agreement": 0.025000000000000005,
+      "chance_agreement": 0.016100178890876563,
+      "lift": 1.5527777777777783,
+      "z": 3.741704629624519,
+      "p_value": 0.00018277626322981018
+    }
+  ],
+  "lambda_neighbours": [
+    {
+      "field": "SUB_COMMODITY_DESC",
+      "within_category": true,
+      "k": 2,
+      "items": 560,
+      "neighbour_agreement": 0.5303571428571429,
+      "chance_agreement": 0.48452380952380947,
+      "lift": 1.0945945945945947,
+      "z": 4.245147417433784,
+      "p_value": 2.1844975494608952e-05
+    },
+    {
+      "field": "BRAND",
+      "within_category": true,
+      "k": 2,
+      "items": 560,
+      "neighbour_agreement": 0.6446428571428572,
+      "chance_agreement": 0.6488095238095237,
+      "lift": 0.9935779816513763,
+      "z": -0.35295363886271686,
+      "p_value": 0.7241231972880999
+    }
+  ],
+  "posterior": {
+    "theta": {
+      "prior_sd": 0.3976353643835253,
+      "mean_posterior_sd": 0.2981456518173218,
+      "posterior_sd_over_prior_sd": 0.7497966289520264,
+      "mean_abs_posterior_mean": 0.10309984534978867,
+      "signal_to_noise": 0.3458036184310913,
+      "rows_effectively_at_prior": 0.0
+    },
+    "gamma": {
+      "prior_sd": 0.334370152488211,
+      "mean_posterior_sd": 0.24177978932857513,
+      "posterior_sd_over_prior_sd": 0.7230901718139648,
+      "mean_abs_posterior_mean": 0.17802244424819946,
+      "signal_to_noise": 0.7362999320030212,
+      "rows_effectively_at_prior": 0.0
+    },
+    "beta": {
+      "prior_sd": 0.3976353643835253,
+      "mean_posterior_sd": 0.2636723816394806,
+      "posterior_sd_over_prior_sd": 0.6631008982658386,
+      "mean_abs_posterior_mean": 0.14623606204986572,
+      "signal_to_noise": 0.5546127557754517,
+      "rows_effectively_at_prior": 0.0
+    },
+    "lam": {
+      "prior_sd": 0.334370152488211,
+      "mean_posterior_sd": 0.17827200889587402,
+      "posterior_sd_over_prior_sd": 0.5331576466560364,
+      "mean_abs_posterior_mean": 0.20834991335868835,
+      "signal_to_noise": 1.1687191724777222,
+      "rows_effectively_at_prior": 0.0
+    }
+  },
+  "personalisation": {
+    "corr_obs_theta_norm": 0.8089153510121786,
+    "corr_obs_gamma_norm": 0.39787794420923134,
+    "households_with_training_data": 2084,
+    "households_total": 2084,
+    "median_training_observations_per_household": 15.0
+  },
+  "personalisation_by_quintile": [
+    {
+      "quintile": 0,
+      "observations": 2.551558752997602,
+      "theta_norm": 0.3469621539115906,
+      "gamma_norm": 0.7698323726654053,
+      "households": 417
+    },
+    {
+      "quintile": 1,
+      "observations": 7.503597122302159,
+      "theta_norm": 0.6100412011146545,
+      "gamma_norm": 0.8467413783073425,
+      "households": 417
+    },
+    {
+      "quintile": 2,
+      "observations": 14.572115384615385,
+      "theta_norm": 0.7837597131729126,
+      "gamma_norm": 0.9099494218826294,
+      "households": 416
+    },
+    {
+      "quintile": 3,
+      "observations": 26.60431654676259,
+      "theta_norm": 0.9812710881233215,
+      "gamma_norm": 0.9689392447471619,
+      "households": 417
+    },
+    {
+      "quintile": 4,
+      "observations": 60.148681055155876,
+      "theta_norm": 1.297182559967041,
+      "gamma_norm": 1.024931788444519,
+      "households": 417
+    }
+  ],
+  "ablation": {
+    "full_model": -4.238594637267036,
+    "no theta (latent taste)": -4.3777437026790915,
+    "no gamma (latent price sensitivity)": -4.459842635228596,
+    "no rho (demographics)": -4.24384316303873,
+    "no household latents at all": -4.675375439083431
+  }
+}

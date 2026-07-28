@@ -1,0 +1,51 @@
+[02] pair-weeks with both days present: 101
+[02] flagged holiday/anomalous weeks: [1, 2, 3, 46, 68, 72, 92, 99, 102]
+[02] pair-weeks dropped for holidays: 14
+[02] retained pair-weeks: 87   sessions (days): 174
+[02] households with 20-300 trips: 2137
+[02] dropping 1 pair-week(s) containing a near-empty day (<50 baskets chain-wide): days [278]
+[02] retained pair-weeks: 86   sessions (days): 172
+[02] sample lines: 647,233   trips: 50,231   households: 2,134
+[02] random-weight screen: 2,142 of 30,452 priced items have modal price share < 0.6 and are excluded
+[02] categories before filters: 285
+[02] price panel: 0.492 of item-weeks directly observed
+[02] categories retained: 56
+[02] 
+drop_reason
+fewer than 5 items or <200 category-trips                                                               137
+unit demand violated (>15% multi-item or >10% multi-top-item trips)                                      79
+KEPT                                                                                                     56
+top 15% most seasonal (Herfindahl of daily demand)                                                       10
+insufficient price variation (<2 items changing, or no item with >=10% of pair-weeks moving >=$0.10)      3
+[02] items retained: 560 across 56 categories
+[02] category-purchase observations (product-choice stage): 66,638
+[02] wrote sample_trips / sample_choices / items / categories / price_panel / sessions / filter_audit
+[03] users 2084  items 560  categories 56  sessions 172  observations 66,638
+[03] moved 139 observations into train so every user/item is represented
+[03] split
+train         46431
+test          13736
+validation     6471
+[03] wrote train.tsv  (46,431 lines)
+[03] wrote validation.tsv  (6,471 lines)
+[03] wrote test.tsv  (13,736 lines)
+[03] wrote item_sess_price.tsv  (96,320 lines)
+[03] wrote itemGroup.tsv  (560 lines)
+[03] wrote sess_days.tsv  (172 lines)
+[03] wrote obsUser.tsv  (2,084 lines)
+[03] obsUser columns (UC=9): ['age', 'income', 'hh_size', 'hh_comp', 'kids', 'married', 'single', 'homeowner', 'has_demo']
+[03] wrote obsItem.tsv  (560 lines)
+[03] obsItem columns (IC=4): ['private_label', 'size_z', 'size_missing', 'mfr_breadth']
+[03] wrote userGroup.tsv  (2,084 lines)
+[03] counterfactual events: own-price 8,087 item-pairweeks, cross-price 32,446
+[03] done -> /Users/ajit/Projects/Causal/nf_dunnhumby/scripts/../model_input
+[04] streaming causal_data.csv (36.8M rows) ...
+[04] causal_data rows for retained items: 511,898
+[04] promoted item-weeks: 24,823  mean display 0.103  mean mailer 0.112
+[04] wrote item_sess_display.tsv (96,320 lines);  0.441 of item-sessions promoted
+[04] wrote item_sess_mailer.tsv (96,320 lines);  0.055 of item-sessions promoted
+[04] coupon rows covering retained items: 1,175 over 23 campaigns
+[04] household x product x campaign eligibility rows: 941,899
+[04] wrote user_item_sess_coupon.tsv (941,899 intervals covering 12,426,792 user-item-session cells; 1516 households, 363 items)
+[04] wrote coupon_campaigns.npz (23 campaigns, 23 active inside the retained sessions)
+[04] wrote redemptions.csv (25,821 household-coupon-product redemptions on retained items)

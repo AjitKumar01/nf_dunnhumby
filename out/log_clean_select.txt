@@ -1,0 +1,24 @@
+[02] pair-weeks with both days present: 101
+[02] flagged holiday/anomalous weeks: [1, 2, 3, 46, 68, 72, 92, 99, 102]
+[02] pair-weeks dropped for holidays: 14
+[02] retained pair-weeks: 87   sessions (days): 174
+[02] households with 20-300 trips: 2137
+[02] dropping 1 pair-week(s) containing a near-empty day (<50 baskets chain-wide): days [278]
+[02] retained pair-weeks: 86   sessions (days): 172
+[02] sample lines: 647,233   trips: 50,231   households: 2,134
+[02] random-weight screen: 2,142 of 30,452 priced items have modal price share < 0.6 and are excluded
+[02] categories before filters: 285
+[02] price panel: 0.492 of item-weeks directly observed
+[02] dropped 10 categories failing the 'random' placebo rule
+[02] categories retained: 46
+[02] 
+drop_reason
+fewer than 5 items or <200 category-trips                                                               137
+unit demand violated (>15% multi-item or >10% multi-top-item trips)                                      79
+KEPT                                                                                                     46
+fails the price placebo test (random)                                                                    10
+top 15% most seasonal (Herfindahl of daily demand)                                                       10
+insufficient price variation (<2 items changing, or no item with >=10% of pair-weeks moving >=$0.10)      3
+[02] items retained: 460 across 46 categories
+[02] category-purchase observations (product-choice stage): 54,104
+[02] wrote sample_trips / sample_choices / items / categories / price_panel / sessions / filter_audit
