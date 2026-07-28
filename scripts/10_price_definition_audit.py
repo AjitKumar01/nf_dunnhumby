@@ -9,9 +9,17 @@ price the model sees is a construction and has to be defended.  This script
   * shows that the guide's two named formulas are inconsistent with its own worked
     examples, and which of the two the examples support,
   * compares four candidate price definitions on how well each behaves like a
-    *posted shelf price* -- concentration at a modal value among shoppers facing the
-    same shelf on the same day,
+    *posted shelf price* -- whether it takes a single value among shoppers facing
+    the same shelf,
   * measures how much each discount actually moves the number.
+
+The decisive test has to condition on the store.  An earlier version of this script
+measured concentration at product x DAY, pooled across all 561 stores; genuine
+cross-store price differences then swamp the within-shelf dispersion and the four
+definitions come out within 0.01 of each other (B 0.674 vs C 0.665), which is not
+enough to choose between them.  Conditioning on the store separates them cleanly:
+within a product x store x week the regular price C takes a single value in 99.1%
+of cells and the loyalty price B in only 92.9%.
 
 Writes out/price_audit.json and figures/price_definitions.png.
 """
@@ -44,10 +52,10 @@ DEFS = {
     "D_customer_paid": lambda d: (d.SALES_VALUE + d.COUPON_DISC) / d.QUANTITY,
 }
 LABELS = {
-    "A_sales_value": "A  SALES_VALUE / Q\n(retailer receipts)",
-    "B_loyalty_shelf": "B  (SALES_VALUE - COUPON_MATCH) / Q\n(posted loyalty price)",
-    "C_regular_shelf": "C  (SALES_VALUE - RETAIL_DISC\n     - COUPON_MATCH) / Q  (regular shelf)",
-    "D_customer_paid": "D  (SALES_VALUE + COUPON_DISC) / Q\n(what the shopper paid)",
+    "A_sales_value": "A  SALES_VALUE / Q\n(retailer receipts; no column)",
+    "B_loyalty_shelf": "B  (SALES_VALUE - COUPON_MATCH) / Q\nloyalty_price -> unit_price",
+    "C_regular_shelf": "C  (SALES_VALUE - RETAIL_DISC\n     - COUPON_MATCH) / Q -> base_price",
+    "D_customer_paid": "D  (SALES_VALUE + COUPON_DISC) / Q\npaid_price (line level only)",
 }
 
 
@@ -123,6 +131,52 @@ def main():
     # discount".  With discounts stored negative the two labels are swapped; the
     # worked examples are the authority.
     r["guide_formula_labels_consistent_with_examples"] = False
+
+    # ------------------------------------------- the decisive test: posted price
+    # A posted price is one number per shelf.  Measure, for each candidate, the
+    # share of product x store x week cells in which it takes a single cent value
+    # among single-unit buyers.  Restricted to the retained catalogue: random-weight
+    # produce and service-counter meat have a continuous unit price by construction
+    # and would drag every definition down equally (see 02_select_sample).
+    items_csv = os.path.join(HERE, "..", "model_input", "id_maps", "items.csv")
+    retained = set(pd.read_csv(items_csv).PRODUCT_ID) if os.path.exists(items_csv) else None
+    raw = pd.read_csv(RAW + "transaction_data.csv")
+    raw = raw[(raw.QUANTITY == 1) & (raw.SALES_VALUE > 0)].copy()
+    if retained:
+        raw = raw[raw.PRODUCT_ID.isin(retained)]
+    for k, f in DEFS.items():
+        raw[k] = f(raw)
+    cell = ["PRODUCT_ID", "STORE_ID", "WEEK_NO"]
+    g = raw.groupby(cell)
+    n = g.PRODUCT_ID.transform("size")
+    dense = raw[n >= 2]
+    gg = dense.groupby(cell)
+    post = {"cells": int(gg.ngroups), "lines": int(len(dense)),
+            "restricted_to_retained_catalogue": bool(retained)}
+    for k in DEFS:
+        post[k] = float((gg[k].apply(lambda v: v.round(2).nunique()) == 1).mean())
+    r["posted_price_single_valued_within_store_week"] = post
+    log(f"posted-price test on {post['cells']:,} product x store x week cells "
+        f"({post['lines']:,} single-unit lines):")
+    for k in DEFS:
+        log(f"  {k:>16}: single-valued in {post[k]:.4f} of cells")
+
+    # Is the residual variation in the loyalty price a timed promotion, or is it
+    # household specific?  If it were a promotion that started mid-week, every
+    # shopper on a given day would still face the same number.  Count the cells where
+    # the loyalty discount is switched on for some shoppers and off for others.
+    on = (dense.RETAIL_DISC < 0).astype(int)
+    share_on = on.groupby([dense[c] for c in cell]).transform("mean")
+    r["loyalty_discount_uniformity"] = {
+        "cells_all_discounted": float((share_on == 1).mean()),
+        "cells_none_discounted": float((share_on == 0).mean()),
+        "cells_mixed": float(((share_on > 0) & (share_on < 1)).mean()),
+    }
+    lu = r["loyalty_discount_uniformity"]
+    log(f"loyalty discount within a product x store x week: all shoppers "
+        f"{lu['cells_all_discounted']:.4f}, no shoppers {lu['cells_none_discounted']:.4f}, "
+        f"mixed {lu['cells_mixed']:.4f}")
+    del raw, dense
 
     # --------------------------------------------------- candidate comparison
     tx = tx[(tx.QUANTITY > 0) & (tx.SALES_VALUE > 0) & (tx.QUANTITY <= 30)].copy()
@@ -284,32 +338,38 @@ def main():
 
     keys = list(DEFS)
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.2))
+    # Left: the decisive test -- does the candidate take one value per shelf?
     ax = axes[0]
-    vals = [conc[k] for k in keys]
-    colors = ["#9aa5b1" if k != "B_loyalty_shelf" else "#2d6cdf" for k in keys]
+    vals = [post[k] for k in keys]
+    colors = ["#9aa5b1" if k != "C_regular_shelf" else "#2d6cdf" for k in keys]
     bars = ax.barh(range(len(keys)), vals, color=colors)
     ax.set_yticks(range(len(keys)))
     ax.set_yticklabels([LABELS[k] for k in keys], fontsize=8)
     ax.invert_yaxis()
-    ax.set_xlabel("mean share of buyers at the modal cent value")
-    ax.set_title("Which construction behaves like a posted shelf price?\n"
-                 "single-unit purchases, product-days with $\\geq$8 buyers", fontsize=10)
-    ax.set_xlim(0, 1)
+    ax.set_xlabel("share of product $\\times$ store $\\times$ week cells with a single value")
+    ax.set_title("Which construction is a posted price?\n"
+                 f"conditioning on the store; {post['cells']:,} cells, "
+                 "$\\geq$2 single-unit buyers", fontsize=10)
+    ax.set_xlim(0, 1.05)
     for b, v in zip(bars, vals):
         ax.text(v + 0.012, b.get_y() + b.get_height() / 2, f"{v:.3f}",
                 va="center", fontsize=9)
     ax.grid(axis="x", alpha=0.3)
 
+    # Right: the same question without conditioning on the store -- the test that
+    # cannot discriminate, kept so the difference between the two is visible.
     ax = axes[1]
-    vals = [disp[k] for k in keys]
-    bars = ax.barh(range(len(keys)), vals, color=colors)
+    vals = [conc[k] for k in keys]
+    bars = ax.barh(range(len(keys)), vals, color="#9aa5b1")
     ax.set_yticks(range(len(keys)))
     ax.set_yticklabels([])
     ax.invert_yaxis()
-    ax.set_xlabel("mean |unit price $-$ product-day median|  (\\$)")
-    ax.set_title("Dispersion among shoppers facing the same shelf", fontsize=10)
+    ax.set_xlim(0, 1.05)
+    ax.set_xlabel("mean share of buyers at the modal cent value")
+    ax.set_title("Same question, pooled across 561 stores:\n"
+                 "cross-store price differences hide the answer", fontsize=10)
     for b, v in zip(bars, vals):
-        ax.text(v + max(vals) * 0.02, b.get_y() + b.get_height() / 2, f"${v:.3f}",
+        ax.text(v + 0.012, b.get_y() + b.get_height() / 2, f"{v:.3f}",
                 va="center", fontsize=9)
     ax.grid(axis="x", alpha=0.3)
 

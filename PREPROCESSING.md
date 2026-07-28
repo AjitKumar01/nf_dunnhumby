@@ -38,8 +38,10 @@ The three discount columns mean genuinely different things:
 | `COUPON_DISC` | the manufacturer's own coupon, which the manufacturer later repays the store | 1.23% of lines | 37.5% of what the shopper paid |
 
 All three are stored as **negative numbers**. So *subtracting* one of them **adds the
-money back on**. (Six lines out of 2.6 million have a positive value — evidently
-returns; they get dropped anyway.)
+money back on**. Six lines out of 2.6 million have a positive value; four are float
+noise at ~1e-16, and the other two are genuine sign inversions (`SALES_VALUE` $7.98
+with `RETAIL_DISC` **+**$3.99, and $0.51 with **+**$0.26). Both of the real ones would
+enter the price panel as a 50% price cut that never happened, so all six are dropped.
 
 ### The user guide's formulas are labelled the wrong way round
 
@@ -66,16 +68,28 @@ the shipped data, not an interpretation of the PDF.
 Taking the worked examples as authoritative:
 
 ```
-full price, no loyalty card = (SALES_VALUE − RETAIL_DISC − COUPON_MATCH_DISC) / QUANTITY
-shelf price for card holders = (SALES_VALUE − COUPON_MATCH_DISC) / QUANTITY   ← we use this
-what the shopper handed over = (SALES_VALUE + COUPON_DISC) / QUANTITY
+base_price    = (SALES_VALUE − RETAIL_DISC − COUPON_MATCH_DISC) / QUANTITY
+                the regular posted price, before any discount — the cost the
+                retailer bears.  This is the true posted price (§ below).
+loyalty_price = (SALES_VALUE − COUPON_MATCH_DISC) / QUANTITY
+                what a card holder faces, before their own coupons.
+                → becomes `unit_price`, the column the model consumes.
+paid_price    = (SALES_VALUE + COUPON_DISC) / QUANTITY
+                what the shopper actually handed over.  Household-specific.
 ```
+
+These are the three columns `01_build_base.py` writes, and they reproduce both of the
+guide's worked examples exactly (line 2: base $1.67, loyalty $1.00; line 3: outlay
+$2.34 on `SALES_VALUE` $2.89). The ordering `base ≥ loyalty ≥ paid` holds on 100% of
+lines.
 
 ### Why each discount is treated the way it is
 
-**`RETAIL_DISC` stays subtracted out** — i.e. we use the sale price, not the full price.
-Every household in this panel carries a loyalty card. Adding the discount back would
-model shoppers as facing a price that literally none of them paid.
+**`RETAIL_DISC` stays subtracted out** — i.e. the model's price is the sale price, not
+the full price. Every household in this panel carries a loyalty card, so adding the
+discount back would model shoppers as facing a price that literally none of them paid.
+It *is* computed and kept as `base_price`, both because it is the cleanest posted price
+in the file and because promotion depth is measured against it.
 
 **`COUPON_MATCH_DISC` gets added back.** This discount fires only because one particular
 shopper walked in holding a manufacturer's coupon. It is not on the shelf tag. Leaving
@@ -94,54 +108,87 @@ A shelf tag is the same for everyone buying that product that day. So the right 
 definition should be the one where shoppers **agree** most — where most of them are
 recorded at the same number.
 
-The test: take only single-unit purchases (so a "2 for $3" deal cannot explain
-disagreement), on product-days where at least 8 different people bought — 10,172
-product-days, 138,429 lines. Then ask what fraction of buyers sit at the single most
-common price to the cent.
+The test has to **condition on the store**. Take only single-unit purchases (so a
+"2 for $3" deal cannot explain disagreement), only the retained catalogue (§4 — scale-
+weighed produce has a continuous "unit price" by construction and would drag every
+candidate down equally), and ask: within one product, in one store, in one week, does
+the formula return a *single* number? A posted price must.
 
 ![price definitions](figures/price_definitions.png)
 
-**Reading the figure.** Four candidate formulas, left bar chart: how often buyers agree
-on the price (higher = more like a real shelf tag). Right chart: how far a typical
-buyer sits from that day's middle price (lower is better). The blue bar is the
-definition we use.
+**Reading the figure.** Left: the decisive test, on 18,017 product × store × week cells
+covering 39,943 lines. Right: the same question asked without conditioning on the
+store, which is what an earlier version of this audit did — pooled across 561 stores,
+genuine cross-store price differences swamp the within-shelf dispersion and all four
+candidates land within 0.01 of each other, which cannot settle anything.
 
-| definition | buyers agreeing on the price | typical distance from the day's middle price |
+| definition | single-valued within product × store × week | pooled across stores |
 |---|---|---|
-| A `SALES_VALUE / Q` | 0.6742 | $0.1897 |
-| **B `(SALES_VALUE − COUPON_MATCH) / Q`** | **0.6744** | **$0.1897** |
-| C `(SALES_VALUE − RETAIL_DISC − COUPON_MATCH) / Q` | 0.6645 | $0.2294 |
-| D `(SALES_VALUE + COUPON_DISC) / Q` | 0.6732 | $0.1916 |
+| A `SALES_VALUE / Q` | 0.9256 | 0.674 |
+| B `(SALES_VALUE − COUPON_MATCH) / Q` | 0.9288 | 0.674 |
+| **C `(SALES_VALUE − RETAIL_DISC − COUPON_MATCH) / Q`** | **0.9910** | 0.665 |
+| D `(SALES_VALUE + COUPON_DISC) / Q` | 0.9240 | 0.673 |
 
-C — the full, non-loyalty price — is clearly worst. Adding the loyalty discount back
-makes buyers *disagree* 21% more, because the discount is a promotion that not every
-product-day has. That rules it out.
+**C is the posted price.** The regular shelf price takes one value in 99.1% of cells;
+the loyalty price in only 92.9%. Since C is constant within the cell, *all* of B's
+dispersion is `RETAIL_DISC` dispersion — the loyalty discount is not identical across
+shoppers buying the same item in the same store in the same week. In 4.4% of cells it
+is switched on for some shoppers and off for others, and 18% of households appear on
+both sides of that split. Basket size does not explain it (1.11 lines vs 1.05), so it
+is not a mix-and-match mechanic.
 
-A and B look nearly identical, but only because the coupon-match discount fires on
-0.68% of lines and is drowned out in the average. Zooming in on exactly those lines
-settles it. Take product-days where *some* shoppers used a coupon match and others
-didn't, and ask how far the coupon users sit from the normal price that day:
+A and B differ only on the 0.68% of lines where the coupon match fires, so the average
+cannot separate them. Zooming in on exactly those lines does. Take product-days where
+*some* shoppers used a coupon match and others didn't, and ask how far the coupon users
+sit from the normal price that day:
 
 | definition | gap for shoppers with a coupon match | gap for everyone else |
 |---|---|---|
 | A (leaves the match in) | **−$0.357** | −$0.001 |
 | B (adds the match back) | **$0.000** | −$0.001 |
 
-Definition B puts coupon users **exactly on the shelf price**. That confirms both that
-`SALES_VALUE` really is net of the coupon match, and that adding it back is correct.
+Adding the match back puts coupon users **exactly on the shelf price**, confirming that
+`SALES_VALUE` really is net of it. The mirror test on `COUPON_DISC`: leaving it alone
+keeps those shoppers on the shelf price (−$0.004), while subtracting it drops them
+**$1.73 below** it. So `COUPON_DISC` must not enter a shelf price.
 
-Running the mirror test on `COUPON_DISC`: leaving it alone keeps those shoppers on the
-shelf price (−$0.004), while subtracting it drops them **$1.73 below** it. So
-`COUPON_DISC` must *not* go into the price. Both decisions are now evidence-based
-rather than a reading of an ambiguous manual.
+### So why does the model still use B?
 
-### What is left unexplained
+Because C is the price a *non-cardholder* would pay, and there are none — this is a
+loyalty panel, every household in it carries a card. The price actually faced at the
+shelf is B. Choosing C would also discard two thirds of the identifying variation:
 
-Even with the right formula, buyers agree on the price only ~67% of the time.
-`RETAIL_DISC` is identical for all single-unit buyers on just 50% of product-days. Some
-of that is different stores charging different prices — §3 measures that. Some is
-multi-buy mechanics we cannot see. The daily median price used downstream is a robust
-summary that shrugs off both.
+| | week-to-week price change rate | mean \|Δlog p\| when it moves | within-item CV |
+|---|---|---|---|
+| B loyalty price | 23.9% | 0.234 | 0.125 |
+| C regular price | 7.5% | 0.146 | 0.050 |
+
+Most of that gap is real: in 95.6% of product × store × week cells the loyalty discount
+is either on for everyone or off for everyone, i.e. a genuine promotion. Only the 4.4%
+residue is shopper-specific.
+
+`01_build_base.py` therefore materialises all three — `base_price` (C), `loyalty_price`
+(B), `paid_price` (D) — and `unit_price`, the column the model consumes, is B by
+default. `NF_PRICE_BASIS=base` switches it to C as a sensitivity check.
+
+`paid_price` is deliberately **line-level only** and never becomes a session price: a
+manufacturer coupon is issued to one household, and on 21% of coupon lines it takes the
+price to **zero or below**, which no choice model can consume. It is the right number
+for household outlay, though, which is why `trips.parquet` now carries `spend_paid`
+alongside `spend` — the two differ by 0.43% of turnover overall but up to 8.6% for an
+individual household.
+
+### The cell price is a mode, not a median
+
+A posted price is a single number, not a central tendency. Since it takes one value in
+99.1% of cells, the right estimator is the **mode**, which recovers it exactly; the
+median only lands near it once the shopper-specific part of `RETAIL_DISC` is mixed in.
+The two disagree by more than a cent on 2.8% of chain-week cells, by up to $4.49.
+
+One further correction: 2 lines carry a *positive* discount. One is float noise, but
+the other (`SALES_VALUE` $7.98, `RETAIL_DISC` **+**$3.99) inverts the sign and yields a
+base price half what was paid — entering the panel as a 50% price cut that never
+happened. Both are now dropped.
 
 ---
 
@@ -381,7 +428,7 @@ how far left both distributions sit.
 | items (10 per category) | 560 | 1,263 |
 | trips | 49,729 | 100,504 |
 | sessions | 172 days (86 pair-weeks) | ~176 days |
-| observed category purchases | 66,638 | 455,445 |
+| observed category purchases | 66,637 | 455,445 |
 | how often a category is bought, per trip | 2.3% | 3.7% |
 | households with demographics on file | 37% | all of them |
 
@@ -488,16 +535,16 @@ than it is.
 categories. A p-value is the chance of seeing an effect this big if there were really
 no effect — so under a genuine fake, these bars should be flat at the dashed line.
 *Bottom row*: the estimated price effects themselves. Red is the real price data, blue
-is the fakes. The real data (far left) piles up at p ≈ 0 and centres at −0.61; a
+is the fakes. The real data (far left) piles up at p ≈ 0 and centres at −0.59; a
 working fake should look like the fourth panel, centred on zero.
 
 | price series | typical price effect | categories significant at 1% | how much of the real price *level* survives in the fake |
 |---|---|---|---|
-| **real prices** | **−0.614** | **75.0%** | 1.00 |
-| all items, forward | −0.141 | 32.1% | 0.58 |
-| all items, backward | −0.164 | 35.7% | 0.49 |
-| **all items, random** | **+0.007** | **12.5%** | 0.12 |
-| single item, random | −0.056 | 10.7% | 0.06 |
+| **real prices** | **−0.586** | **71.4%** | 1.00 |
+| all items, forward | −0.191 | 30.4% | 0.58 |
+| all items, backward | −0.188 | 33.9% | 0.52 |
+| **all items, random** | **−0.117** | **10.7%** | 0.14 |
+| single item, random | −0.059 | 5.4% | 0.08 |
 
 Clustering by household inflated the standard errors by only 1.0–1.1×, so that is not
 what is driving anything below.
@@ -511,15 +558,18 @@ what is driving anything below.
    their "13 of 123 categories fail" is not the clean measure it appears to be.
 
 2. **The random fake is the real test, and the design passes it.** It is the only rule
-   that genuinely breaks the link with the real price path (correlation 0.12). Under it,
-   the estimated price effect **collapses from −0.614 to +0.007** — essentially zero.
-   Our Sunday/Monday window is not manufacturing price effects out of thin air.
+   that genuinely breaks the link with the real price path (correlation 0.14). Under it,
+   the estimated price effect **collapses from −0.586 to −0.117** — a fifth of the real
+   size, and with 1/7th as many categories significant. Our Sunday/Monday window is not
+   manufacturing price effects out of thin air.
 
 3. **But it does not pass cleanly.** Under a genuine fake, 1% of categories should be
-   significant at the 1% level. **12.5% are.** Roughly one category in eight has prices
+   significant at the 1% level. **10.7% are.** Roughly one category in nine has prices
    and demand moving together for reasons the week and weekday controls don't absorb.
+   (The residue is not exactly zero either, at −0.117; on the stricter single-item
+   version of the same fake it falls to −0.059 with 5.4% significant.)
 
-Overall: **31 of 56 categories fail at least one of the six fakes; 10 fail the clean
+Overall: **34 of 56 categories fail at least one of the six fakes; 7 fail the clean
 random one.** The paper reported 13 of 123. The identification here is genuinely
 weaker — which is what you would expect when prices are averaged across 561 stores and
 the comparison days are Sunday and Monday rather than two quiet mid-week days.
@@ -527,7 +577,7 @@ the comparison days are Sunday and Monday rather than two quiet mid-week days.
 ### What was done about it
 
 `13_placebo_followup.py` writes a verdict for every category to
-`out/placebo_category_status.csv`. 25 categories pass every fake; 46 pass the random
+`out/placebo_category_status.csv`. 22 categories pass every fake; 49 pass the random
 one. `02_select_sample.py --exclude-placebo-failures` rebuilds the sample without the
 failures.
 

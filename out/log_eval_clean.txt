@@ -3,38 +3,38 @@
 [07] evaluating logit_clean ...
 
       label  K  Kp  homogeneous  pooled extras  train_loglik  test_loglik  train_mse  test_mse  event_own_price_change_loglik  event_cross_price_change_loglik  cv_upc  cv_category  slope_upc  slope_category  own_elasticity_median  own_elasticity_sd_across_items  own_elasticity_mean_sd_across_users  nesting_coef_mean  crosscond_same_subclass  crosscond_diff_subclass  crosscond_gap_subclass  crosscond_share_cats_higher_inside_subclass  crosscond_gap_manufacturer  crosscond_share_cats_higher_inside_manufacturer  cross_gap_subclass  cross_share_cats_higher_inside_subclass
-   nf_clean 40  20        False    True      -       -3.2992      -4.1962     0.8887    0.9307                        -4.0370                          -4.2296  2.7186       1.0817     1.2254          1.2170                -1.1862                          1.2348                               0.7865             0.9284                   0.0780                   0.0814                  0.0035                                       0.6286                      0.0079                                           0.6444             -0.0008                                   0.5429
-logit_clean 40  20         True    True      -       -4.5166      -4.6143     0.9771    0.9779                        -4.3345                          -4.6567  0.6785       0.1435     0.8563          0.8656                -1.0736                          1.2935                               0.1952             0.5235                   0.1369                   0.1352                  0.0029                                       0.5714                      0.0164                                           0.6889              0.0016                                   0.5714
+   nf_clean 40  20        False    True      -       -3.2919      -4.2998     0.8900    0.9343                        -3.9696                          -4.3546  3.0494       1.1064     1.1647          1.1790                -1.0779                          1.2057                               0.8526             0.8776                   0.0848                   0.0846                  0.0060                                       0.6154                      0.0145                                           0.7500              0.0015                                   0.4615
+logit_clean 40  20         True    True      -       -4.5460      -4.6831     0.9774    0.9796                        -4.2981                          -4.7280  0.6610       0.1378     0.8395          0.8759                -1.0631                          1.2453                               0.1876             0.5785                   0.1298                   0.1283                  0.0041                                       0.5897                      0.0156                                           0.6875              0.0019                                   0.5897
 
 per-category ranking (paper Table 2)
              mean_rank_ll  mean_rank_se  best_ll  best_se
 label                                                    
-logit_clean         1.935           2.0    0.065      0.0
-nf_clean            1.065           1.0    0.935      1.0
+logit_clean         1.918          1.98    0.082     0.02
+nf_clean            1.082          1.02    0.918     0.98
 
-never-bought-this-UPC deciles, nf_clean (top/bottom lift 23.3x)
+never-bought-this-UPC deciles, nf_clean (top/bottom lift 26.9x)
  decile  predicted   actual     n
-      0   0.000053 0.000550 71074
-      1   0.000196 0.000729 71073
-      2   0.000368 0.000812 71073
-      3   0.000569 0.000971 71073
-      4   0.000819 0.001196 71073
-      5   0.001149 0.001734 71073
-      6   0.001618 0.002137 71072
-      7   0.002390 0.002707 71074
-      8   0.003991 0.003902 71073
-      9   0.013591 0.012795 71073
+      0   0.000023 0.000438 76081
+      1   0.000117 0.000841 76081
+      2   0.000260 0.000822 76081
+      3   0.000446 0.001077 76081
+      4   0.000682 0.001188 76081
+      5   0.000996 0.001488 76081
+      6   0.001451 0.001859 76081
+      7   0.002195 0.002594 76081
+      8   0.003771 0.003974 76081
+      9   0.014138 0.011761 76081
 
-never-bought-this-UPC deciles, logit_clean (top/bottom lift 21.5x)
+never-bought-this-UPC deciles, logit_clean (top/bottom lift 18.1x)
  decile  predicted   actual     n
-      0   0.000141 0.000562 71074
-      1   0.000513 0.000831 71073
-      2   0.000896 0.000999 71073
-      3   0.001287 0.001158 71073
-      4   0.001755 0.001507 71073
-      5   0.002341 0.001673 71073
-      6   0.003171 0.002217 71072
-      7   0.004387 0.002842 71074
-      8   0.006753 0.003672 71073
-      9   0.020757 0.012071 71073
+      0   0.000155 0.000611 76081
+      1   0.000528 0.000755 76081
+      2   0.000909 0.000929 76081
+      3   0.001278 0.001250 76081
+      4   0.001695 0.001338 76081
+      5   0.002222 0.001753 76081
+      6   0.002962 0.001912 76081
+      7   0.004132 0.002855 76081
+      8   0.006359 0.003560 76081
+      9   0.020160 0.011080 76081
 [07] wrote out/evaluation.json, evaluation_summary.csv, evaluation_by_category.csv

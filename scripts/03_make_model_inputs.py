@@ -228,8 +228,12 @@ def main(cfg):
       lambda r: f"{int(r.item_id)}\t" + "\t".join(f"{getattr(r, c):.6f}" for c in xcols) + "\n")
     log(f"obsItem columns (IC={len(xcols)}): {xcols}")
 
-    # userGroup: needed only by the hpf binary's -days option; use spend quintiles
-    spend = trips.groupby("household_key").spend.sum().reindex(users).fillna(0)
+    # userGroup: needed only by the hpf binary's -days option; use spend quintiles.
+    # spend_paid, not spend: the latter is retailer receipts and overstates household
+    # outlay by the manufacturer coupons the retailer is reimbursed for (see
+    # 01_build_base.py).  Barely moves the quintiles, but this is a household spend
+    # measure and spend_paid is the correct column for one.
+    spend = trips.groupby("household_key").spend_paid.sum().reindex(users).fillna(0)
     ug = pd.DataFrame({"user_id": np.arange(len(users)),
                        "group_id": pd.qcut(spend.rank(method="first"), 5, labels=False).values})
     w("userGroup.tsv", ug.astype(int), lambda r: f"{r.user_id}\t{r.group_id}\n")

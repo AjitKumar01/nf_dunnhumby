@@ -40,7 +40,8 @@ Terms used throughout the code and the other documents.
 | **session** | a block of time within which prices don't change. Here: one calendar day, chain-wide. |
 | **pair-week** | our unit of "before and after a price change": the Sunday of one week paired with the Monday of the next. Prices reset in between. |
 | **posted / shelf price** | the price on the tag, the same for everyone. What we want. |
-| **loyalty price** | the shelf price for card holders. Every household in this panel has a card, so this *is* the relevant shelf price. |
+| **loyalty price** | the shelf price for card holders — regular price net of the loyalty promotion, before that shopper's own coupons. Every household in this panel has a card, so this *is* the relevant shelf price, and it is what the model consumes as `unit_price`. |
+| **base price** | the regular posted price before any discount, the cost the retailer bears. Takes a single value across all shoppers of an item in a store in a week (99.1% of cells), so it is the cleanest posted price in the file — but nobody in this panel pays it. Used to measure promotion depth. |
 | **held-out / test data** | trips deliberately hidden during fitting, used to check the model predicts things it has never seen. |
 | **log-likelihood** | how surprised the model is by what actually happened. Closer to zero is better; −4.3 is better than −4.7. |
 | **elasticity** | percentage change in how much of something gets bought when its price goes up 1%. −1.2 means a 1% price rise cuts sales 1.2%. |
@@ -80,13 +81,18 @@ There is **no price column**. `SALES_VALUE` is what the retailer banked.
 For the salad mix: two units for $2.99 total, with a $2.99 loyalty discount applied.
 
 ```
-price this shopper faced   = SALES_VALUE / QUANTITY          = 2.99 / 2 = $1.495
-price without a loyalty card = (2.99 + 2.99) / 2             = $2.99
+loyalty_price  what this shopper faced   = SALES_VALUE / QUANTITY      = 2.99 / 2 = $1.495
+base_price     the regular posted price  = (2.99 + 2.99) / 2           = $2.99
+paid_price     what they handed over     = (SALES_VALUE + COUPON_DISC) / QUANTITY = $1.495
 ```
 
+(The three coincide here only because no coupon was involved and nothing was matched.)
 Every household in this panel has a loyalty card, so **$1.495 is the price that
-mattered**. (§1 of `PREPROCESSING.md` shows why, and why the two other discount columns
-are handled differently.)
+mattered**, and it is `loyalty_price` that becomes the model's `unit_price`.
+`base_price` is the cleaner posted number — it is the one that takes a single value
+across every shopper of an item in a store in a week — but it is a price nobody in this
+panel pays. §1 of `PREPROCESSING.md` shows the evidence, why the two other discount
+columns are handled differently, and why `paid_price` never becomes a session price.
 
 ### Step 3 — one row per category, not per product
 
@@ -198,7 +204,7 @@ Seven filters, in order. Each one is justified in `PREPROCESSING.md`.
 | drop scale-weighed items | their "unit price" is really weight × price-per-pound | 2,142 of 30,452 priced products |
 | the paper's category filters | enough items, one-per-trip holds, enough price movement, not too seasonal | 285 → **56 categories** |
 
-Outputs: `data/sample_trips.parquet` (49,729), `data/sample_choices.parquet` (66,638),
+Outputs: `data/sample_trips.parquet` (49,729), `data/sample_choices.parquet` (66,637),
 `data/items.parquet` (560), `data/filter_audit.csv` (why each category was kept or cut).
 
 ### `03_make_model_inputs.py` — write the files the model reads
@@ -208,8 +214,8 @@ the exact file formats the authors' C++ expects.
 
 | file | lines | contents |
 |---|---|---|
-| `train.tsv` | 46,431 | household, item, session, 1 |
-| `validation.tsv` | 6,471 | same, used to decide when to stop |
+| `train.tsv` | 46,432 | household, item, session, 1 |
+| `validation.tsv` | 6,469 | same, used to decide when to stop |
 | `test.tsv` | 13,736 | same, never touched during fitting |
 | `item_sess_price.tsv` | 96,320 | **every** item × session price = 560 × 172 |
 | `itemGroup.tsv` | 560 | which category each item belongs to |
@@ -279,12 +285,12 @@ data/tx.parquet               2,553,408 lines  ->  data/trips.parquet   213,961 
         |  02: Sun/Mon window, holidays, households, categories, items
         v
 data/sample_trips.parquet        49,729 trips
-data/sample_choices.parquet      66,638 (trip, category, chosen item)
+data/sample_choices.parquet      66,637 (trip, category, chosen item)
 data/items.parquet                  560 items in 56 categories
         |  03: renumber, split, complete the price grid
         v
-model_input/train.tsv            46,431      \
-model_input/validation.tsv        6,471       |  the model's view
+model_input/train.tsv            46,432      \
+model_input/validation.tsv        6,469       |  the model's view
 model_input/test.tsv             13,736       |
 model_input/item_sess_price.tsv  96,320      /   = 560 items x 172 days
         |  05: fit
@@ -295,7 +301,7 @@ out/nf_stage1.pt, out/nf_stage2.pt
 out/evaluation_summary.csv, figures/*.png
 ```
 
-The two numbers worth staring at: **66,638 observed choices**, and **96,320 prices**.
+The two numbers worth staring at: **66,637 observed choices**, and **96,320 prices**.
 The second is bigger than the first, and that is the point — most of the work is
 constructing prices for choices that were never made.
 

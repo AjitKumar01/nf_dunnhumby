@@ -349,6 +349,8 @@ def main(cfg):
 
     smp_trips = smp.groupby(["household_key", "DAY"], as_index=False).agg(
         n_lines=("PRODUCT_ID", "size"), spend=("SALES_VALUE", "sum"),
+        # retailer receipts and actual household outlay; see 01_build_base.py
+        spend_paid=("paid_value", "sum"),
         store_id=("STORE_ID", "first"), hour=("hour", "median"))
     smp_trips = smp_trips.merge(sess, on="DAY", how="left")
 

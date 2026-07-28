@@ -138,7 +138,7 @@ Two limits matter for any port:
 ---
 
 > **Verification.** The PyTorch re-implementation has been checked against the
-> authors' C++ on identical files (same 13,736 test instances, peaks 0.057 nats and
+> authors' C++ on identical files (same 13,736 test instances, peaks 0.063 nats and
 > one evaluation point apart), against an independently written MLE conditional logit
 > (0.4% difference), and by parameter recovery on simulated data. That last one sets
 > a limit worth carrying into every number below: at this sample size the
@@ -257,7 +257,7 @@ Steps, in order (`01`–`04`):
 | items | 560 | 1,263 |
 | trips | 49,729 | 100,504 |
 | sessions | 172 days (86 pair-weeks) | ~176 days (88 weeks) |
-| category-purchase observations | 66,638 | 455,445 |
+| category-purchase observations | 66,637 | 455,445 |
 | mean purchase rate per category-trip | 2.3% | 3.7% |
 | item-weeks with an own-price move ≥ $0.10 | 8,087 | — |
 | item-weeks with a cross-price move in the category | 32,446 | — |
@@ -341,16 +341,16 @@ household × pair-week hold-out:
 
 | model | test log-lik | test MSE | train log-lik | train MSE | mean rank (log-lik) | % categories best |
 |---|---|---|---|---|---|---|
-| nf | **−4.2386** | 0.9377 | −3.4604 | 0.9017 | **1.71** | **44.6%** |
-| nf_promo | −4.2420 | **0.9353** | −3.3897 | 0.8950 | 1.89 | 35.7% |
-| nf_nopool | −4.2790 | 0.9373 | −3.5161 | 0.9048 | 2.48 | 17.9% |
-| logit | −4.7145 | 0.9799 | −4.6071 | 0.9791 | 3.91 | 1.8% |
+| nf_promo | **−4.2434** | **0.9364** | −3.4131 | 0.8954 | **1.61** | **55.4%** |
+| nf | −4.2665 | 0.9367 | −3.3811 | 0.8971 | 2.00 | 26.8% |
+| nf_nopool | −4.2855 | 0.9384 | −3.5165 | 0.9051 | 2.54 | 14.3% |
+| logit | −4.6993 | 0.9799 | −4.5979 | 0.9793 | 3.86 | 3.6% |
 
-`nf` and `nf_promo` are within 0.004 nats of each other — a difference small enough
-that which one comes first is not stable across sample definitions (`nf_promo` led on
-an earlier sample by a similar margin). What is stable is the ordering of the four:
-either full model beats the no-pooling benchmark by ~0.04 nats, and both beat the
-homogeneous logit by ~0.47.
+`nf_promo` leads on every column, by 0.023 nats on test log-likelihood. On earlier
+samples it and `nf` traded places within 0.004 nats, so treat the *size* of that lead
+as sample-specific; what has been stable across every sample is the ordering of the
+four: either full model beats the no-pooling benchmark by ~0.02–0.04 nats, and both
+beat the homogeneous logit by ~0.44.
 
 For reference the paper reports test log-likelihood −4.91 for NF against −5.68 for
 the nested logit with demographic controls, and test MSE 0.9268 against 0.9801. The
@@ -359,28 +359,28 @@ levels and the gaps line up closely.
 ### Weeks with a price-change event (paper Table 3)
 
 Restricted to purchases of items whose own price moved ≥ $0.10 across the
-Sunday→Monday boundary (3,555 test purchases), and to items where *another* item in
-the category moved (9,096):
+Sunday→Monday boundary (3,519 test purchases), and to items where *another* item in
+the category moved (9,130):
 
 | model | own-price weeks | cross-price weeks |
 |---|---|---|
-| nf_promo | **−3.8512** | −4.2637 |
-| nf_nopool | −3.9254 | −4.3003 |
-| nf | −3.9631 | **−4.2560** |
-| logit | −4.3250 | −4.7557 |
+| nf_promo | **−3.8661** | **−4.2672** |
+| nf_nopool | −3.9308 | −4.3079 |
+| nf | −3.9666 | −4.2853 |
+| logit | −4.3043 | −4.7390 |
 
 ### Personalisation (paper Table 4)
 
 | model | CV, UPC | CV, category | slope UPC | slope category |
 |---|---|---|---|---|
-| nf_nopool | 2.669 | 1.058 | 1.189 | 1.145 |
-| nf_promo | 2.550 | **1.122** | 1.116 | 1.108 |
-| nf | **2.223** | 1.026 | 1.144 | 1.148 |
-| logit | 0.651 | 0.152 | 0.829 | 0.874 |
+| nf_nopool | **2.729** | 1.053 | 1.177 | 1.148 |
+| nf | 2.649 | **1.126** | 1.102 | 1.077 |
+| nf_promo | 2.380 | 1.120 | 1.094 | 1.083 |
+| logit | 0.651 | 0.147 | 0.815 | 0.883 |
 
 The slope is a regression of realised on predicted held-out purchase rate with item
 fixed effects: 1.0 is perfect calibration of the *cross-household spread*. NF is at
-1.14, the homogeneous logit at 0.83 — and the logit's coefficient of variation is
+1.10, the homogeneous logit at 0.82 — and the logit's coefficient of variation is
 three to four times smaller, so it barely differentiates households at all. The paper reports 3.25 / 0.9955 for NF
 and 0.43 / 0.9077 for the multinomial logit; same picture.
 
@@ -391,10 +391,10 @@ Held-out purchase rate by decile of predicted rate, among household-item pairs w
 
 | model | UPC-level top/bottom lift | category-level lift |
 |---|---|---|
-| nf | 31.3× | 19.2× |
-| nf_promo | 30.3× | 16.7× |
-| nf_nopool | 26.4× | 15.3× |
-| logit | 18.2× | 9.4× |
+| nf | **29.7×** | 16.3× |
+| nf_promo | 29.0× | 14.1× |
+| nf_nopool | 25.0× | **16.4×** |
+| logit | 18.9× | 10.3× |
 
 NF's decile curve is also monotone *and* roughly calibrated at the top; the logit's is
 monotone but badly scaled, overstating the top decile by nearly a factor of two — it is
@@ -404,14 +404,14 @@ ranking households mostly by demographics. The paper reports >10× at UPC level 
 
 | model | median own-price elasticity | SD across items | mean SD across households | nesting coefficient |
 |---|---|---|---|---|
-| nf | −1.182 | 1.108 | **0.638** | 1.004 |
-| nf_nopool | −1.279 | 1.297 | 0.347 | 0.969 |
-| nf_promo | −1.046 | 1.088 | 0.652 | 0.702 |
-| logit | −1.098 | 1.275 | 0.186 | 0.737 |
+| nf | −1.160 | 1.158 | **0.725** | **0.999** |
+| nf_nopool | −1.260 | 1.296 | 0.349 | 0.928 |
+| nf_promo | −1.048 | 1.054 | 0.612 | 0.679 |
+| logit | −1.091 | 1.263 | 0.187 | 0.737 |
 
 The medians are close across models — it is the *dispersion* that separates them.
-NF puts three and a half times as much household-level variation into elasticities as
-the homogeneous logit, and nearly twice as much as the un-pooled version: pooling
+NF puts nearly four times as much household-level variation into elasticities as
+the homogeneous logit, and roughly twice as much as the un-pooled version: pooling
 across categories is what makes household-level price sensitivity estimable at all.
 The paper's Table 7 shows the same contrast (Mean(SD) 1.777 for NF against 0.0017 for
 the multinomial logit).
@@ -424,23 +424,22 @@ purchase rate in held-out data, by how far the price moved. Change per 1,000 tri
 
 | price move | most elastic | middle | least elastic |
 |---|---|---|---|
-| > $0.25 cut | **4.00** | 3.91 | 2.52 |
-| $0.10–0.25 cut | −0.40 | −1.32 | **0.34** |
-| $0.01–0.10 cut | **3.03** | −0.95 | −1.44 |
-| no change | −0.64 | −0.17 | −0.62 |
-| $0.01–0.10 rise | −0.52 | −0.63 | **−2.40** |
-| $0.10–0.25 rise | 0.23 | 1.27 | **−2.21** |
-| > $0.25 rise | **−3.89** | −2.20 | −3.52 |
+| > $0.25 cut | **3.83** | 3.22 | 2.67 |
+| $0.10–0.25 cut | −0.06 | **−1.61** | 0.11 |
+| $0.01–0.10 cut | **6.74** | 2.21 | −3.80 |
+| no change | −0.51 | −0.19 | −0.70 |
+| $0.01–0.10 rise | −0.54 | 0.14 | **−1.94** |
+| $0.10–0.25 rise | −0.35 | −0.12 | **−0.58** |
+| > $0.25 rise | **−3.92** | −3.01 | −3.14 |
 
-Demand moves the right way with the price in the large buckets, the "no change" row is
-flat as it should be, and in the two extreme buckets — where the signal-to-noise is
-best — the households the model called most elastic moved further, in the right
-direction, than the households it called least elastic. The four middle rows are
-mixed and several go the wrong way; these are $0.01–0.25 changes on items bought a
-handful of times per tercile per week, and the cell noise is of the same order as the
-effect. This test is weaker evidence than an earlier version of this document claimed
-on a slightly different sample, where four of six rows lined up; the two extreme rows
-are the part that is stable. Nothing here uses the model as ground truth — the
+Demand moves the right way with the price in the large buckets and the "no change" row
+is flat as it should be. Three of the six price-moving rows are monotone in the
+predicted direction — both large-cut rows and the large-rise row — with the households
+the model called most elastic moving furthest. The other three are mixed and two go the
+wrong way; these are $0.01–0.25 changes on items bought a handful of times per tercile
+per week, and the cell noise is of the same order as the effect. Which of the middle
+rows line up is not stable across samples — an earlier version of this document
+reported four, then two — so treat only the extreme rows as evidence. Nothing here uses the model as ground truth — the
 terciles are a model output, the demand changes are raw held-out data.
 
 ### Two results that did not replicate
@@ -449,8 +448,8 @@ terciles are a model output, the demand changes are raw held-out data.
 test — the model should infer, without being told, that products sharing a subclass
 substitute more — comes out weak and undiscriminating here. Comparing within
 category and averaging across categories, the within-subclass conditional cross
-elasticity exceeds the across-subclass one in 56% of categories for NF (gap +0.002)
-and 58% for the homogeneous logit (gap +0.007). The effect exists but the full model
+elasticity exceeds the across-subclass one in 62% of categories for NF (gap +0.005)
+and 58% for the homogeneous logit (gap +0.006). The effect exists but the full model
 is no better at it than the baseline. Two reasons: dunnhumby's hierarchy has three
 levels, so `SUB_COMMODITY_DESC` is the paper's *subclass*, where they too found only
 an 8.4% gap; and the mechanism runs through the weighting of households, which even
@@ -458,7 +457,7 @@ the demographics-only model reproduces in part.
 
 **Coupon response by predicted elasticity.** Households the model calls price
 sensitive show no larger purchase lift during their actual coupon-eligibility
-windows (lift +1.7% for the most elastic tercile, +1.4% for the least; both within
+windows (lift +1.5% for the most elastic tercile, +1.1% for the least; both within
 noise). This is a null, and the design is weak rather than the model: only 1,175
 coupon-product rows and 23 campaigns touch the 560 retained items, campaign windows
 are long enough that the "not eligible" comparison period is contaminated, and for
@@ -479,11 +478,11 @@ refitted per category with household-clustered standard errors.
 
 | series | median price coefficient | % categories p<1% | correlation of the placebo price *level* with the real one |
 |---|---|---|---|
-| **actual prices** | **−0.590** | **73.2%** | 1.00 |
-| all items, forward | −0.145 | 30.4% | 0.61 |
-| all items, backward | −0.174 | 30.4% | 0.51 |
-| **all items, random** | **+0.025** | **14.3%** | 0.12 |
-| single UPC, random | +0.079 | 10.7% | 0.11 |
+| **actual prices** | **−0.586** | **71.4%** | 1.00 |
+| all items, forward | −0.191 | 30.4% | 0.58 |
+| all items, backward | −0.188 | 33.9% | 0.52 |
+| **all items, random** | **−0.117** | **10.7%** | 0.14 |
+| single UPC, random | −0.059 | 5.4% | 0.08 |
 
 Three findings.
 
@@ -493,32 +492,36 @@ Three findings.
    are not by themselves evidence of endogeneity — which also means the paper's
    "13 of 123 categories fail" is not a clean measure of how clean their data was.
 2. **The randomised relocation is the valid null, and the design passes it on
-   average.** The point estimate collapses from −0.590 to +0.025, mean +0.0004. The
-   Sunday/Monday window is not manufacturing price effects out of nothing.
-3. **But it over-rejects.** 14.3% of categories reject at the 1% level against a
-   nominal 1% (KS against uniform, p = 0.0003). Clustering by household inflates
-   standard errors only 1.0–1.1×, so that is not the explanation. **31 of 56
-   categories fail at least one of the six placebos; 10 fail the randomised one.**
+   average.** The median point estimate collapses from −0.586 to −0.117, mean −0.063 —
+   a fifth of the real size. The Sunday/Monday window is not manufacturing price
+   effects out of nothing.
+3. **But it over-rejects.** 10.7% of categories reject at the 1% level against a
+   nominal 1% (KS against uniform). Clustering by household inflates
+   standard errors only 1.0–1.1×, so that is not the explanation. **34 of 56
+   categories fail at least one of the six placebos; 7 fail the randomised one.**
 
 Acting on it: `13_placebo_followup.py` writes a per-category verdict, and
 `02_select_sample.py --exclude-placebo-failures` rebuilds the sample without the
 failures. Re-aggregating held-out fit over the survivors, and retraining from scratch
-on the 46 placebo-clean categories:
+on the 49 placebo-clean categories:
 
 | subset | nf | nf_promo | nf_nopool | logit |
 |---|---|---|---|---|
-| all 56 categories | −4.239 | −4.242 | −4.279 | −4.715 |
-| passes the random placebo (46) | −4.210 | −4.210 | −4.242 | −4.702 |
-| passes every placebo (25) | −4.340 | −4.342 | −4.378 | −4.882 |
-| **retrained on the 46 clean categories** | **−4.196** | — | — | **−4.614** |
+| all 56 categories | −4.267 | −4.243 | −4.285 | −4.699 |
+| passes the random placebo (49) | −4.288 | −4.267 | −4.317 | −4.734 |
+| passes every placebo (22) | −4.171 | −4.158 | −4.188 | −4.656 |
+| **retrained on the 49 clean categories** | **−4.300** | — | — | **−4.683** |
 
-The ranking is identical everywhere and the full-model advantage *widens* on the
-strictly clean categories (0.48 → 0.54 nats; 0.42 on the retrained model, where the
-household spread in elasticity is still four times the logit's, 0.79 against 0.20). So
-the model comparisons in §B.5 do not rest on the compromised categories.
+The ranking is identical in every subset. The full-model advantage over the logit
+*widens* on the strictly clean categories (0.43 → 0.49 nats) and narrows slightly when
+the model is retrained on the 49 clean ones (0.38), where the household spread in
+elasticity is still 4.5× the logit's (0.85 against 0.19). Note the retrained model's
+absolute score (−4.300) is *worse* than the full sample's (−4.267): it is scored on a
+different, harder set of test purchases, so only the within-row gaps are comparable.
+Either way the model comparisons in §B.5 do not rest on the compromised categories.
 
 What this does change: the **level** of an estimated elasticity is not trustworthy in
-the 10 categories that fail the randomised placebo, and is suspect in the 31 that fail
+the 7 categories that fail the randomised placebo, and is suspect in the 34 that fail
 any. Model comparison is safe — whatever endogeneity exists is in the data all models
 see — but anything that converts an elasticity into a pricing decision should be run
 on the clean subset only.
@@ -544,12 +547,14 @@ the model already has:
 3. **Realised redemptions** (`coupon_redempt`), held out of training entirely and
    used only as a validation target.
 
-Adding (1) and (2) is `nf_promo`. It is the best model on test MSE (0.9353 against
-0.9377) and by a clear margin exactly where it should be, in weeks with a price change
-(−3.851 against −3.963 for `nf`); on overall test log-likelihood the two are a
-statistical tie (−4.2420 against −4.2386). That pattern is the honest reading: knowing
-about displays and mailers helps most in the weeks when promotions actually move, and
-is close to free elsewhere. The cost is that `bemb_loc` cannot fit it — price is its
+Adding (1) and (2) is `nf_promo`, and it is the best model on every headline column:
+test log-likelihood (−4.2434 against −4.2665 for `nf`), test MSE (0.9364 against
+0.9367), and by the widest margin exactly where it should be, in weeks with a price
+change (−3.866 against −3.967). The MSE gap is negligible and the log-likelihood gap
+of 0.023 nats is modest — on earlier samples the two traded places within 0.004 — but
+the own-price-week gap of 0.10 nats has been stable and is the one that matters:
+knowing about displays and mailers helps most in the weeks when promotions actually
+move, and is close to free elsewhere. The cost is that `bemb_loc` cannot fit it — price is its
 only time-varying attribute slot.
 
 Two further pieces of dunnhumby are catalogued but not used here: `QUANTITY` (the
@@ -590,7 +595,7 @@ Three caveats are load-bearing.
 
 *The identification is weaker here than in the paper.* A randomised placebo collapses
 the price coefficient to zero on average, so the design is sound, but 14% of categories
-still reject at the 1% level and 31 of 56 fail at least one placebo. Model comparisons
+still reject at the 1% level and 34 of 56 fail at least one placebo. Model comparisons
 survive this; individual elasticity levels in the failing categories do not.
 
 *Two terms need care the paper's text does not dwell on.* The bilinear price term

@@ -1,0 +1,185 @@
+
+=== 01 build base ===
+skipped
+
+=== 02 select sample ===
+[02] pair-weeks with both days present: 101
+[02] flagged holiday/anomalous weeks: [1, 2, 3, 46, 68, 72, 92, 99, 102]
+[02] pair-weeks dropped for holidays: 14
+[02] retained pair-weeks: 87   sessions (days): 174
+[02] households with 20-300 trips: 2137
+[02] dropping 1 pair-week(s) containing a near-empty day (<50 baskets chain-wide): days [278]
+[02] retained pair-weeks: 86   sessions (days): 172
+[02] sample lines: 647,231   trips: 50,231   households: 2,134
+[02] random-weight screen: 2,142 of 30,452 priced items have modal price share < 0.6 and are excluded
+[02] categories before filters: 285
+[02] price panel: 0.492 of item-weeks directly observed
+[02] categories retained: 56
+[02] 
+drop_reason
+fewer than 5 items or <200 category-trips                                                               137
+unit demand violated (>15% multi-item or >10% multi-top-item trips)                                      79
+KEPT                                                                                                     56
+top 15% most seasonal (Herfindahl of daily demand)                                                       10
+insufficient price variation (<2 items changing, or no item with >=10% of pair-weeks moving >=$0.10)      3
+[02] items retained: 560 across 56 categories
+[02] category-purchase observations (product-choice stage): 66,637
+[02] wrote sample_trips / sample_choices / items / categories / price_panel / sessions / filter_audit
+
+=== 03 model inputs ===
+[03] users 2084  items 560  categories 56  sessions 172  observations 66,637
+[03] moved 140 observations into train so every user/item is represented
+[03] split
+train         46432
+test          13736
+validation     6469
+[03] wrote train.tsv  (46,432 lines)
+[03] wrote validation.tsv  (6,469 lines)
+[03] wrote test.tsv  (13,736 lines)
+[03] wrote item_sess_price.tsv  (96,320 lines)
+[03] wrote itemGroup.tsv  (560 lines)
+[03] wrote sess_days.tsv  (172 lines)
+[03] wrote obsUser.tsv  (2,084 lines)
+[03] obsUser columns (UC=9): ['age', 'income', 'hh_size', 'hh_comp', 'kids', 'married', 'single', 'homeowner', 'has_demo']
+[03] wrote obsItem.tsv  (560 lines)
+[03] obsItem columns (IC=4): ['private_label', 'size_z', 'size_missing', 'mfr_breadth']
+[03] wrote userGroup.tsv  (2,084 lines)
+[03] counterfactual events: own-price 7,954 item-pairweeks, cross-price 32,382
+[03] done -> /Users/ajit/Projects/Causal/nf_dunnhumby/scripts/../model_input
+
+=== 04 dunnhumby extras (display / mailer / coupons) ===
+[04] streaming causal_data.csv (36.8M rows) ...
+[04] causal_data rows for retained items: 511,898
+[04] promoted item-weeks: 24,823  mean display 0.103  mean mailer 0.112
+[04] wrote item_sess_display.tsv (96,320 lines);  0.441 of item-sessions promoted
+[04] wrote item_sess_mailer.tsv (96,320 lines);  0.055 of item-sessions promoted
+[04] coupon rows covering retained items: 1,175 over 23 campaigns
+[04] household x product x campaign eligibility rows: 941,899
+[04] wrote user_item_sess_coupon.tsv (941,899 intervals covering 12,426,792 user-item-session cells; 1516 households, 363 items)
+[04] wrote coupon_campaigns.npz (23 campaigns, 23 active inside the retained sessions)
+[04] wrote redemptions.csv (25,821 household-coupon-product redemptions on retained items)
+
+=== 10 price definition audit ===
+[10]    B_loyalty_shelf: single-valued in 0.9288 of cells
+[10]    C_regular_shelf: single-valued in 0.9910 of cells
+[10]    D_customer_paid: single-valued in 0.9240 of cells
+[10] loyalty discount within a product x store x week: all shoppers 0.3601, no shoppers 0.5963, mixed 0.0436
+[10] concentration measured on 10,172 product-days with >=8 single-unit buyers (138,429 lines)
+[10]      A_sales_value: mean modal-price share = 0.6742
+[10]    B_loyalty_shelf: mean modal-price share = 0.6744
+[10]    C_regular_shelf: mean modal-price share = 0.6645
+[10]    D_customer_paid: mean modal-price share = 0.6732
+[10] retail_disc active on 0.500 of lines (mean 26.8% off the regular price); coupon_match on 0.0068; coupon_disc on 0.0123
+[10] COUPON_MATCH_DISC: on mixed product-days (26 discounted lines of 264) the differential gap to the modal price is A_sales_value -0.3569, B_loyalty_shelf +0.0008
+[10] COUPON_DISC: on mixed product-days (135 discounted lines of 1,133) the differential gap to the modal price is B_loyalty_shelf -0.0043, D_customer_paid -1.7320
+[10] RETAIL_DISC is identical for all single-unit buyers on 0.500 of product-days (mean modal share 0.818)
+[10] posted-price items, 293 lines in 24 product-weeks spanning 2.2 stores each: price B modal share 0.942 within store vs 0.942 pooled across stores
+[10] lines with a positive (sign-anomalous) discount: 6
+[10]      A_sales_value: mean |price - product-day median| = $0.1897
+[10]    B_loyalty_shelf: mean |price - product-day median| = $0.1897
+[10]    C_regular_shelf: mean |price - product-day median| = $0.2294
+[10]    D_customer_paid: mean |price - product-day median| = $0.1916
+[10] wrote figures/price_definitions.png and out/price_audit.json
+
+=== 11 placebo tests -- run before believing any elasticity ===
+actual (all items)        56.0   -0.586426 -0.618603         0.714286         0.803571                0.732143                          1.097849                 0.803571                         1.0                         1.0           0.768853       0.0                                    NaN                              NaN                    NaN
+actual (single UPC)       56.0   -0.642696 -1.002233         0.357143         0.571429                0.392857                          1.038588                 0.571429                         1.0                         1.0           0.549598       0.0                                    NaN                              NaN                    NaN
+all items backward        56.0   -0.187768 -0.242639         0.339286              0.5                0.357143                          1.039962                 0.482143                   -0.000038                    0.524424           0.479172       0.0                                    NaN                              NaN                    NaN
+all items forward         56.0   -0.191324 -0.231973         0.303571         0.464286                0.357143                          1.028167                 0.428571                   -0.000032                    0.584919            0.45173       0.0                                    NaN                              NaN                    NaN
+all items random          56.0    -0.11719 -0.062964         0.107143         0.214286                   0.125                          1.029228                 0.160714                   -0.000028                    0.141348           0.385347       0.0                                    NaN                              NaN                    NaN
+single UPC backward       56.0   -0.074269 -0.138724         0.160714         0.232143                0.107143                          1.018245                 0.142857                   -0.000003                    0.306002           0.248771  0.001538                                    NaN                              NaN                    NaN
+single UPC forward        56.0    -0.15139 -0.385298            0.125         0.214286                0.160714                          0.996586                 0.196429                   -0.000156                     0.40004            0.19075  0.029378                                    NaN                              NaN                    NaN
+single UPC random         56.0   -0.059356 -0.059045         0.053571         0.142857                0.071429                          0.996405                 0.053571                   -0.000001                    0.083481           0.218738  0.007828                                    NaN                              NaN                    NaN
+
+categories failing at least one placebo at 1%: 34 of 56
+  APPLES, BACON, BATH TISSUES, BEEF, BEERS/ALES, BERRIES, BLEACH, BREAD, BREAKFAST SWEETS, CANNED MILK, CHICKEN/POULTRY, CITRUS, COCOA MIXES, DRIED FRUIT, EGGS, FACIAL TISS/DNR NAPKIN, FLOUR & MEALS, FROZEN BREAD/DOUGH, FROZEN PIE/DESSERTS, LAUNDRY ADDITIVES, LAUNDRY DETERGENTS, MARGARINES, OLIVES, ORGANICS FRUIT & VEGETABLES, PAPER TOWELS, PICKLE/RELISH/PKLD VEG, POPCORN, POTATOES, PROCESSED, SEAFOOD - FROZEN, SHORTENING/OIL, SUGARS/SWEETNERS, VEGETABLES - ALL OTHERS, WATER - CARBONATED/FLVRD DRINK
+[11] wrote out/placebo_tests.csv, out/placebo_summary.json, figures/placebo.png
+
+=== 05 train ===
+  trained nf
+  trained logit
+  trained nf_nopool
+  trained nf_promo
+
+=== 07 evaluate ===
+    label  K  Kp  homogeneous  pooled                extras  train_loglik  test_loglik  train_mse  test_mse  event_own_price_change_loglik  event_cross_price_change_loglik  cv_upc  cv_category  slope_upc  slope_category  own_elasticity_median  own_elasticity_sd_across_items  own_elasticity_mean_sd_across_users  nesting_coef_mean  crosscond_same_subclass  crosscond_diff_subclass  crosscond_gap_subclass  crosscond_share_cats_higher_inside_subclass  crosscond_gap_manufacturer  crosscond_share_cats_higher_inside_manufacturer  cross_gap_subclass  cross_share_cats_higher_inside_subclass
+       nf 40  20        False    True                     -       -3.3811      -4.2665     0.8971    0.9367                        -3.9666                          -4.2853  2.6492       1.1261     1.1024          1.0775                -1.1604                          1.1576                               0.7253             0.9990                   0.0785                   0.0800                  0.0049                                       0.6222                      0.0078                                           0.6545             -0.0003                                   0.4667
+    logit 40  20         True    True                     -       -4.5979      -4.6993     0.9793    0.9799                        -4.3043                          -4.7390  0.6509       0.1467     0.8152          0.8832                -1.0909                          1.2630                               0.1868             0.7374                   0.1343                   0.1318                  0.0063                                       0.5778                      0.0161                                           0.6727              0.0020                                   0.6000
+nf_nopool 40  20        False   False                     -       -3.5165      -4.2855     0.9051    0.9384                        -3.9308                          -4.3079  2.7285       1.0534     1.1765          1.1480                -1.2603                          1.2960                               0.3486             0.9276                   0.1048                   0.1073                  0.0112                                       0.6667                      0.0156                                           0.6909              0.0018                                   0.4889
+ nf_promo 40  20        False    True display,mailer,coupon       -3.4131      -4.2434     0.8954    0.9364                        -3.8661                          -4.2672  2.3797       1.1201     1.0942          1.0830                -1.0478                          1.0535                               0.6120             0.6787                   0.0715                   0.0696                  0.0017                                       0.6222                      0.0068                                           0.7091              0.0002                                   0.5556
+
+per-category ranking (paper Table 2)
+
+=== 13 placebo follow-up ===
+[13] 56 categories: 34 fail at least one placebo at 1%, 7 fail a fully-decorrelated (random) placebo, 23 fail a backward placebo
+[13] strictly clean categories: 22;  clean on the random placebo: 49
+
+Held-out fit re-aggregated over placebo-surviving categories
+    label                     subset  categories  test_purchases  test_loglik  test_mse
+ nf_promo        all (56 categories)          56           13736      -4.2434    0.9364
+       nf        all (56 categories)          56           13736      -4.2665    0.9367
+nf_nopool        all (56 categories)          56           13736      -4.2855    0.9384
+    logit        all (56 categories)          56           13736      -4.6993    0.9799
+ nf_promo  passes every placebo (22)          22            4892      -4.1579    0.9265
+       nf  passes every placebo (22)          22            4892      -4.1706    0.9258
+nf_nopool  passes every placebo (22)          22            4892      -4.1881    0.9276
+    logit  passes every placebo (22)          22            4892      -4.6559    0.9797
+ nf_promo passes random placebo (49)          49           11339      -4.2670    0.9346
+       nf passes random placebo (49)          49           11339      -4.2884    0.9345
+nf_nopool passes random placebo (49)          49           11339      -4.3173    0.9366
+    logit passes random placebo (49)          49           11339      -4.7345    0.9801
+[13] wrote out/placebo_category_status.csv, evaluation_placebo_subsets.csv, placebo_followup.json
+
+=== 09 model-free counterfactual checks ===
+[09] household x item elasticities: 1,167,040  median -1.168
+
+Realised Sun->Mon demand change per 1,000 trips, test set (paper Figure 6)
+tercile       most elastic  middle  least elastic
+bucket                                           
+> .25 cut            3.833   3.218          2.665
+.10-.25 cut         -0.063  -1.605          0.108
+.01-.10 cut          6.743   2.212         -3.795
+no change           -0.509  -0.193         -0.700
+.01-.10 rise        -0.541   0.138         -1.937
+.10-.25 rise        -0.352  -0.120         -0.578
+> .25 rise          -3.921  -3.008         -3.137
+
+Purchase rate while holding a coupon, by predicted elasticity tercile
+      tercile  rate_with_coupon  rate_without     lift  cells  lift_pct                        sample
+least elastic           0.00813       0.00807  0.00009 1012.0   1.14774                 all campaigns
+       middle           0.00420       0.00429 -0.00010 1012.0  -2.22519                 all campaigns
+ most elastic           0.00356       0.00350  0.00005 1011.0   1.50562                 all campaigns
+least elastic           0.00687       0.00913 -0.00089  142.0  -9.78518 certain eligibility (TypeB/C)
+       middle           0.00336       0.00362  0.00040  142.0  11.14288 certain eligibility (TypeB/C)
+ most elastic           0.00158       0.00211  0.00004  141.0   2.07985 certain eligibility (TypeB/C)
+[09] done
+
+=== 08 / 12 reports and figures ===
+[12] wrote figures/week_structure.png
+[12] wrote figures/cross_store_prices.png
+[12] wrote figures/random_weight_screen.png
+[12] wrote figures/holiday_weeks.png
+[12] wrote figures/category_funnel.png
+[12] wrote figures/sample_profile.png
+[12] wrote figures/price_panel.png
+[12] wrote out/figure_stats.json
+
+=== 14-17 verification: recovery, C++ cross-check, embeddings, stores ===
+  parameter recovery ok
+  C++ cross-check ok
+  embeddings ok
+  store diagnostics ok
+
+=== retrain on the placebo-clean subset ===
+  trained nf_clean
+  trained logit_clean
+      label  K  Kp  homogeneous  pooled extras  train_loglik  test_loglik  train_mse  test_mse  event_own_price_change_loglik  event_cross_price_change_loglik  cv_upc  cv_category  slope_upc  slope_category  own_elasticity_median  own_elasticity_sd_across_items  own_elasticity_mean_sd_across_users  nesting_coef_mean  crosscond_same_subclass  crosscond_diff_subclass  crosscond_gap_subclass  crosscond_share_cats_higher_inside_subclass  crosscond_gap_manufacturer  crosscond_share_cats_higher_inside_manufacturer  cross_gap_subclass  cross_share_cats_higher_inside_subclass
+   nf_clean 40  20        False    True      -       -3.2919      -4.2998     0.8900    0.9343                        -3.9696                          -4.3546  3.0494       1.1064     1.1647          1.1790                -1.0779                          1.2057                               0.8526             0.8776                   0.0848                   0.0846                  0.0060                                       0.6154                      0.0145                                           0.7500              0.0015                                   0.4615
+logit_clean 40  20         True    True      -       -4.5460      -4.6831     0.9774    0.9796                        -4.2981                          -4.7280  0.6610       0.1378     0.8395          0.8759                -1.0631                          1.2453                               0.1876             0.5785                   0.1298                   0.1283                  0.0041                                       0.5897                      0.0156                                           0.6875              0.0019                                   0.5897
+
+
+=== restore the default sample as the primary artefacts ===
+[04] wrote coupon_campaigns.npz (23 campaigns, 23 active inside the retained sessions)
+[04] wrote redemptions.csv (25,821 household-coupon-product redemptions on retained items)
+
+=== done ===

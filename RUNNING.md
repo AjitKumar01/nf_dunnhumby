@@ -169,28 +169,29 @@ column -s, -t out/evaluation_summary.csv | cut -c1-120
 | households / items / categories | 2,084 / 560 / 56 |
 | sessions | 172 days = 86 pair-weeks |
 | trips | 49,729 |
-| category purchases | 66,638 |
-| train / validation / test | 46,431 / 6,471 / 13,736 |
+| category purchases | 66,637 |
+| train / validation / test | 46,432 / 6,469 / 13,736 |
 | price grid | 96,320 = 560 × 172 |
 
 **Held-out log-likelihood** (`out/evaluation_summary.csv`, higher is better):
 
 | model | test log-lik | test MSE |
 |---|---|---|
-| `nf` | −4.239 | 0.938 |
-| `nf_promo` | −4.242 | 0.935 |
-| `nf_nopool` | −4.279 | 0.937 |
-| `logit` | −4.715 | 0.980 |
+| `nf_promo` | −4.243 | 0.936 |
+| `nf` | −4.267 | 0.937 |
+| `nf_nopool` | −4.285 | 0.938 |
+| `logit` | −4.699 | 0.980 |
 
-The three latent models must beat `logit` by roughly 0.45 nats, and `nf`/`nf_promo`
-must beat `nf_nopool`. `nf` and `nf_promo` sit within 0.004 of each other, so which
-of those two prints first is not meaningful.
+The three latent models must beat `logit` by roughly 0.43 nats, and `nf`/`nf_promo`
+must beat `nf_nopool`. `nf` and `nf_promo` have traded places across samples within
+0.03 nats, so which of those two prints first is not by itself meaningful.
 
 **Two sanity numbers that catch the failure modes documented in `README.md`:**
 
 * the nesting coefficient (`nesting_coef_mean`) should be ≈ **1.0**, not negative —
   a negative value means the inclusive value is not being centred;
-* the median own-price elasticity should be ≈ **−1.2**, not ≈ 0 — a near-zero value
+* the median own-price elasticity should be ≈ **−1.2** (−1.16 on the current sample),
+  not ≈ 0 — a near-zero value
   means the bilinear price term collapsed and `--price-prior-mean` is not taking
   effect.
 

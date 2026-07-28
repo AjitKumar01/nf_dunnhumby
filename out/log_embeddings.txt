@@ -1,22 +1,22 @@
 [16] model nf: K=40, Kp=20, 2084 households, 560 items
 [16] item embeddings: nearest-neighbour agreement on labels never shown to the model
-[16]   beta, SUB_COMMODITY_DESC (k=1): 0.593 vs chance 0.485 -> lift 1.22x  (p = 1.29e-12)
-[16]   beta, SUB_COMMODITY_DESC (k=2): 0.557 vs chance 0.485 -> lift 1.15x  (p = 1.74e-11)
-[16]   beta, BRAND (k=2): 0.719 vs chance 0.649 -> lift 1.11x  (p = 3.13e-09)
-[16]   beta, MANUFACTURER (k=2): 0.446 vs chance 0.363 -> lift 1.23x  (p = 3.07e-12)
-[16]   beta, COMMODITY_DESC (k=5), across all items: 0.025 vs chance 0.016 -> lift 1.55x  (p = 0.000183)
-[16]   lambda (price), SUB_COMMODITY_DESC (k=2): 0.530 vs chance 0.485 -> lift 1.09x (p = 2.18e-05)
-[16]   lambda (price), BRAND (k=2): 0.645 vs chance 0.649 -> lift 0.99x (p = 0.724)
+[16]   beta, SUB_COMMODITY_DESC (k=1): 0.609 vs chance 0.485 -> lift 1.26x  (p = 3.71e-16)
+[16]   beta, SUB_COMMODITY_DESC (k=2): 0.565 vs chance 0.485 -> lift 1.17x  (p = 8e-14)
+[16]   beta, BRAND (k=2): 0.726 vs chance 0.649 -> lift 1.12x  (p = 6.59e-11)
+[16]   beta, MANUFACTURER (k=2): 0.468 vs chance 0.363 -> lift 1.29x  (p = 1.96e-18)
+[16]   beta, COMMODITY_DESC (k=5), across all items: 0.019 vs chance 0.016 -> lift 1.18x  (p = 0.234)
+[16]   lambda (price), SUB_COMMODITY_DESC (k=2): 0.527 vs chance 0.485 -> lift 1.09x (p = 9.06e-05)
+[16]   lambda (price), BRAND (k=2): 0.658 vs chance 0.649 -> lift 1.01x (p = 0.434)
 [16] posterior vs prior (a collapsed posterior would sit at ratio 1.0 with |mu|~0)
-[16]   nf.theta: posterior sd / prior sd = 0.750, |mu| / sd = 0.35, rows still at the prior = 0.000
-[16]   nf.gamma: posterior sd / prior sd = 0.723, |mu| / sd = 0.74, rows still at the prior = 0.000
-[16]   nf.beta: posterior sd / prior sd = 0.663, |mu| / sd = 0.55, rows still at the prior = 0.000
-[16]   nf.lam: posterior sd / prior sd = 0.533, |mu| / sd = 1.17, rows still at the prior = 0.000
+[16]   nf.theta: posterior sd / prior sd = 0.883, |mu| / sd = 0.30, rows still at the prior = 0.081
+[16]   nf.gamma: posterior sd / prior sd = 0.816, |mu| / sd = 0.68, rows still at the prior = 0.000
+[16]   nf.beta: posterior sd / prior sd = 0.743, |mu| / sd = 0.49, rows still at the prior = 0.009
+[16]   nf.lam: posterior sd / prior sd = 0.591, |mu| / sd = 1.08, rows still at the prior = 0.000
 [16]   households with training data: 2084 of 2084, median 15 observations each
-[16]   corr(observations, |theta_i|) = 0.809; corr(observations, |gamma_i|) = 0.398
+[16]   corr(observations, |theta_i|) = 0.807; corr(observations, |gamma_i|) = 0.498
 [16] ablations on held-out data (unconditional log-likelihood per purchase)
-[16]   no theta (latent taste)                -4.3777   (-0.1391)
-[16]   no gamma (latent price sensitivity)    -4.4598   (-0.2212)
-[16]   no rho (demographics)                  -4.2438   (-0.0052)
-[16]   no household latents at all            -4.6754   (-0.4368)
+[16]   no theta (latent taste)                -4.4018   (-0.1352)
+[16]   no gamma (latent price sensitivity)    -4.4321   (-0.1656)
+[16]   no rho (demographics)                  -4.2559   (+0.0106)
+[16]   no household latents at all            -4.6317   (-0.3652)
 [16] wrote out/embedding_report.json, out/embedding_neighbours.csv, figures/embeddings.png

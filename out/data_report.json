@@ -1,6 +1,6 @@
 {
   "raw": {
-    "lines": 2553408,
+    "lines": 2553406,
     "households": 2500,
     "products": 91856,
     "stores": 561,
@@ -23,12 +23,12 @@
     "sessions": 172,
     "pair_weeks": 86,
     "trips": 49729,
-    "category_purchases": 66638,
-    "purchase_rate_per_category_trip": 0.023928980790168426,
+    "category_purchases": 66637,
+    "purchase_rate_per_category_trip": 0.02392862170104825,
     "split": {
-      "train": 46431,
+      "train": 46432,
       "test": 13736,
-      "validation": 6471
+      "validation": 6469
     }
   },
   "filters": {
@@ -40,9 +40,9 @@
   },
   "events": {
     "item_pairweeks": 48160,
-    "own_price_change": 8087,
-    "cross_price_change": 32446,
-    "mean_abs_dp_when_changed": 0.6977808087053295
+    "own_price_change": 7954,
+    "cross_price_change": 32382,
+    "mean_abs_dp_when_changed": 0.7175936635655016
   },
   "demographics_coverage": 0.3694817658349328
 }

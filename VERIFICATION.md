@@ -27,17 +27,17 @@ store deviates from the chain price and compare log-likelihood.
 
 | quartile of store price deviation | mean deviation | held-out log-likelihood | purchases |
 |---|---|---|---|
-| 1 (closest) | $0.019 | −4.199 | 3,332 |
-| 2 | $0.031 | −4.252 | 3,257 |
-| 3 | $0.042 | −4.220 | 3,604 |
-| 4 (furthest) | $0.066 | −4.280 | 3,539 |
+| 1 (closest) | $0.019 | −4.224 | 3,332 |
+| 2 | $0.031 | −4.285 | 3,257 |
+| 3 | $0.042 | −4.251 | 3,604 |
+| 4 (furthest) | $0.066 | −4.301 | 3,539 |
 
 The best-fitting quartile is the closest one and the worst is the furthest, a gap of
-**0.081 nats**, though the middle two are out of order so the trend is not monotone.
+**0.077 nats**, though the middle two are out of order so the trend is not monotone.
 This is a change from an earlier version of this document, which reported no gradient
 at all on a slightly different sample and concluded chain pooling was costless. The
 defensible reading now is weaker: the cost of pooling is **detectable but small** —
-0.08 nats against the 0.48-nat gap between the full model and the homogeneous logit —
+0.08 nats against the 0.43-nat gap between the full model and the homogeneous logit —
 and it runs in the direction you would expect if price mismeasurement were the cause.
 
 **Assortment — not handled, and this is a genuine gap.** The median store with at
@@ -132,15 +132,16 @@ made the first run of this test meaningless):
 
 | model | held-out log-likelihood | change |
 |---|---|---|
-| full | −4.239 | |
-| no `theta` (latent taste) | −4.378 | −0.139 |
-| no `gamma` (latent price sensitivity) | −4.460 | −0.221 |
-| no `rho` (demographics) | −4.244 | −0.005 |
-| no household latents at all | −4.675 | −0.437 |
+| full | −4.267 | |
+| no `theta` (latent taste) | −4.402 | −0.135 |
+| no `gamma` (latent price sensitivity) | −4.432 | −0.166 |
+| no `rho` (demographics) | −4.256 | **+0.011** |
+| no household latents at all | −4.632 | −0.365 |
 
 Two things fall out. The personalisation is entirely in the latent vectors, and the
-**demographics contribute essentially nothing** — dropping them costs 0.005 nats,
-within noise, which is unsurprising given they cover only 37% of households. And the latent
+**demographics contribute essentially nothing** — dropping them actually *improves*
+held-out fit by 0.011 nats, i.e. they are within noise of useless and if anything cost
+a little, which is unsurprising given they cover only 37% of households. And the latent
 *price-sensitivity* vector carries more of it than the taste vector, which is the
 opposite of what a recommender-systems intuition would predict.
 
@@ -166,12 +167,12 @@ this port otherwise uses:
 |---|---|---|
 | test instances read | 13,736 | 13,736 |
 | starting test log-likelihood | −2.279 | −2.355 |
-| best test log-likelihood | **−1.686** | **−1.742** |
+| best test log-likelihood | **−1.686** | **−1.749** |
 | iteration of the peak | 200 | 250 |
 | trajectory correlation | 0.964 | |
-| still falling at iteration 2000 | yes (−2.203) | yes (−2.281) |
+| still falling at iteration ~2000 | yes (−2.217) | yes (−2.294) |
 
-Same data, same shape, peaks 0.057 nats and one evaluation point apart. They diverge
+Same data, same shape, peaks 0.063 nats and one evaluation point apart. They diverge
 *after* the peak because the optimisers differ — Adam here, the paper's ADVI step
 schedule there — and Adam descends the training objective harder, so it overfits
 faster. This is a validation of the model and likelihood, not a bit-exact
@@ -231,7 +232,7 @@ the model with known latents and refitting:
 
 | simulated choices | price-coefficient corr | slope | choice-probability corr |
 |---|---|---|---|
-| **46,431 (our actual sample)** | **0.207** | **0.316** | 0.833 |
+| **46,432 (our actual sample)** | **0.207** | **0.316** | 0.833 |
 | 278,586 (6×) | 0.416 | 0.622 | 0.949 |
 | 1,392,930 (30×) | 0.485 | 0.747 | 0.980 |
 

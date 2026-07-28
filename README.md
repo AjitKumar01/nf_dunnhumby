@@ -71,7 +71,7 @@ model fits for that reason.
 | trip = household × calendar day | same |
 | price change at Tuesday midnight → Tue/Wed sample | price change at the Sunday→Monday week boundary → Sun/Mon sample |
 | stock-out feed | not available; and store assortment differs (the median store sells 67% of the retained catalogue) |
-| placebo tests: 13 of 123 categories fail at 1% | 31 of 56 fail at least one of six; 10 fail a fully randomised placebo |
+| placebo tests: 13 of 123 categories fail at 1% | 34 of 56 fail at least one of six; 7 fail a fully randomised placebo |
 | — | in-store display and weekly mailer, product × store × week |
 | — | coupon campaigns: household × product × date eligibility, and realised redemptions |
 

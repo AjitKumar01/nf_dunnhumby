@@ -5,7 +5,7 @@
 [02] households with 20-300 trips: 2137
 [02] dropping 1 pair-week(s) containing a near-empty day (<50 baskets chain-wide): days [278]
 [02] retained pair-weeks: 86   sessions (days): 172
-[02] sample lines: 647,233   trips: 50,231   households: 2,134
+[02] sample lines: 647,231   trips: 50,231   households: 2,134
 [02] random-weight screen: 2,142 of 30,452 priced items have modal price share < 0.6 and are excluded
 [02] categories before filters: 285
 [02] price panel: 0.492 of item-weeks directly observed
@@ -18,16 +18,16 @@ KEPT                                                                            
 top 15% most seasonal (Herfindahl of daily demand)                                                       10
 insufficient price variation (<2 items changing, or no item with >=10% of pair-weeks moving >=$0.10)      3
 [02] items retained: 560 across 56 categories
-[02] category-purchase observations (product-choice stage): 66,638
+[02] category-purchase observations (product-choice stage): 66,637
 [02] wrote sample_trips / sample_choices / items / categories / price_panel / sessions / filter_audit
-[03] users 2084  items 560  categories 56  sessions 172  observations 66,638
-[03] moved 139 observations into train so every user/item is represented
+[03] users 2084  items 560  categories 56  sessions 172  observations 66,637
+[03] moved 140 observations into train so every user/item is represented
 [03] split
-train         46431
+train         46432
 test          13736
-validation     6471
-[03] wrote train.tsv  (46,431 lines)
-[03] wrote validation.tsv  (6,471 lines)
+validation     6469
+[03] wrote train.tsv  (46,432 lines)
+[03] wrote validation.tsv  (6,469 lines)
 [03] wrote test.tsv  (13,736 lines)
 [03] wrote item_sess_price.tsv  (96,320 lines)
 [03] wrote itemGroup.tsv  (560 lines)
@@ -37,7 +37,7 @@ validation     6471
 [03] wrote obsItem.tsv  (560 lines)
 [03] obsItem columns (IC=4): ['private_label', 'size_z', 'size_missing', 'mfr_breadth']
 [03] wrote userGroup.tsv  (2,084 lines)
-[03] counterfactual events: own-price 8,087 item-pairweeks, cross-price 32,446
+[03] counterfactual events: own-price 7,954 item-pairweeks, cross-price 32,382
 [03] done -> /Users/ajit/Projects/Causal/nf_dunnhumby/scripts/../model_input
 [04] streaming causal_data.csv (36.8M rows) ...
 [04] causal_data rows for retained items: 511,898

@@ -43,6 +43,20 @@
     }
   },
   "guide_formula_labels_consistent_with_examples": false,
+  "posted_price_single_valued_within_store_week": {
+    "cells": 18017,
+    "lines": 39943,
+    "restricted_to_retained_catalogue": true,
+    "A_sales_value": 0.9255702947216518,
+    "B_loyalty_shelf": 0.9287894766054282,
+    "C_regular_shelf": 0.9909529888438697,
+    "D_customer_paid": 0.9239607037797636
+  },
+  "loyalty_discount_uniformity": {
+    "cells_all_discounted": 0.3600630899031119,
+    "cells_none_discounted": 0.5963247627869714,
+    "cells_mixed": 0.04361214730991663
+  },
   "modal_share_by_definition": {
     "A_sales_value": 0.674167443443155,
     "B_loyalty_shelf": 0.6744102590905703,
