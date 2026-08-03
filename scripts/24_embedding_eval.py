@@ -154,7 +154,7 @@ def main(a):
 
     # ---------------------------------------------------------- basket models
     for lb in a.labels:
-        path = os.path.join(OUT, f"{lb}_basket.pt")
+        path = os.path.join(OUT, f"{lb}{a.suffix}.pt")
         if not os.path.exists(path):
             log(f"  {lb}: no checkpoint, skipping")
             continue
@@ -364,6 +364,9 @@ if __name__ == "__main__":
     p.add_argument("--primary", default="tied_k64_r",
                    help="model whose embedding is used for the head-to-head "
                         "with nf, the neighbour examples and the t-SNE map")
+    p.add_argument("--suffix", default="_basket",
+                   help="checkpoint suffix: _basket for stage 23, _nested "
+                        "for stage 27 (both store the embedding as alpha)")
     p.add_argument("--k", type=int, default=10)
     p.add_argument("--tsne", action="store_true", default=True)
     p.add_argument("--tsne-items", type=int, default=2500)

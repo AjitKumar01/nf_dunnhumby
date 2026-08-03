@@ -1,0 +1,81 @@
+{
+  "config": {
+    "label": "nested_pl",
+    "K": 64,
+    "Kp": 8,
+    "Kt": 8,
+    "Ks": 4,
+    "n_neg": 20,
+    "n_cat": 4,
+    "iv_cap": 32,
+    "batch_baskets": 192,
+    "iters": 12000,
+    "eval_every": 3000,
+    "lr": 0.005,
+    "l2": 0.01,
+    "l2_price": 0.0001,
+    "w_quantity": 1.0,
+    "w_incidence": 1.0,
+    "iv_center": 0.0,
+    "placebo_price": "permute",
+    "no_nest": false,
+    "no_quantity": false,
+    "no_store": false,
+    "no_store_price": false,
+    "avail_only": false,
+    "seed": 0,
+    "device": "cpu"
+  },
+  "history": [
+    {
+      "iter": 3000,
+      "val_item": -2.0242183028169976,
+      "val_top1": 0.36450065416484956,
+      "val_quantity_nll": 0.6810018259731381,
+      "val_incidence_nll": 0.468612232764562,
+      "kappa_median": 1.4174447059631348,
+      "price_coef": -3.2398505344458427e-38,
+      "quantity_price_coef": 1.7464368747895552e-39,
+      "secs": 92.55674481391907
+    },
+    {
+      "iter": 6000,
+      "val_item": -2.0123930311586373,
+      "val_top1": 0.37172707339094546,
+      "val_quantity_nll": 0.6935268162174193,
+      "val_incidence_nll": 0.4553577500970694,
+      "kappa_median": 1.4092748165130615,
+      "price_coef": -4.189147567416511e-38,
+      "quantity_price_coef": 8.985960927135465e-39,
+      "secs": 446.8510000705719
+    },
+    {
+      "iter": 9000,
+      "val_item": -1.9775943701671879,
+      "val_top1": 0.38265905657210003,
+      "val_quantity_nll": 0.6994089467304954,
+      "val_incidence_nll": 0.4406386822064718,
+      "kappa_median": 1.4085592031478882,
+      "price_coef": -4.2833117413625173e-38,
+      "quantity_price_coef": -1.0536297292230476e-38,
+      "secs": 536.8656208515167
+    },
+    {
+      "iter": 12000,
+      "val_item": -2.00595715620346,
+      "val_top1": 0.3763896463481143,
+      "val_quantity_nll": 0.6896699296001341,
+      "val_incidence_nll": 0.44741637182235716,
+      "kappa_median": 1.4075396060943604,
+      "price_coef": -2.2424907858368367e-38,
+      "quantity_price_coef": -1.178798472471319e-38,
+      "secs": 628.9545447826385
+    }
+  ],
+  "n_parameters": 867950,
+  "best_iter": 9000,
+  "test_item": -2.0423704696830707,
+  "test_top1": 0.36139127547420413,
+  "test_quantity_nll": 0.6860977887169677,
+  "test_incidence_nll": 0.45647918375853763
+}

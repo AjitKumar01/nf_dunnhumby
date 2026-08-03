@@ -1,0 +1,9 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
+[27] model nested: K=64 nest=True quantity=True store=True store_price=True avail_only=False -> 867,950 parameters
+[27]   it  3000  item -1.9760  top1 0.382  qNLL 0.6647  cNLL 0.4680  kappa 1.392  price +0.556  qprice +0.044 *
+[27]   it  6000  item -1.9546  top1 0.389  qNLL 0.6721  cNLL 0.4539  kappa 1.388  price +0.715  qprice +0.099 *
+[27]   it  9000  item -1.9230  top1 0.398  qNLL 0.6837  cNLL 0.4409  kappa 1.411  price +0.749  qprice +0.124 *
+[27]   it 12000  item -1.9417  top1 0.397  qNLL 0.6642  cNLL 0.4479  kappa 1.389  price +0.757  qprice +0.128
+[27] best at 9000; TEST item -1.9910 top1 0.378 qNLL 0.6658 cNLL 0.4568
+[27] saved nested_nested.pt

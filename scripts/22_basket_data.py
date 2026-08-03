@@ -7,19 +7,24 @@ assumption this model drops:
 
   paper's pipeline                        here
   --------------------------------------  ------------------------------------------
-  at most one item per category per trip  a basket is a set; buy as many as you like
-  -> 132 of 307 categories dropped        -> no unit-demand filter at all
+  at most one item per category per trip  a basket is a multiset; buy several items,
+  -> 132 of 307 categories dropped        and several units of each
   categories independent                  items interact through a shared embedding
   Sunday + Monday only (172 sessions)     all 711 days, because state needs time
   -> 560 items, 56 categories             -> ~5,500 items, ~750 sub-commodities
   price = the only time-varying input     price + household state per sub-commodity
+  prices pooled to chain level            store-level price where observed
+  no assortment                           per-store availability, so an item a store
+                                          never carries is not scored as "rejected"
 
 What it writes to basket_input/:
 
-  baskets.parquet   one row per (basket, item) purchase, with split label
+  baskets.parquet   one row per (basket, item) purchase: units, store, split label
   items.parquet     item_id <-> PRODUCT_ID and the held-out labels (sub-commodity,
                     brand, manufacturer, department) that the model never sees
-  prices.npy        [J, D] log price by item and day, carried forward
+  log_price*.npy    [J, D] log price by item and day, carried forward
+  store_price.npz   store-level price deviations where observed, plus the
+                    per-store availability mask
   state.npz         the structure that answers "how long since this household last
                     bought this sub-commodity, as of this day"
   meta.json         sizes, split boundaries, and the frequency cut
@@ -117,12 +122,25 @@ def main(a):
     log(f"ids: {N:,} households, {J:,} items, {S:,} sub-commodities, {D} days")
 
     # ------------------------------------------------------------ basket table
-    # One row per (basket, item).  QUANTITY is kept but the model treats purchase as
-    # binary: dunnhumby's quantity field is unreliable for weighed goods and the
-    # paper makes the same choice.
+    # One row per (basket, item), with units as a count.
+    # A trip happens at one store: only 2.4% of household-days touch more than one,
+    # so the store is a clean per-basket attribute rather than a within-trip choice.
+    store_of_basket = (tx.groupby("BASKET_ID").STORE_ID
+                       .agg(lambda s: s.mode().iat[0]).rename("store_raw"))
+    stores = np.sort(store_of_basket.unique())
+    sid = pd.Series(np.arange(len(stores)), index=stores)
     bk = (tx.groupby(["BASKET_ID", "user_id", "DAY", "WEEK_NO", "item_id", "sub_id"],
                      as_index=False)
           .agg(units=("QUANTITY", "sum"), price=("unit_price", "median")))
+    bk["store_id"] = bk.BASKET_ID.map(store_of_basket).map(sid).astype(np.int32)
+    # Units are kept as counts.  22.3% of (basket, item) rows buy more than one, and
+    # those rows carry 42.7% of all units, so collapsing to binary would discard
+    # nearly half the volume and one of the two channels a price cut works through
+    # (more buyers, and more units each -- the units-per-buyer elasticity is -0.22).
+    bk["units"] = bk.units.clip(lower=1, upper=a.max_units).astype(np.int16)
+    log(f"stores: {len(stores)};  units>1 on {(bk.units > 1).mean():.1%} of rows, "
+        f"carrying {bk.units[bk.units > 1].sum() / bk.units.sum():.1%} of all units "
+        f"(clipped at {a.max_units})")
     bk = bk.sort_values(["user_id", "DAY", "BASKET_ID", "item_id"]).reset_index(drop=True)
     log(f"basket table: {len(bk):,} (basket, item) rows over {bk.BASKET_ID.nunique():,} baskets")
 
@@ -170,6 +188,47 @@ def main(a):
     log(f"price panel: {J} x {D}, {obs_share:.1%} of item-days directly observed, "
         f"sd of within-item log price {log_price_dev.std():.4f}")
 
+    # ------------------------------------------------ store prices and assortment
+    # Two things the chain-level panel gets wrong.
+    #
+    # 1. Price.  15.8% of store-item-weeks sit more than a cent from the chain price
+    #    (sd across stores $0.12), so pooling puts measurement error straight into the
+    #    regressor that the elasticity is read off.  Store-level cells are sparse
+    #    though -- only 2.3% of the item x store x week grid is ever observed -- so
+    #    the deviation is stored sparsely and the model falls back to the chain price
+    #    wherever a store-week was not observed.  That is honest about what is known
+    #    rather than imputing a store price from nothing.
+    #
+    # 2. Assortment.  The median store carries 63% of the catalogue and the 10th
+    #    percentile store carries 39%.  Scoring an item a store has never stocked as
+    #    a *rejected* alternative is a specification error: it was not available to
+    #    reject.  dunnhumby has no stock-out feed (the paper's data did), so
+    #    availability is proxied by "this store sold this item at some point in a
+    #    window around this week", which is the standard proxy and is a proxy.
+    tx["store_id"] = tx.BASKET_ID.map(store_of_basket).map(sid).astype(np.int32)
+    n_stores = len(stores)
+    sp = (tx.groupby(["item_id", "store_id", "WEEK_NO"])
+          .unit_price.median().rename("p_store").reset_index())
+    cp = (tx.groupby(["item_id", "WEEK_NO"])
+          .unit_price.median().rename("p_chain").reset_index())
+    sp = sp.merge(cp, on=["item_id", "WEEK_NO"])
+    eps = 1e-3
+    sp["dev"] = (np.log(sp.p_store.clip(lower=eps)) - np.log(sp.p_chain.clip(lower=eps)))
+    sp = sp[sp.dev.abs() > 1e-6]
+    log(f"store prices: {len(sp):,} item x store x week deviations kept "
+        f"({len(sp) / max(len(cp) * n_stores, 1):.2%} of the grid); "
+        f"median |dev| {sp.dev.abs().median():.4f} in logs")
+
+    # availability: item x store, plus the first and last week each store sold it
+    av = (tx.groupby(["item_id", "store_id"])
+          .WEEK_NO.agg(["min", "max", "size"]).reset_index())
+    av = av[av["size"] >= a.min_store_lines]
+    carried = np.zeros((J, n_stores), dtype=bool)
+    carried[av.item_id.to_numpy(), av.store_id.to_numpy()] = True
+    log(f"assortment: a store carries {carried.sum(0).mean():.0f} of {J} items on "
+        f"average (median {np.median(carried.sum(0)):.0f}); "
+        f"{carried.mean():.1%} of the item x store grid")
+
     # --------------------------------------------------------------- state
     # For every (household, sub-commodity) pair, the sorted days on which that
     # household bought that sub-commodity.  Encoded as one globally sorted key array
@@ -206,6 +265,10 @@ def main(a):
     items.to_parquet(os.path.join(OUT, "items.parquet"), index=False)
     np.save(os.path.join(OUT, "log_price_dev.npy"), log_price_dev)
     np.save(os.path.join(OUT, "log_price.npy"), log_price)
+    np.savez(os.path.join(OUT, "store_price.npz"),
+             item=sp.item_id.to_numpy(np.int32), store=sp.store_id.to_numpy(np.int32),
+             week=sp.WEEK_NO.to_numpy(np.int32), dev=sp.dev.to_numpy(np.float32),
+             carried=carried, n_stores=np.int32(n_stores))
     np.savez(os.path.join(OUT, "state.npz"),
              keys=keys, gstart_keys=gstart_keys, gstart_vals=gstart_vals,
              sub_gap=sub_gap, item_sub=items.sub_id.to_numpy().astype(np.int32))
@@ -218,6 +281,12 @@ def main(a):
         "day_stride": DAY_STRIDE,
         "split_rows": {k: int(v) for k, v in bk.split.value_counts().items()},
         "n_commodities": int(items.cat_id.nunique()),
+        "n_stores": int(n_stores),
+        "max_units": a.max_units,
+        "share_rows_units_gt1": float((bk.units > 1).mean()),
+        "share_units_in_multi_rows": float(bk.units[bk.units > 1].sum() / bk.units.sum()),
+        "store_price_cells": int(len(sp)),
+        "assortment_share": float(carried.mean()),
         "price_obs_share": obs_share,
         "median_repurchase_gap_days": float(gaps.median()),
     }
@@ -235,4 +304,11 @@ if __name__ == "__main__":
     p.add_argument("--max-trips", type=int, default=300)
     p.add_argument("--val-weeks", type=int, default=8)
     p.add_argument("--test-weeks", type=int, default=12)
+    p.add_argument("--max-units", type=int, default=12,
+                   help="cap on units per (basket, item); dunnhumby's QUANTITY is "
+                        "unreliable for weighed goods and the tail is bulk lines")
+    p.add_argument("--min-store-lines", type=int, default=1,
+                   help="sales needed before a store counts as carrying an item; 1 "
+                        "because an item a store sold was by definition available "
+                        "there, and anything higher marks real purchases unavailable")
     main(p.parse_args())

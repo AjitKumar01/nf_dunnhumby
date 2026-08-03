@@ -1,0 +1,81 @@
+{
+  "config": {
+    "label": "nested_noqty",
+    "K": 64,
+    "Kp": 8,
+    "Kt": 8,
+    "Ks": 4,
+    "n_neg": 20,
+    "n_cat": 4,
+    "iv_cap": 32,
+    "batch_baskets": 192,
+    "iters": 12000,
+    "eval_every": 3000,
+    "lr": 0.005,
+    "l2": 0.01,
+    "l2_price": 0.0001,
+    "w_quantity": 1.0,
+    "w_incidence": 1.0,
+    "iv_center": 0.0,
+    "placebo_price": "none",
+    "no_nest": false,
+    "no_quantity": true,
+    "no_store": false,
+    "no_store_price": false,
+    "avail_only": false,
+    "seed": 0,
+    "device": "cpu"
+  },
+  "history": [
+    {
+      "iter": 3000,
+      "val_item": -1.9758438236787232,
+      "val_top1": 0.3824683820322721,
+      "val_quantity_nll": 0.0,
+      "val_incidence_nll": 0.467133501291275,
+      "kappa_median": 1.3959479331970215,
+      "price_coef": 0.5558585524559021,
+      "quantity_price_coef": NaN,
+      "secs": 88.11344718933105
+    },
+    {
+      "iter": 6000,
+      "val_item": -1.9543861570554677,
+      "val_top1": 0.3896556171804463,
+      "val_quantity_nll": 0.0,
+      "val_incidence_nll": 0.45374765428108654,
+      "kappa_median": 1.3854186534881592,
+      "price_coef": 0.7158926725387573,
+      "quantity_price_coef": NaN,
+      "secs": 175.81957912445068
+    },
+    {
+      "iter": 9000,
+      "val_item": -1.9229160300513053,
+      "val_top1": 0.39738962565049524,
+      "val_quantity_nll": 0.0,
+      "val_incidence_nll": 0.44028525257110596,
+      "kappa_median": 1.4024866819381714,
+      "price_coef": 0.7491216659545898,
+      "quantity_price_coef": NaN,
+      "secs": 473.77375841140747
+    },
+    {
+      "iter": 12000,
+      "val_item": -1.9417021848583609,
+      "val_top1": 0.39707177916684144,
+      "val_quantity_nll": 0.0,
+      "val_incidence_nll": 0.4478803739547729,
+      "kappa_median": 1.387502908706665,
+      "price_coef": 0.757148027420044,
+      "quantity_price_coef": NaN,
+      "secs": 560.6689043045044
+    }
+  ],
+  "n_parameters": 780507,
+  "best_iter": 9000,
+  "test_item": -1.9910521290546008,
+  "test_top1": 0.37824264309135436,
+  "test_quantity_nll": 0.0,
+  "test_incidence_nll": 0.4568681976765589
+}

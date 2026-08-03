@@ -91,6 +91,8 @@ run_bemb_loc.sh             run the authors' C++ stage-1 binary on the same file
 24_embedding_eval.py        do the embeddings recover sub-commodity clusters?
 25_basket_placebo.py        price-endogeneity placebos on the 188-category catalogue
 26_price_causal.py          structural placebo; fit where the counterfactual lives
+27_nested_basket.py         nested model: incidence + item + quantity, with stores
+28_nested_counterfactual.py placebo, elasticity decomposition, basket generation
 ```
 
 ## Where to start
@@ -98,7 +100,8 @@ run_bemb_loc.sh             run the authors' C++ stage-1 binary on the same file
 | document | what it is | read it if |
 |---|---|---|
 | **`DATA_EXPLORATION.md`** | what the data looks like once the paper's assumptions are dropped: unit demand, category independence, no state — plus whether the price variation is exogenous | **start here for the basket model** |
-| **`BASKET_MODEL.md`** | the replacement model — 5,455 items, 188 categories, product interactions, household state — its embedding test, its placebos, and what it gives up | you want the current results |
+| **`BASKET_MODEL.md`** | the flat basket model — 5,455 items, 188 categories, product interactions, household state — its embedding test, its placebos, and what it gives up | you want the current validated results |
+| **`NESTED_MODEL.md`** | the nested model that puts back what the flat one dropped: category incidence with an estimated nesting coefficient, quantity as counts, and stores. **Results pending validation** | you want to know where the work is going |
 | **`FLOW.md`** | the end-to-end map of the *paper's* port: vocabulary, one real shopping trip followed through, every file and row count | you want the paper replication |
 | `RUNNING.md` | how to install, run and debug the pipeline | you want to execute it |
 | `PREPROCESSING.md` | every data decision, with figures and the evidence for each | you want to know why the data looks the way it does |

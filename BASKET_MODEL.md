@@ -504,7 +504,22 @@ size and kind observed in the data, and not a substitute for an experiment.
 
 ---
 
-## 8. What this enables that the paper's model could not
+## 8. What this model dropped, and where that is being fixed
+
+Three things this model does *not* do, each of which the paper's model did or the data
+demands. They are the subject of **`NESTED_MODEL.md`**, which is a rebuild rather than
+a patch:
+
+- **no nest.** There is no category-incidence stage, so the model can rank items but
+  cannot say whether a household buys from a category at all — it cannot separate "the
+  category grew" from "this item took share".
+- **purchase is binary.** 22.3% of (basket, item) rows buy more than one unit and those
+  rows carry 42.6% of all units; the units-per-buyer elasticity is −0.219.
+- **no stores.** Prices pooled across 115 stores although 15.8% of store-item-weeks
+  differ by more than a cent, and assortment ignored although the median store carries
+  63% of the catalogue.
+
+## 9. What this enables that the paper's model could not
 
 - **Multi-item baskets.** 56.1% of baskets are now representable rather than filtered
   or truncated; 132 previously discarded categories are back.
@@ -520,7 +535,7 @@ size and kind observed in the data, and not a substitute for an experiment.
 
 ---
 
-## 9. Limitations, stated plainly
+## 10. Limitations, stated plainly
 
 - **The causal claim is a placebo argument, not an instrument.** §7 establishes that
   the price coefficient is driven by real price variation and that the variation

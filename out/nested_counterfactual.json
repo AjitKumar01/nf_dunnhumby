@@ -1,0 +1,61 @@
+{
+  "nested": {
+    "placebo_price": "none",
+    "nest": true,
+    "quantity": true,
+    "store": true,
+    "price_coef": 0.7487765550613403,
+    "quantity_price_coef": 0.12390302866697311,
+    "median_kappa": 1.410551905632019,
+    "test_item": -1.9909831899558157,
+    "test_top1": 0.37797285518615364,
+    "test_quantity_nll": 0.6658431029107499,
+    "test_incidence_nll": 0.4567738325068189
+  },
+  "decomposition": {
+    "n": 12724,
+    "allocation": -0.9618498086929321,
+    "incidence": -0.08448389917612076,
+    "quantity": -0.14043062925338745,
+    "total": -1.1867642402648926,
+    "median_total": -0.9706388711929321,
+    "share_allocation": 0.8104809498458108,
+    "share_incidence": 0.07118844359286008,
+    "share_quantity": 0.11833068817614738,
+    "median_kappa": 1.410551905632019,
+    "share_categories_kappa_above_1": 0.792553186416626
+  },
+  "generation": {
+    "real_items": {
+      "mean": 8.3595,
+      "median": 5.0,
+      "p90": 21.0
+    },
+    "generated_items": {
+      "mean": 10.420291666666666,
+      "median": 7.833333333333333,
+      "p90": 23.5
+    },
+    "real_categories": {
+      "mean": 6.49425,
+      "median": 4.0,
+      "p90": 16.0
+    },
+    "generated_categories": {
+      "mean": 10.420291666666666,
+      "median": 7.833333333333333,
+      "p90": 23.5
+    },
+    "real_units": {
+      "mean": 11.26825,
+      "median": 6.0,
+      "p90": 28.0
+    },
+    "generated_units": {
+      "mean": 13.686791666666666,
+      "median": 7.833333333333333,
+      "p90": 31.333333333333332
+    },
+    "trips": 4000
+  }
+}

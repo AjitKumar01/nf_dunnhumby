@@ -1,0 +1,556 @@
+"""
+Stage 27 -- Nested basket model: category incidence, item choice, quantity, stores.
+
+Stage 23 dropped three things it should not have, and this puts them back.
+
+1. THE NEST.  23 models "which item", never "does this household buy from this
+   category at all".  That is not a simplification, it is the loss of the question a
+   retailer actually asks: cut Tide's price and does total detergent volume grow, or
+   does Tide just take share from Gain?  23 cannot distinguish those.  Unit demand
+   failing kills the within-category *softmax*; it says nothing about whether
+   incidence is a separate decision from allocation, and 23 conflated the two.
+
+2. QUANTITY.  23 treats purchase as binary.  22.3% of (basket, item) rows buy more
+   than one unit and those rows carry 42.6% of all units, so binary throws away
+   nearly half the volume.  Worse, it throws away one of the two channels a price cut
+   works through: the units-per-buyer elasticity is -0.22, on top of the extra buyers.
+
+3. STORES.  23 pools prices to chain level and ignores assortment.  15.8% of
+   store-item-weeks sit more than a cent from the chain price, which is measurement
+   error in the regressor the elasticity is read off; and the median store carries
+   63% of the catalogue, so scoring an item a store never stocked as a *rejected*
+   alternative is a specification error -- it was not there to reject.
+
+How the nest and multiple items coexist
+---------------------------------------
+The paper gets its nest from a within-category softmax plus an outside good, which is
+exactly what unit demand buys it.  Drop unit demand and that construction is gone, but
+the nest is not: it survives as a Poisson-multinomial factorisation.
+
+    total units from category c    Q_ict ~ Poisson(exp(a_ic + kappa_c * IV_ict))
+    allocation across its items    multinomial(softmax_j u_ijt)
+    IV_ict = log sum_{j in c, stocked at s} exp(u_ijt)
+
+Poisson-multinomial factorises, so this is equivalent to independent counts
+
+    q_ijt ~ Poisson(exp(a_ic + (kappa_c - 1) * IV_ict + u_ijt))
+
+and `kappa` is a nesting coefficient with the paper's interpretation:
+
+    kappa = 1   IV cancels; category volume is whatever the items sum to (IIA)
+    kappa = 0   category volume is fixed; a price cut only moves share
+    kappa > 1   the category expands more than proportionally
+
+That is the parameter that answers the question in (1), it is estimated rather than
+assumed, and it is compatible with buying three yogurts.
+
+Fitting.  A full Poisson likelihood needs every item on every trip (5,455 x 199,347),
+so the three heads are trained jointly on sampled data:
+
+  item head       softmax over {chosen} u {negatives}, negatives drawn only from
+                  items the trip's store actually stocks
+  quantity head   units - 1 ~ Poisson, on chosen items only, with its own price
+                  coefficient, so the quantity margin gets its own elasticity
+  incidence head  per (trip, category): bought or not, against IV computed over the
+                  category's stocked items.  Categories are sampled, positives and
+                  negatives, so this costs ~4 categories x ~29 items per trip
+
+Writes out/<label>_nested.pt and out/<label>_nested_history.json.
+"""
+import argparse
+import json
+import os
+import time
+
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+IN = os.path.join(HERE, "..", "basket_input")
+OUT = os.path.join(HERE, "..", "out")
+
+N_STATE_FEATURES = 4
+
+
+def log(m):
+    print(f"[27] {m}", flush=True)
+
+
+class NestedData:
+    def __init__(self, indir, device="cpu", placebo_price="none",
+                 placebo_seed=0):
+        self.meta = json.load(open(os.path.join(indir, "meta.json")))
+        bk = pd.read_parquet(os.path.join(indir, "baskets.parquet"))
+        self.items = pd.read_parquet(os.path.join(indir, "items.parquet"))
+        self.J = int(self.meta["n_items"]); self.N = int(self.meta["n_users"])
+        self.S = int(self.meta["n_subs"]); self.C = int(self.meta["n_commodities"])
+        self.n_stores = int(self.meta["n_stores"])
+        self.stride = int(self.meta["day_stride"])
+        self.device = device
+
+        lpd = np.load(os.path.join(indir, "log_price_dev.npy"))
+        # Structural placebo: scramble the price panel before fitting.  A price
+        # coefficient that survives this was never measuring price.
+        if placebo_price != "none":
+            r = np.random.default_rng(placebo_seed)
+            if placebo_price == "permute":
+                for j in range(lpd.shape[0]):
+                    lpd[j] = r.permutation(lpd[j])
+            elif placebo_price == "swap":
+                lpd = lpd[r.permutation(lpd.shape[0])]
+            log(f"PLACEBO: price panel scrambled with '{placebo_price}'")
+        self.log_price_dev = torch.as_tensor(lpd, device=device)
+        z = np.load(os.path.join(indir, "state.npz"))
+        self.keys = z["keys"]; self.sub_gap = z["sub_gap"].astype(np.float32)
+        self.item_sub = z["item_sub"].astype(np.int64)
+
+        # --- stores: sparse price deviations, dense availability
+        sz = np.load(os.path.join(indir, "store_price.npz"))
+        self.carried = torch.as_tensor(sz["carried"], device=device)      # [J, nS] bool
+        # sparse (item, store, week) -> log price deviation, as a dict-free lookup on
+        # a sorted key array, same trick the state uses
+        k = (sz["item"].astype(np.int64) * self.n_stores + sz["store"]) * 128 + sz["week"]
+        o = np.argsort(k)
+        self.sp_keys = k[o]
+        dev_arr = sz["dev"][o]
+        if placebo_price != "none":
+            # the store-level deviation is price too; leaving it real would leak
+            dev_arr = np.random.default_rng(placebo_seed + 1).permutation(dev_arr)
+        self.sp_dev = torch.as_tensor(dev_arr, device=device)
+
+        it_cat = self.items.sort_values("item_id").cat_id.to_numpy()
+        self.item_cat = torch.as_tensor(it_cat, device=device)
+        # padded [C, Mmax] item block per category, for the inclusive value
+        cmax = int(np.bincount(it_cat).max())
+        ci = np.zeros((self.C, cmax), dtype=np.int64)
+        cm = np.zeros((self.C, cmax), dtype=np.float32)
+        for c in range(self.C):
+            js = np.flatnonzero(it_cat == c)
+            ci[c, :len(js)] = js; cm[c, :len(js)] = 1.0
+        self.cat_items = torch.as_tensor(ci, device=device)
+        self.cat_mask = torch.as_tensor(cm, device=device)
+
+        bk = bk.sort_values(["split", "BASKET_ID", "item_id"]).reset_index(drop=True)
+        self.splits = {}
+        for sp, g in bk.groupby("split", sort=False):
+            g = g.reset_index(drop=True)
+            codes, _ = pd.factorize(g.BASKET_ID)
+            starts = np.flatnonzero(np.r_[True, np.diff(codes) != 0])
+            ends = np.r_[starts[1:], len(g)]
+            self.splits[sp] = {
+                "user": g.user_id.to_numpy(np.int64), "item": g.item_id.to_numpy(np.int64),
+                "day": g.DAY.to_numpy(np.int64), "units": g.units.to_numpy(np.float32),
+                "store": g.store_id.to_numpy(np.int64),
+                "week": (g.WEEK_NO.to_numpy(np.int64) - 1) % 52,
+                "raw_week": g.WEEK_NO.to_numpy(np.int64),
+                "cat": it_cat[g.item_id.to_numpy()],
+                "starts": starts.astype(np.int64), "ends": ends.astype(np.int64),
+                "n_baskets": len(starts), "n_rows": len(g)}
+        cnt = np.bincount(self.splits["train"]["item"], minlength=self.J).astype(np.float64)
+        pr = np.power(np.maximum(cnt, 1.0), 0.75)
+        self.neg_p = pr / pr.sum()
+        log(f"data: {self.N:,} households, {self.J:,} items, {self.C} categories, "
+            f"{self.n_stores} stores; "
+            + ", ".join(f"{k} {v['n_rows']:,} rows" for k, v in self.splits.items()))
+        log(f"      units>1 on {self.meta['share_rows_units_gt1']:.1%} of rows carrying "
+            f"{self.meta['share_units_in_multi_rows']:.1%} of units; "
+            f"assortment {self.meta['assortment_share']:.1%} of the item x store grid")
+
+    def store_dev(self, item, store, week):
+        """Store-level log price deviation; 0 where that store-week was not observed."""
+        k = (item * self.n_stores + store) * 128 + week
+        idx = np.searchsorted(self.sp_keys, k)
+        ok = (idx < len(self.sp_keys))
+        idx = np.clip(idx, 0, max(len(self.sp_keys) - 1, 0))
+        hit = ok & (self.sp_keys[idx] == k)
+        out = torch.zeros(len(k), dtype=torch.float32, device=self.device)
+        if hit.any():
+            out[torch.as_tensor(np.flatnonzero(hit), device=self.device)] = \
+                self.sp_dev[torch.as_tensor(idx[hit], device=self.device)]
+        return out
+
+    def state(self, user, item, day):
+        sub = self.item_sub[item]
+        group = user.astype(np.int64) * self.S + sub
+        key = group * self.stride + day
+        idx = np.searchsorted(self.keys, key, side="left")
+        prev = np.clip(idx - 1, 0, len(self.keys) - 1)
+        prev_key = self.keys[prev]
+        same = (idx - 1 >= 0) & ((prev_key // self.stride) == group)
+        since = np.where(same, day - (prev_key % self.stride), 0).astype(np.float32)
+        gap = self.sub_gap[sub]
+        return np.stack([
+            (~same).astype(np.float32),
+            np.where(same, np.exp(-since / 7.0), 0.0),
+            np.where(same, np.exp(-since / gap), 0.0),
+            np.where(same, np.log1p(since) / np.log(100.0), 0.0)], axis=1).astype(np.float32)
+
+
+class NestedModel(nn.Module):
+    def __init__(self, d: NestedData, K=64, Kp=8, Kt=8, Ks=4, n_weeks=52, seed=0,
+                 use_nest=True, use_quantity=True, use_store=True,
+                 use_store_price=True, avail_only=False):
+        super().__init__()
+        g = torch.Generator().manual_seed(seed)
+        J, N, C = d.J, d.N, d.C
+        self.K, self.Kp, self.d = K, Kp, d
+        self.use_nest, self.use_quantity, self.use_store = use_nest, use_quantity, use_store
+
+        def emb(n, k, sd=0.05):
+            return nn.Parameter(torch.randn(n, k, generator=g) * sd)
+
+        # --- item layer (as stage 23, tied interaction)
+        self.lam = nn.Parameter(torch.zeros(J))
+        self.alpha = emb(J, K)
+        self.theta = emb(N, K)
+        self.gamma = emb(N, Kp, 0.1); self.beta = emb(J, Kp, 0.1)
+        self.eta = emb(J, N_STATE_FEATURES, 0.01)
+        self.mu = emb(J, Kt, 0.02); self.delta = emb(n_weeks, Kt, 0.02)
+        # store x item affinity: format and assortment differ, and a low-rank term
+        # keeps it to 115*Ks + J*Ks parameters instead of 115*5455
+        self.use_store_price = use_store_price
+        keep_aff = use_store and not avail_only
+        self.store_vec = emb(d.n_stores, Ks, 0.02) if keep_aff else None
+        self.item_store = emb(J, Ks, 0.02) if keep_aff else None
+
+        # --- quantity head: units - 1 ~ Poisson(exp(.)), own price coefficient so the
+        # quantity margin is not forced to share the incidence one
+        if use_quantity:
+            self.q0 = nn.Parameter(torch.zeros(J))
+            self.q_gamma = emb(N, Kp, 0.05); self.q_beta = emb(J, Kp, 0.05)
+            self.q_state = emb(J, N_STATE_FEATURES, 0.01)
+
+        # --- incidence head: per category, with the nesting coefficient on IV
+        if use_nest:
+            self.c0 = nn.Parameter(torch.zeros(C))
+            self.c_user = emb(N, K, 0.05); self.c_cat = emb(C, K, 0.05)
+            # kappa parameterised as softplus so it stays positive; init near 1, which
+            # is the "IV cancels" point, so the data has to move it either way
+            self.kappa_raw = nn.Parameter(torch.full((C,), 0.5413))   # softplus -> 1.0
+            self.c_state = emb(C, N_STATE_FEATURES, 0.01)
+
+    def kappa(self):
+        return nn.functional.softplus(self.kappa_raw)
+
+    def item_utility(self, users, items, ctx, dlogp, state, weeks, stores):
+        s = self.lam[items]
+        a = self.alpha[items]
+        s = s + torch.einsum("bk,bmk->bm", self.theta[users], a)
+        s = s + (a * ctx.unsqueeze(1)).sum(-1)
+        s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
+        s = s + (self.eta[items] * state).sum(-1)
+        s = s + (self.mu[items] * self.delta[weeks].unsqueeze(1)).sum(-1)
+        if self.store_vec is not None:
+            s = s + (self.item_store[items] * self.store_vec[stores].unsqueeze(1)).sum(-1)
+        return s
+
+    def l2_repr(self):
+        ps = [self.alpha, self.theta, self.eta, self.mu, self.delta,
+              self.store_vec, self.item_store]
+        if self.use_nest:
+            ps += [self.c_user, self.c_cat, self.c_state]
+        if self.use_quantity:
+            ps += [self.q_state]
+        return sum((p ** 2).sum() for p in ps if p is not None)
+
+    def l2_price(self):
+        ps = [self.gamma, self.beta]
+        if self.use_quantity:
+            ps += [self.q_gamma, self.q_beta]
+        return sum((p ** 2).sum() for p in ps if p is not None)
+
+
+def make_batch(d, model, split, bidx, n_neg, rng, device):
+    """Positives, store-aware negatives, context, prices, state, units."""
+    sp = d.splits[split]
+    starts, ends = sp["starts"][bidx], sp["ends"][bidx]
+    lens = ends - starts
+    rows = np.concatenate([np.arange(s, e) for s, e in zip(starts, ends)])
+    user, item = sp["user"][rows], sp["item"][rows]
+    day, week = sp["day"][rows], sp["week"][rows]
+    store, units = sp["store"][rows], sp["units"][rows]
+    B = len(rows)
+
+    owner = np.repeat(np.arange(len(bidx)), lens)
+    ow = torch.as_tensor(owner, device=device)
+    a_all = model.alpha.detach()[item]
+    sums = torch.zeros(len(bidx), model.K, device=device, dtype=a_all.dtype)
+    sums.index_add_(0, ow, a_all)
+    n_in = torch.as_tensor(lens, device=device, dtype=a_all.dtype)[ow]
+    ctx = (sums[ow] - a_all) / (n_in - 1).clamp_min(1).unsqueeze(1)
+    ctx = torch.where((n_in > 1).unsqueeze(1), ctx, torch.zeros_like(ctx))
+
+    neg = rng.choice(d.J, size=(B, n_neg), p=d.neg_p).astype(np.int64)
+    cand = np.concatenate([item[:, None], neg], axis=1)
+    M = cand.shape[1]
+    day_r = np.repeat(day[:, None], M, 1)
+    user_r = np.repeat(user[:, None], M, 1)
+    store_r = np.repeat(store[:, None], M, 1)
+    rw = np.repeat(sp["raw_week"][rows][:, None], M, 1)
+
+    st = d.state(user_r.ravel(), cand.ravel(), day_r.ravel()).reshape(B, M, N_STATE_FEATURES)
+    ci = torch.as_tensor(cand, device=device)
+    dlogp = d.log_price_dev[ci, torch.as_tensor(day_r, device=device)]
+    if model.use_store and model.use_store_price:
+        dlogp = dlogp + d.store_dev(cand.ravel(), store_r.ravel(), rw.ravel()).reshape(B, M)
+    # An item the store does not stock was not available to reject, so it must not
+    # sit in the choice set.  The chosen item is stocked by construction.
+    avail = torch.ones(B, M, dtype=torch.bool, device=device)
+    if model.use_store:
+        avail = d.carried[ci, torch.as_tensor(store_r, device=device)].clone()
+        avail[:, 0] = True
+    return dict(
+        user=torch.as_tensor(user, device=device), cand=ci, ctx=ctx, dlogp=dlogp,
+        state=torch.as_tensor(st, device=device),
+        week=torch.as_tensor(week, device=device),
+        store=torch.as_tensor(store, device=device),
+        units=torch.as_tensor(units, device=device), avail=avail)
+
+
+def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
+    """Sampled (trip, category) pairs with the inclusive value over stocked items."""
+    sp = d.splits[split]
+    # Categories are sampled case-control: a few bought ones and a few not, because
+    # uniform sampling would give 0.13 positives per trip (the true base rate is 6.1
+    # of 188 categories, 3.25%).  That over-samples positives about 30x, so the fitted
+    # intercept is calibrated to the *sample* and not to reality -- generation from an
+    # uncorrected head produced 58 categories per basket against a real 6.5.
+    # The standard fix is an offset log(pi_1 / pi_0) inside the logit during training,
+    # dropped at prediction time so probabilities come out on the population scale.
+    cats, ys, trip, off = [], [], [], []
+    for ti, i in enumerate(bidx):
+        s = set(sp["cat"][sp["starts"][i]:sp["ends"][i]].tolist())
+        n_pos_avail = max(len(s), 1)
+        n_neg_avail = max(d.C - len(s), 1)
+        pos = list(s)[:max(1, n_cat // 2)]
+        neg = [c for c in rng.choice(d.C, size=n_cat, replace=False).tolist()
+               if c not in s][:max(n_cat - len(pos), 1)]
+        o = np.log((len(pos) / n_pos_avail) / (max(len(neg), 1) / n_neg_avail))
+        for c in pos:
+            cats.append(c); ys.append(1.0); trip.append(ti); off.append(o)
+        for c in neg:
+            cats.append(c); ys.append(0.0); trip.append(ti); off.append(o)
+    if not cats:
+        return None
+    cats = np.asarray(cats, dtype=np.int64); trip = np.asarray(trip)
+    P = len(cats)
+    first = sp["starts"][bidx][trip]
+    user, day = sp["user"][first], sp["day"][first]
+    week, store, rw = sp["week"][first], sp["store"][first], sp["raw_week"][first]
+
+    ct = torch.as_tensor(cats, device=device)
+    blk, msk = d.cat_items[ct], d.cat_mask[ct].clone()
+    # Every category is padded to the largest one (225 items) although the median has
+    # 15, so a dense block spends most of its work on padding and costs 5.4x the item
+    # head.  Sample `iv_cap` of each category's items instead and scale the sum by
+    # n_c / m: that is an unbiased estimator of sum_j exp(u_j), which is what the
+    # inclusive value needs, at a fixed cost per category.
+    n_valid = msk.sum(1)
+    if iv_cap and blk.shape[1] > iv_cap:
+        m = torch.clamp(n_valid, max=iv_cap)
+        r = torch.rand(len(cats), iv_cap, device=device)
+        pick = (r * n_valid.clamp_min(1).unsqueeze(1)).long().clamp_max(
+            blk.shape[1] - 1)                                    # [P, iv_cap]
+        blk = torch.gather(blk, 1, pick)
+        msk = torch.gather(msk, 1, pick)
+        iv_scale = torch.log(n_valid.clamp_min(1) / m.clamp_min(1))
+    else:
+        iv_scale = torch.zeros(len(cats), device=device)
+    Mx = blk.shape[1]
+    blk_np = blk.cpu().numpy()
+    day_r = np.repeat(day[:, None], Mx, 1)
+    user_r = np.repeat(user[:, None], Mx, 1)
+    store_r = np.repeat(store[:, None], Mx, 1)
+    rw_r = np.repeat(rw[:, None], Mx, 1)
+    st = d.state(user_r.ravel(), blk_np.ravel(), day_r.ravel()).reshape(P, Mx, N_STATE_FEATURES)
+    dlogp = d.log_price_dev[blk, torch.as_tensor(day_r, device=device)]
+    if model.use_store:
+        if model.use_store_price:
+            dlogp = dlogp + d.store_dev(blk_np.ravel(), store_r.ravel(),
+                                        rw_r.ravel()).reshape(P, Mx)
+        msk = msk * d.carried[blk, torch.as_tensor(store_r, device=device)].float()
+    # Incidence is decided before the basket exists, so there is no context yet.
+    ctx = torch.zeros(P, model.K, device=device)
+    u = model.item_utility(torch.as_tensor(user, device=device), blk, ctx, dlogp,
+                           torch.as_tensor(st, device=device),
+                           torch.as_tensor(week, device=device),
+                           torch.as_tensor(store, device=device))
+    any_stocked = msk.sum(1) > 0
+    iv = torch.logsumexp(u.masked_fill(msk == 0, -1e9), dim=1) + iv_scale
+    # A category the store stocks nothing from has IV = -1e9, which would dominate the
+    # incidence logit.  Centring on the batch and zeroing those rows leaves the
+    # category intercept to explain them, which is what they are: not on offer.
+    iv = torch.where(any_stocked, iv, torch.zeros_like(iv))
+    iv = iv - iv[any_stocked].mean() if bool(any_stocked.any()) else iv
+    iv = torch.where(any_stocked, iv, torch.zeros_like(iv))
+    cst = d.state(user, blk_np[:, 0], day)
+    return dict(cat=ct, user=torch.as_tensor(user, device=device), iv=iv,
+                state=torch.as_tensor(cst, device=device),
+                offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
+                y=torch.as_tensor(np.asarray(ys, dtype=np.float32), device=device))
+
+
+def losses(model, bt, ib, iv_center):
+    out = {}
+    u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
+                           bt["state"], bt["week"], bt["store"])
+    u = u.masked_fill(~bt["avail"], -1e9)
+    out["item"] = -torch.log_softmax(u, dim=1)[:, 0].mean()
+
+    if model.use_quantity:
+        # units - 1 ~ Poisson(exp(z)), with its own price coefficient so the quantity
+        # margin is not forced to share the incidence one.
+        j = bt["cand"][:, 0]
+        z = (model.q0[j]
+             - (model.q_gamma[bt["user"]] * model.q_beta[j]).sum(-1) * bt["dlogp"][:, 0]
+             + (model.q_state[j] * bt["state"][:, 0, :]).sum(-1)).clamp(-6.0, 4.0)
+        k = (bt["units"] - 1.0).clamp_min(0)
+        out["quantity"] = (torch.exp(z) - k * z + torch.lgamma(k + 1)).mean()
+
+    if model.use_nest and ib is not None:
+        kap = model.kappa()[ib["cat"]]
+        lin = (model.c0[ib["cat"]]
+               + (model.c_user[ib["user"]] * model.c_cat[ib["cat"]]).sum(-1)
+               + (model.c_state[ib["cat"]] * ib["state"]).sum(-1)
+               + kap * (ib["iv"] - iv_center)
+               + ib["offset"])          # case-control correction; see incidence_batch
+        out["incidence"] = nn.functional.binary_cross_entropy_with_logits(lin, ib["y"])
+    return out
+
+
+@torch.no_grad()
+def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
+             iv_cap=32):
+    sp = d.splits[split]
+    nb = min(sp["n_baskets"], max_baskets)
+    idx = rng.choice(sp["n_baskets"], size=nb, replace=False)
+    s_item = s_q = s_c = 0.0
+    n_i = n_q = n_c = hits = 0
+    for a in range(0, nb, 256):
+        b = idx[a:a + 256]
+        bt = make_batch(d, model, split, b, n_neg, rng, device)
+        u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
+                               bt["state"], bt["week"], bt["store"])
+        u = u.masked_fill(~bt["avail"], -1e9)
+        lp = torch.log_softmax(u, dim=1)[:, 0]
+        s_item += float(lp.sum()); n_i += lp.shape[0]
+        hits += int((u.argmax(1) == 0).sum())
+        L = losses(model, bt, None, iv_center)
+        if "quantity" in L:
+            s_q += float(L["quantity"]) * lp.shape[0]; n_q += lp.shape[0]
+        if model.use_nest:
+            ib = incidence_batch(d, model, split, b, 4, rng, device, iv_cap)
+            if ib is not None:
+                Lc = losses(model, bt, ib, iv_center)
+                s_c += float(Lc["incidence"]) * ib["y"].shape[0]; n_c += ib["y"].shape[0]
+    return (s_item / max(n_i, 1), hits / max(n_i, 1),
+            s_q / max(n_q, 1), s_c / max(n_c, 1))
+
+
+def main(a):
+    os.makedirs(OUT, exist_ok=True)
+    dev = torch.device(a.device)
+    torch.manual_seed(a.seed)
+    d = NestedData(IN, device=dev, placebo_price=a.placebo_price,
+                   placebo_seed=a.seed)
+    model = NestedModel(d, K=a.K, Kp=a.Kp, Kt=a.Kt, Ks=a.Ks, seed=a.seed,
+                        use_nest=not a.no_nest, use_quantity=not a.no_quantity,
+                        use_store=not a.no_store,
+                        use_store_price=not (a.no_store_price or a.avail_only),
+                        avail_only=a.avail_only).to(dev)
+    n_par = sum(p.numel() for p in model.parameters())
+    log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
+        f"store={not a.no_store} store_price={model.use_store_price} "
+        f"avail_only={a.avail_only} -> {n_par:,} parameters")
+
+    opt = torch.optim.Adam(model.parameters(), lr=a.lr)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.iters,
+                                                      eta_min=a.lr * 0.05)
+    rng = np.random.default_rng(a.seed)
+    ev = np.random.default_rng(12345)
+    sp = d.splits["train"]
+    hist, best, best_it = [], -1e9, -1
+    t0 = time.time()
+    for it in range(1, a.iters + 1):
+        bidx = rng.integers(0, sp["n_baskets"], size=a.batch_baskets)
+        bt = make_batch(d, model, "train", bidx, a.n_neg, rng, dev)
+        ib = incidence_batch(d, model, "train", bidx, a.n_cat, rng, dev, a.iv_cap) \
+            if model.use_nest else None
+        L = losses(model, bt, ib, a.iv_center)
+        loss = (L["item"] + a.w_quantity * L.get("quantity", 0.0)
+                + a.w_incidence * L.get("incidence", 0.0)
+                + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price())
+                / bt["cand"].shape[0])
+        opt.zero_grad(); loss.backward(); opt.step(); sched.step()
+
+        if it % a.eval_every == 0 or it == a.iters:
+            vi, vacc, vq, vc = evaluate(model, d, "validation", a.n_neg, ev, dev,
+                                        a.iv_center, iv_cap=a.iv_cap)
+            kap = float(model.kappa().detach().median()) if model.use_nest else float("nan")
+            pc = float((model.gamma.detach() @ model.beta.detach().T).median())
+            qc = float((model.q_gamma.detach() @ model.q_beta.detach().T).median()) \
+                if model.use_quantity else float("nan")
+            hist.append({"iter": it, "val_item": vi, "val_top1": vacc,
+                         "val_quantity_nll": vq, "val_incidence_nll": vc,
+                         "kappa_median": kap, "price_coef": pc,
+                         "quantity_price_coef": qc, "secs": time.time() - t0})
+            score = vi - a.w_quantity * vq - a.w_incidence * vc
+            star = ""
+            if score > best:
+                best, best_it = score, it
+                torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_nested.pt"))
+                star = " *"
+            log(f"  it {it:5d}  item {vi:.4f}  top1 {vacc:.3f}  qNLL {vq:.4f}  "
+                f"cNLL {vc:.4f}  kappa {kap:.3f}  price {pc:+.3f}  qprice {qc:+.3f}{star}")
+
+    model.load_state_dict(torch.load(os.path.join(OUT, f"{a.label}_nested.pt"),
+                                     map_location=dev))
+    ti, tacc, tq, tc = evaluate(model, d, "test", a.n_neg,
+                                np.random.default_rng(999), dev, a.iv_center, 6000,
+                                iv_cap=a.iv_cap)
+    log(f"best at {best_it}; TEST item {ti:.4f} top1 {tacc:.3f} qNLL {tq:.4f} cNLL {tc:.4f}")
+    with open(os.path.join(OUT, f"{a.label}_nested_history.json"), "w") as f:
+        json.dump({"config": vars(a), "history": hist, "n_parameters": n_par,
+                   "best_iter": best_it, "test_item": ti, "test_top1": tacc,
+                   "test_quantity_nll": tq, "test_incidence_nll": tc}, f, indent=2)
+    log(f"saved {a.label}_nested.pt")
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--label", default="nested")
+    p.add_argument("--K", type=int, default=64)
+    p.add_argument("--Kp", type=int, default=8)
+    p.add_argument("--Kt", type=int, default=8)
+    p.add_argument("--Ks", type=int, default=4)
+    p.add_argument("--n-neg", type=int, default=20)
+    p.add_argument("--n-cat", type=int, default=4)
+    p.add_argument("--iv-cap", type=int, default=32,
+                   help="items sampled per category for the inclusive value; 0 uses "
+                        "the full padded block, which is 5x slower for no gain")
+    p.add_argument("--batch-baskets", type=int, default=192)
+    p.add_argument("--iters", type=int, default=12000)
+    p.add_argument("--eval-every", type=int, default=1000)
+    p.add_argument("--lr", type=float, default=0.005)
+    p.add_argument("--l2", type=float, default=1e-2)
+    p.add_argument("--l2-price", type=float, default=1e-4)
+    p.add_argument("--w-quantity", type=float, default=1.0)
+    p.add_argument("--w-incidence", type=float, default=1.0)
+    p.add_argument("--iv-center", type=float, default=0.0,
+                   help="extra shift on the (already batch-centred) inclusive value")
+    p.add_argument("--placebo-price", default="none",
+                   choices=["none", "permute", "swap"])
+    p.add_argument("--no-nest", action="store_true")
+    p.add_argument("--no-quantity", action="store_true")
+    p.add_argument("--no-store", action="store_true")
+    p.add_argument("--no-store-price", action="store_true",
+                   help="keep availability and store affinity, drop store-level prices")
+    p.add_argument("--avail-only", action="store_true",
+                   help="availability mask only: no store prices, no store affinity. "
+                        "Isolates how much of the store gain is just a smaller choice "
+                        "set rather than real information")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--device", default="cpu")
+    main(p.parse_args())
