@@ -88,37 +88,47 @@ python3 19_substitution_test.py --labels nf nf_ks nf_sub > $L/log_sub_test.txt 2
   && tail -8 $L/log_sub_test.txt
 python3 20_simulate.py --label nf_sub > $L/log_simulate.txt 2>&1 && tail -6 $L/log_simulate.txt
 
-step "21-24 the basket model: exploration, data, fit, embedding test"
+step "21-22 the basket model: exploration and dataset"
 python3 21_basket_eda.py     > $L/log_basket_eda.txt  2>&1 && echo "  basket EDA ok"
 python3 22_basket_data.py    > $L/log_basket_data.txt 2>&1 && echo "  basket dataset ok"
-BT="--tie-context --K 64 --l2 1e-2 --lr 0.005 --iters 9000 --eval-every 500"
-for spec in "tied_k64_r|" "tied_noctx|--no-context" "tied_nostate|--no-state" \
-            "tied_noprice|--no-price" "tied_notaste|--no-taste" "tied_s1|--seed 1"; do
+
+step "25 price-endogeneity placebos on the 188-category catalogue"
+# Deliberately before the fits, for the same reason stage 11 is: this is what decides
+# whether any elasticity from the basket model can be believed.
+python3 25_basket_placebo.py > $L/log_basket_placebo.txt 2>&1; tail -14 $L/log_basket_placebo.txt
+
+step "23 fit the basket model, its seed replicate, its placebo and its ablations"
+# One configuration for everything.  Two settings are load-bearing and neither is a
+# tuning trick (BASKET_MODEL.md 2, 7.2, and 3):
+#   --tie-context   rho_j = alpha_j, so co-purchase structure lands in the embedding
+#                   the sub-commodity test reads, instead of in a free rho
+#   --l2-price      the price block needs its own, much lighter penalty; a single L2
+#                   tuned for the embedding shrinks the elasticity by 10x
+#   --lr-decay      without it the validation sequence bounces ~0.03 nats and the
+#                   saved checkpoint is a lottery
+CT="--tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --lr-decay --iters 12000 --eval-every 1000"
+for spec in "one|" "one_s1|--seed 1" "one_pl|--placebo-price permute" \
+            "one_noctx|--no-context" "one_nostate|--no-state" \
+            "one_noprice|--no-price" "one_notaste|--no-taste" \
+            "one_noseason|--no-season"; do
   lab=${spec%%|*}; extra=${spec#*|}
   # shellcheck disable=SC2086
-  python3 23_basket_model.py --label "$lab" $BT $extra > $L/log_$lab.txt 2>&1
-  echo "  trained $lab"
+  python3 23_basket_model.py --label "$lab" $CT $extra > $L/log_$lab.txt 2>&1
+  echo "  trained $lab: $(grep 'best validation' $L/log_$lab.txt)"
 done
-python3 24_embedding_eval.py --labels tied_k64_r tied_noctx tied_nostate tied_noprice \
-  tied_notaste tied_s1 --primary tied_k64_r > $L/log_embed_eval.txt 2>&1
-tail -8 $L/log_embed_eval.txt
+# The two comparators the argument in BASKET_MODEL.md 2 and 7.2 leans on: a free rho,
+# and a single L2 across all parameters.  Both are superseded, both are cited.
+python3 23_basket_model.py --label basket --K 32 --l2 1e-4 --l2-price 1e-4 \
+  --lr 0.01 --iters 8000 --eval-every 500 > $L/log_basket.txt 2>&1
+python3 23_basket_model.py --label tied_k64_r --tie-context --K 64 --l2 1e-2 \
+  --l2-price 1e-2 --lr 0.005 --iters 9000 --eval-every 500 > $L/log_tied_k64_r.txt 2>&1
 
-step "25-26 price causality: placebos on the data, then on the model"
-python3 25_basket_placebo.py > $L/log_basket_placebo.txt 2>&1; tail -14 $L/log_basket_placebo.txt
-# The price block needs its own, much lighter penalty: a single L2 tuned for the
-# embedding shrinks the elasticity by an order of magnitude (see BASKET_MODEL.md 7.2).
-# One configuration for everything.  Cosine decay matters: without it the validation
-# sequence bounces ~0.03 nats and the saved checkpoint is a lottery, which is what made
-# the embedding look like it traded off against the price coefficient.
-CT="--tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --lr-decay --iters 12000 --eval-every 1000"
-# shellcheck disable=SC2086
-python3 23_basket_model.py --label one    $CT                         > $L/log_one.txt    2>&1
-# shellcheck disable=SC2086
-python3 23_basket_model.py --label one_s1 $CT --seed 1                > $L/log_one_s1.txt 2>&1
-# shellcheck disable=SC2086
-python3 23_basket_model.py --label one_pl $CT --placebo-price permute > $L/log_one_pl.txt 2>&1
-python3 24_embedding_eval.py --labels one one_s1 one_pl --primary one > $L/log_embed_eval.txt 2>&1
-python3 26_price_causal.py --labels one one_s1 one_pl > $L/log_price_causal.txt 2>&1
+step "24 / 26 does it recover sub-commodity structure, and is the price causal?"
+python3 24_embedding_eval.py --primary one --labels one one_s1 one_nostate one_noprice \
+  one_noseason one_notaste one_noctx tied_k64_r basket > $L/log_embed_eval.txt 2>&1
+grep -E "^\[24\]" $L/log_embed_eval.txt | tail -16
+python3 26_price_causal.py --labels one one_s1 one_pl one_noseason \
+  > $L/log_price_causal.txt 2>&1
 grep -E "^\[26\]" $L/log_price_causal.txt | tail -18
 
 step "retrain on the placebo-clean subset"
