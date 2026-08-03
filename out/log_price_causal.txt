@@ -3,8 +3,7 @@
 [26]    one            placebo=none     median gamma.beta +0.8400  sd across items 1.1746  test loglik -2.1704
 [26]    one_s1         placebo=none     median gamma.beta +0.8466  sd across items 1.1659  test loglik -2.1686
 [26]    one_pl         placebo=permute  median gamma.beta -0.0000  sd across items 0.0489  test loglik -2.2155
-[26]    tied_k64_r     placebo=none     median gamma.beta +0.0814  sd across items 0.3073  test loglik -2.1788
-[26]    causal         placebo=none     median gamma.beta +0.7124  sd across items 1.0137  test loglik -2.2120
+[26]    one_noseason   placebo=none     median gamma.beta +1.0071  sd across items 1.4244  test loglik -2.1365
 [26]    -> one_pl retains -0.0% of the real coefficient
 [26] 
 [26] 2. held-out fit restricted to item-weeks where the price actually moved
@@ -12,8 +11,7 @@
 [26]    one            price-move weeks -2.1029 (82,010)   static weeks -2.2354 (120,693)
 [26]    one_s1         price-move weeks -2.1047 (82,010)   static weeks -2.2336 (120,693)
 [26]    one_pl         price-move weeks -2.1425 (82,010)   static weeks -2.2882 (120,693)
-[26]    tied_k64_r     price-move weeks -2.1537 (82,010)   static weeks -2.2151 (120,693)
-[26]    causal         price-move weeks -2.1509 (82,010)   static weeks -2.2736 (120,693)
+[26]    one_noseason   price-move weeks -2.1131 (82,010)   static weeks -2.1707 (120,693)
 [26] 
 [26] 3. elasticity by placebo verdict
 [26]    clean (passes every placebo)     3,044 items   median gamma.beta +1.1056

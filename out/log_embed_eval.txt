@@ -1,17 +1,20 @@
 [24] 5,455 items, 758 sub-commodities, 19 departments
+[24]   one                kNN purity 0.3023 (70.6x chance)   AUC 0.8233   silhouette -0.1536   NMI 0.7560
+[24]   one_s1             kNN purity 0.3039 (71.0x chance)   AUC 0.8245   silhouette -0.1533   NMI 0.7571
+[24]   one_nostate        kNN purity 0.3566 (83.3x chance)   AUC 0.8724   silhouette -0.0919   NMI 0.7820
+[24]   one_noprice        kNN purity 0.3052 (71.3x chance)   AUC 0.8245   silhouette -0.1514   NMI 0.7590
+[24]   one_noseason       kNN purity 0.3047 (71.2x chance)   AUC 0.8249   silhouette -0.1529   NMI 0.7565
+[24]   one_notaste        kNN purity 0.3044 (71.1x chance)   AUC 0.8491   silhouette -0.2695   NMI 0.7582
+[24]   one_noctx          kNN purity 0.2058 (48.1x chance)   AUC 0.7101   silhouette -0.2255   NMI 0.7103
 [24]   tied_k64_r         kNN purity 0.2880 (67.3x chance)   AUC 0.8163   silhouette -0.1600   NMI 0.7480
-[24]   tied_noctx         kNN purity 0.2029 (47.4x chance)   AUC 0.7120   silhouette -0.2234   NMI 0.7075
-[24]   tied_nostate       kNN purity 0.3430 (80.2x chance)   AUC 0.8656   silhouette -0.0996   NMI 0.7734
-[24]   tied_noprice       kNN purity 0.2885 (67.4x chance)   AUC 0.8167   silhouette -0.1598   NMI 0.7498
-[24]   tied_notaste       kNN purity 0.2797 (65.4x chance)   AUC 0.8378   silhouette -0.2760   NMI 0.7460
-[24]   tied_s1            kNN purity 0.2910 (68.0x chance)   AUC 0.8180   silhouette -0.1602   NMI 0.7511
+[24]   causal             kNN purity 0.2700 (63.1x chance)   AUC 0.7996   silhouette -0.1757   NMI 0.7413
 [24]   basket             kNN purity 0.0579 (13.5x chance)   AUC 0.6078   silhouette -0.3898   NMI 0.6514
-[24] headline model for the head-to-head, neighbours and map: tied_k64_r
+[24] headline model for the head-to-head, neighbours and map: one
 [24]   control: random    kNN purity 0.0037 (0.9x chance)   AUC 0.4986
 [24]   control: popularity kNN purity 0.0038 (0.9x chance)   AUC 0.5100
 [24] head-to-head on 409 items that nf models and whose sub-commodity has 2+ members
 [24]   nf beta            kNN purity 0.0142 (1.0x chance)   AUC 0.3789   silhouette -0.3127
-[24]   tied_k64_r alpha   kNN purity 0.1489 (11.0x chance)   AUC 0.8034   silhouette -0.0614
-[24] nearest-neighbour examples: 40.0% of the top-5 neighbours of 15 popular items share the query's sub-commodity
+[24]   one alpha          kNN purity 0.1604 (11.8x chance)   AUC 0.8146   silhouette -0.0503
+[24] nearest-neighbour examples: 42.7% of the top-5 neighbours of 15 popular items share the query's sub-commodity
 [24] t-SNE on the 2500 most-purchased items ...
 [24] wrote out/embedding_eval.json and figures/embedding_*.png

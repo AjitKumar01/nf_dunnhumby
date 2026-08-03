@@ -19,8 +19,8 @@ Everything below measures those three commitments directly against the full
 `transaction_data.csv`: **2,553,406 lines, 2,500 households, 91,856 products, 253,183
 baskets, 711 days, 307 commodities, 2,373 sub-commodities**.
 
-Every number and figure here is produced by `scripts/21_basket_eda.py`. Nothing is
-typed in by hand.
+Every number and figure in §§1–5 is produced by `scripts/21_basket_eda.py`; §6 comes
+from `scripts/25_basket_placebo.py`. Nothing is typed in by hand.
 
 ---
 
@@ -208,7 +208,52 @@ response.
 
 ---
 
-## 6. What the exploration implies for the model
+## 6. Is the price variation exogenous, and how much of it is the calendar?
+
+Sections 1–5 establish that the expanded catalogue *has* price variation. Whether that
+variation can support a counterfactual is a separate question, and it is answered by
+`scripts/25_basket_placebo.py` rather than here. The headline is worth stating in this
+document because it changes how the sample should be read.
+
+Four placebos per category on the 160 categories large enough to estimate, from an
+item × week panel of log purchase rate on log price with item fixed effects absorbed:
+
+| price series | median coefficient | categories significant at 1% |
+|---|---|---|
+| **real prices** | **−0.844** | 52.5% |
+| shifted ±6 weeks | −0.08 / −0.05 | 10.6% / 9.4% |
+| **weeks reordered within item** | **−0.006** | 3.1% |
+| **another item's price series** | **+0.002** | 4.4% |
+
+The two strict placebos retain **0.7%** of the real effect, and only **5 of 160**
+categories fail one. On the paper's 56-category Sunday/Monday sample the randomised
+placebo retained **20%** and 34 of 56 categories failed at least one
+(`PREPROCESSING.md` §9).
+
+**Widening the catalogue and using all 711 days improved identification rather than
+degrading it.** That is the opposite of what one might expect from dropping a narrow,
+carefully-chosen identification window, and the reason is that item-level idiosyncratic
+price moves dominate once you are no longer conditioning on a two-day slice.
+
+### How much of the price effect is seasonality
+
+The same regression, run with and without week fixed effects, isolates the part of the
+price coefficient that is really the calendar:
+
+| specification | median coefficient |
+|---|---|
+| no week effects | −0.951 |
+| week effects | −0.844 |
+
+**11.3% of the raw price coefficient is seasonality** — prices and demand moving
+together over the year rather than one causing the other. This is small enough to be
+easy to miss and large enough to matter for a counterfactual, and it is the reason the
+model carries a seasonality term at all (`BASKET_MODEL.md` §7.5, where the fitted model
+reproduces both numbers to within a few percent).
+
+---
+
+## 7. What the exploration implies for the model
 
 Each finding maps to a specific modelling decision. Nothing here is a preference.
 
@@ -221,6 +266,8 @@ Each finding maps to a specific modelling decision. Nothing here is a preference
 | repurchase hazard swings **4.30×** and is **non-monotone** | add a household × sub-commodity state, with a basis flexible enough for a hump |
 | 5,455 items / 545 testable sub-commodity groups become available | the embedding requirement becomes testable |
 | price still moves on 30.5% of item-weeks | price stays in the model; elasticity remains identified |
+| strict placebos retain **0.7%** of the real price effect; 5 of 160 categories fail | the design supports counterfactuals — more cleanly than the paper's own sample |
+| **11.3%** of the raw price coefficient is week-frequency seasonality | add a low-rank seasonality term, or accept a biased elasticity |
 
 The resulting sample, built by `scripts/22_basket_data.py`:
 
@@ -242,17 +289,18 @@ model whose purpose is to answer "what happens next" should be scored on what ha
 next. 97 held-out rows (0.03%) whose item or household never appears in training are
 dropped rather than scored as a cold start the model was never given a chance at.
 
-The model built on this is specified and evaluated in **`BASKET_MODEL.md`**.
+The model built on this is specified and evaluated in **`BASKET_MODEL.md`**, including
+the placebo evidence summarised in §6 and the seasonality correction it implies.
 
 ---
 
 ## Appendix: what this exploration does *not* establish
 
-- **Causality of price.** This document establishes only that price *varies* in the
-  expanded catalogue (30.5% of item-weeks). Whether that variation is exogenous is
-  tested separately in `BASKET_MODEL.md` §7 — the answer is that the strict placebos
-  retain 0.7% of the real effect and only 5 of 160 categories fail one, which is a
-  cleaner result than the paper's own sample gives.
+- **Causality of price.** §6 shows the variation survives four placebos, which is a
+  statement about the *design*, not a proof of exogeneity. A placebo rules out
+  confounders it destroys; it cannot rule out something that moves with price at
+  item × week frequency and survives reordering — promotions timed to anticipated
+  demand are exactly that, and the 11.3% seasonal component is its visible part.
 - **Store heterogeneity.** Prices are still pooled to chain level across 561 stores,
   with the cost measured in `VERIFICATION.md` §1 (0.077 nats between the closest and
   furthest quartile of store price deviation).
