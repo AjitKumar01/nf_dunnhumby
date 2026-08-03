@@ -150,16 +150,27 @@ apples-to-apples comparison with the paper's model is the embedding test in §5.
 
 All at K=64, L2 1e-2, lr 0.005, 9,000 iterations, best-validation checkpoint.
 
-| model | test log-lik | top-1 | cost of removing |
-|---|---|---|---|
-| **full (`one`)** | **−2.1704** | **0.360** | — |
-| no price | −2.2011 | 0.352 | 0.031 |
-| no state | −2.2538 | 0.341 | **0.083** |
-| no interaction | −2.3280 | 0.322 | **0.158** |
+| model | test log-lik | top-1 | cost of removing | kNN purity |
+|---|---|---|---|---|
+| **full (`one`)** | −2.1704 | 0.360 | — | 0.302 |
+| no seasonality | **−2.1365** | **0.369** | **−0.034** (an *improvement*) | 0.305 |
+| no price | −2.2011 | 0.352 | 0.031 | 0.305 |
+| no state | −2.2538 | 0.341 | 0.083 | — |
+| no interaction | −2.3280 | 0.322 | 0.158 | — |
+| no household taste | −2.3625 | 0.294 | **0.192** | 0.304 |
 
-Same ordering as before — interaction matters most, then state, then price — but every
-gap is wider under the decayed schedule, because the full model now converges instead
-of being checkpointed mid-bounce.
+Household taste is now the single most valuable component, then interaction, then
+state, then price. Every gap is wider than on the no-decay recipe because the full
+model converges instead of being checkpointed mid-bounce.
+
+**Removing seasonality improves average fit by 0.034 nats.** That is not a reason to
+remove it — see §7.5, where it turns out to be buying something average fit does not
+measure.
+
+Note also that the embedding is essentially unchanged across every ablation
+(0.302–0.305). It is produced by the tied co-purchase term and is indifferent to
+whether the model carries price, seasonality or household taste — which is what the
+tying was for.
 
 The earlier no-decay recipe, where the full set including household taste and
 seasonality was run (internally consistent, every number ~0.01–0.03 nats worse than
@@ -411,24 +422,42 @@ coefficients. The usual worry — that the average elasticity is propped up by t
 endogenous categories — does not hold here. Restricting to the clean subset would
 change the answer by about 4%, in the direction of a slightly smaller elasticity.
 
-### 7.5 What did not work: the seasonality term
+### 7.5 Seasonality: it costs average fit and buys an unbiased coefficient
 
-The reduced form says week effects remove **11.3%** of the price coefficient, so the
-model should have a time term. Adding a low-rank item × week one made held-out fit
-**worse**, −2.2170 against −2.1788.
+On the noisy no-decay recipe this section previously read "what did not work". With
+the decayed schedule the picture is clear, and the earlier reading was wrong.
 
-The first attempt was worse still and for an instructive reason: it indexed
-seasonality by *absolute* week, and the split is chronological, so the held-out weeks'
-effects were never estimated and stayed at their random initialisation. Re-indexing by
-**week-of-year** fixed the leak — every held-out week-of-year value appears in
-training — and the term still costs fit. With a 102-week panel there are at most two
-observations per item per week-of-year, which is not enough to estimate 44k seasonal
-parameters.
+Dropping the low-rank item × week-of-year term **improves** average held-out fit by
+0.034 nats (−2.1365 against −2.1704). It also inflates the price coefficient — and by
+almost exactly the amount the reduced form predicts:
 
-So the headline model carries **no seasonality term**, and the 11.3% is a known,
-measured, uncorrected bias in the price coefficient. It is reported here rather than
-hidden, and it is smaller than the gap between the shrunk and unshrunk coefficient
-that §7.2 fixed.
+| | model's median `γ·β` | reduced-form estimate |
+|---|---|---|
+| **with a time control** | **+0.840** | **−0.844** (week fixed effects) |
+| without a time control | +1.007 | −0.951 (no week fixed effects) |
+
+Two completely different estimators — a within-item panel regression on item-weeks,
+and a 613k-parameter basket model fitted by negative sampling — agree to within 0.5%
+when both control for time, and both inflate by a similar margin when neither does.
+The 11.3% seasonal component the reduced form isolated is real, and the model's
+seasonality term removes it.
+
+The counterfactual-relevant metric agrees. On held-out weeks where price actually
+moved, the model **with** seasonality is better (−2.1029 against −2.1131), even though
+it is worse on static weeks (−2.2354 against −2.1707) and worse on average.
+
+So the trade is: **0.034 nats of average fit for a price coefficient that is not
+contaminated by seasonality, and better prediction exactly where prices change.** For
+a model whose purpose is what-if questions about price, that is the right side of the
+trade, and `one` keeps the term.
+
+(One earlier attempt was broken rather than merely unhelpful: it indexed seasonality
+by *absolute* week while the split is chronological, so held-out weeks' effects were
+never estimated and sat at their random initialisation. Re-indexing by week-of-year
+fixed the leak — every held-out week-of-year value appears in training.)
+
+If average predictive accuracy is what you want and price is incidental,
+`one_noseason` is 0.034 nats better and its embedding is identical (purity 0.305).
 
 ### 7.6 What can and cannot be claimed
 
@@ -469,8 +498,8 @@ size and kind observed in the data, and not a substitute for an experiment.
 - **The causal claim is a placebo argument, not an instrument.** §7 establishes that
   the price coefficient is driven by real price variation and that the variation
   survives four placebos, but a placebo cannot rule out a confounder that moves with
-  price at item × week frequency. The 11.3% seasonality bias is measured and
-  uncorrected.
+  price at item × week frequency and survives reordering. The seasonal component is
+  measured and removed; anything finer-grained than week-of-year is not.
 - **The silhouette is still negative.** Sub-commodities are recoverable but not
   compact. The embedding is good enough to retrieve, cluster and inspect; it is not
   good enough to treat cluster boundaries as meaningful.
@@ -511,11 +540,16 @@ python3 scripts/25_basket_placebo.py
 python3 scripts/26_price_causal.py --labels one one_s1 one_pl
 ```
 
-**Which checkpoint to use: `one`.** It is simultaneously the best-ranking model
-(test −2.1704, top-1 0.360), the best embedding (purity 0.302, 70.6× chance, AUC
-0.823), and the best price model (`γ·β` = +0.840 against a reduced-form 0.844, best
-held-out fit on price-move weeks at −2.1029). The three requirements are not in
-tension once the learning rate decays and the price block has its own penalty.
+**Which checkpoint to use: `one`.** It is the best embedding (purity 0.302, 70.6×
+chance, AUC 0.823 — and every ablation lands within 0.003 of it, so this is robust),
+the best price model (`γ·β` = +0.840 against a reduced-form 0.844, best held-out fit
+on price-move weeks at −2.1029), and a strong ranking model (top-1 0.360).
+
+The one number it does not win is *average* held-out fit: `one_noseason` is 0.034 nats
+better. That is the deliberate trade in §7.5 — the seasonality term costs average
+accuracy and removes an 11% seasonal bias from the price coefficient. If you want
+average accuracy and do not care about price, use `one_noseason`; its embedding is
+identical. For what-if questions, use `one`.
 
 Artefacts: `out/basket_eda.json`, `out/embedding_eval.json`,
 `out/embedding_neighbours_basket.csv`, `out/<label>_basket_history.json`, and the

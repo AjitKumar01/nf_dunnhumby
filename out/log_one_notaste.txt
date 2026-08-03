@@ -4,3 +4,7 @@
 [23]   it  4000  loss 2.3180  val loglik -2.3362  top1 0.298  purity 0.274  price +0.723
 [23]   it  6000  loss 2.2566  val loglik -2.3259  top1 0.304  purity 0.286  price +0.770 *
 [23]   it  8000  loss 2.2342  val loglik -2.3356  top1 0.299  purity 0.295  price +0.787
+[23]   it 10000  loss 2.2527  val loglik -2.3374  top1 0.301  purity 0.301  price +0.793
+[23]   it 12000  loss 2.2779  val loglik -2.3246  top1 0.310  purity 0.305  price +0.794 *
+[23] best validation -2.3246 at iteration 12000; test loglik -2.3625, top1 0.294
+[23] saved one_notaste_basket.pt
