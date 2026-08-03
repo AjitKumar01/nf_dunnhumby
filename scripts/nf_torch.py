@@ -59,7 +59,9 @@ class NFData:
     item_cat: torch.Tensor      # [J] category of each item
     cat_items: torch.Tensor     # [C, Jmax] padded item ids
     cat_mask: torch.Tensor      # [C, Jmax] 1 where the slot is a real item
-    price: torch.Tensor         # [J, S]
+    price: torch.Tensor         # [J, S]  loyalty price -- what the shopper faces
+    base_price: torch.Tensor    # [J, S]  regular posted price, before promotion
+    promo_depth: torch.Tensor   # [J, S]  1 - price/base_price, in [0, 1)
     W: torch.Tensor             # [N, UC] user observables
     X: torch.Tensor             # [J, IC] item observables
     sess_period: torch.Tensor   # [S]
@@ -105,6 +107,15 @@ def load(indir, device="cpu", extras=()):
         return m
 
     price = read_is("item_sess_price.tsv")
+    # Written by 03_make_model_inputs.py.  Older input directories predate them, so
+    # fall back to "no promotion ever" rather than failing -- the nf models never
+    # touch these, and a substitution model run against an old directory should say
+    # so loudly at fit time instead of crashing here.
+    if os.path.exists(os.path.join(indir, "item_sess_base_price.tsv")):
+        base_price = read_is("item_sess_base_price.tsv")
+        promo_depth = read_is("item_sess_promo_depth.tsv")
+    else:
+        base_price, promo_depth = price.copy(), np.zeros_like(price)
 
     ou = pd.read_csv(os.path.join(indir, "obsUser.tsv"), sep="\t", header=None)
     n_users = int(ou[0].max()) + 1
@@ -121,6 +132,8 @@ def load(indir, device="cpu", extras=()):
         cat_items=torch.as_tensor(cat_items, device=device),
         cat_mask=torch.as_tensor(cat_mask, device=device),
         price=torch.as_tensor(price, device=device),
+        base_price=torch.as_tensor(base_price, device=device),
+        promo_depth=torch.as_tensor(promo_depth, device=device),
         W=torch.as_tensor(W, device=device),
         X=torch.as_tensor(X, device=device),
         sess_period=torch.as_tensor(sess_period, device=device),
@@ -196,6 +209,22 @@ class GaussianBlock(nn.Module):
             (var + (self.mu - self.prior_mean) ** 2) / pv - 1.0 - torch.log(var / pv))
 
 
+def load_stage1_state(model, path, map_location="cpu"):
+    """Load a stage-1 checkpoint, tolerating buffers that used to be persisted.
+
+    Checkpoints written before the price buffers were marked non-persistent carry
+    log_base / log_disc / log_price_dev as saved tensors.  They are recomputed from
+    the data at construction, so drop anything the module no longer expects -- but
+    keep strict=True for everything else, so a genuinely missing parameter is still
+    an error rather than a silently half-initialised model.
+    """
+    import torch as _t
+    sd = _t.load(path, map_location=map_location)
+    want = set(model.state_dict().keys())
+    model.load_state_dict({k: v for k, v in sd.items() if k in want}, strict=True)
+    return model
+
+
 # ----------------------------------------------------------------- stage 1 model
 class ProductChoice(nn.Module):
     """Choice of item within a category, conditional on buying from the category."""
@@ -203,11 +232,16 @@ class ProductChoice(nn.Module):
     def __init__(self, data: NFData, K=80, Kp=20, use_user_obs=True, use_item_obs=False,
                  extras=(), item_intercept=True, prior_var=1.0, intercept_var=None,
                  price_prior_var=None, price_prior_mean=0.5, homogeneous=False,
-                 scale_prior=True, pool_across_categories=True, seed=0):
+                 scale_prior=True, pool_across_categories=True, seed=0,
+                 Ks=0, sub_prior_var=0.05, price_split=False):
         super().__init__()
         self.d = data
         self.K, self.Kp = (0, Kp) if homogeneous else (K, Kp)
         self.homogeneous = homogeneous
+        # Ks > 0 adds the substitution kernel; price_split separates the regular
+        # price from the promotional cut.  Both default off so `nf` is unchanged.
+        self.Ks = int(Ks)
+        self.price_split = bool(price_split)
         # pool_across_categories=False gives every (household, category) its own
         # latent vectors, so nothing is shared across categories.  That is the
         # category-by-category benchmark the paper argues against.
@@ -254,6 +288,65 @@ class ProductChoice(nn.Module):
             v = factor_var(price_prior_var, Kp)
             self.gamma = blk((NR, Kp), prior_var=v, prior_mean=pm)
             self.lam = blk((J, Kp), prior_var=v, prior_mean=pm)
+        # Change 3 -- split the own-price effect into the regular posted price and
+        # the promotional cut.  log price = log(base) + log(1 - depth), so writing
+        # the utility as
+        #     -alpha_b * log(base)  +  alpha_p * (-log(1 - depth))
+        # nests the pooled model exactly: alpha_b == alpha_p reproduces
+        # -alpha * log(price).  Whether the two differ is then a testable question
+        # rather than an assumption, and it matters because the EDA shows the base
+        # price moves in only ~7% of item-weeks against ~18% for promotion depth --
+        # so the pooled coefficient is mostly a *promotional* elasticity, and any
+        # counterfactual about regular prices is extrapolating.
+        if self.price_split and not homogeneous:
+            v = factor_var(price_prior_var, Kp)
+            self.gamma_promo = blk((NR, Kp), prior_var=v, prior_mean=pm)
+            self.lam_promo = blk((J, Kp), prior_var=v, prior_mean=pm)
+        elif self.price_split and homogeneous:
+            self.promo_coef = blk((1,), prior_var=price_prior_var,
+                                  prior_mean=price_prior_mean)
+
+        # Change 1 -- the substitution kernel.  Stage 1 as the paper writes it makes
+        # item j's utility depend on j's own price only, so at the household level
+        # d log P(j) / d p_k = alpha_k P(k): identical for every j, i.e. IIA.  Items
+        # substitute in proportion to market share and nothing else, which is why
+        # the paper's own sub-commodity test fails to replicate here.  psi_j . psi_k
+        # lets j's utility respond directly to k's price, so the strength of
+        # substitution is learned rather than implied by shares.  psi is never shown
+        # SUB_COMMODITY_DESC, so that test stays honest.
+        #
+        # The prior is deliberately tight (sub_prior_var defaults to 0.05): the
+        # null of IIA should be given up only where the data insists.
+        if self.Ks > 0:
+            v = factor_var(sub_prior_var, self.Ks)
+            self.psi = blk((J, self.Ks), prior_var=v)
+
+        # Precomputed [J, S] price transforms, so the hot path does no logs.
+        #
+        # Derive both from price and base_price rather than reading promo_depth back
+        # off disk, so that log_base - log_disc == log(price) *exactly*.  Taking the
+        # stored depth instead leaves a residual: it is clipped at zero, and on the
+        # 34 cells (0.035%) where the weekly modal base came out below the weekly
+        # modal loyalty price the clip breaks the identity by up to log 2.  Clamping
+        # the discount at zero here treats those cells as "no promotion", which is
+        # the right reading, and keeps the split an exact reparameterisation of the
+        # pooled log-price model everywhere else.
+        eps = 1e-4
+        lp = torch.log(data.price.clamp_min(eps))
+        log_disc = (torch.log(data.base_price.clamp_min(eps)) - lp).clamp_min(0.0)
+        # persistent=False: these are deterministic functions of the price panel, not
+        # fitted quantities.  Saving them would bloat every checkpoint and, worse,
+        # make checkpoints trained before this change unloadable -- the module would
+        # demand keys the old state_dict has never heard of.
+        self.register_buffer("log_disc", log_disc, persistent=False)      # >= 0
+        self.register_buffer("log_base", lp + log_disc, persistent=False)
+        # The kernel reads *deviations*, not levels: a competitor's price level is
+        # a fixed effect that the item intercept already carries, and only movement
+        # identifies substitution.  Centring within item also keeps the term at zero
+        # in a week where nothing moved.
+        self.register_buffer("log_price_dev", lp - lp.mean(dim=1, keepdim=True),
+                             persistent=False)
+
         for e in self.extras:
             if homogeneous:
                 setattr(self, f"{e}_coef", blk((1,), prior_var=price_prior_var,
@@ -264,10 +357,22 @@ class ProductChoice(nn.Module):
                 setattr(self, f"l_{e}", blk((J, Kp), prior_var=v, prior_mean=pm))
 
     # ---- utilities for a set of (user, session) rows against a padded item block
-    def utility(self, users, sessions, items, stoch=True, draws=None):
-        """users [B], sessions [B], items [B, M] -> utilities [B, M]."""
+    def utility(self, users, sessions, items, stoch=True, draws=None, mask=None):
+        """users [B], sessions [B], items [B, M] -> utilities [B, M].
+
+        `mask` [B, M] marks the real slots in a padded block.  It is required once
+        the substitution kernel is on: the kernel sums over competitors, and the
+        padding (slot 0 of `cat_items`) would otherwise be counted as a real rival.
+        Callers pass blocks in two different layouts -- one category per row, and
+        the whole `cat_items` grid flattened to [B, C*Jmax] -- so the kernel groups
+        by each slot's own category rather than assuming either shape.
+        """
         d = self.d
         s = draws if draws is not None else {}
+        if self.Ks > 0 and mask is None:
+            raise ValueError(
+                "utility() needs `mask` when the substitution kernel is active: the "
+                "competitor sum cannot tell real items from block padding without it")
 
         def get(name):
             if name in s:
@@ -292,11 +397,43 @@ class ProductChoice(nn.Module):
         if self.sigma is not None:
             u = u + (get("sigma")[rows] * d.X[items]).sum(-1)
 
-        p = d.price[items, sessions.unsqueeze(1)]         # [B, M]
-        if self.homogeneous:
-            u = u - get("price_coef") * p
+        sess_col = sessions.unsqueeze(1)
+        if self.price_split:
+            # log(price) = log(base) - log_disc, so equal coefficients here reproduce
+            # the pooled -alpha*log(price) exactly; the split only lets them differ.
+            lb = self.log_base[items, sess_col]            # [B, M]
+            ld = self.log_disc[items, sess_col]            # [B, M] >= 0
+            if self.homogeneous:
+                u = u - get("price_coef") * lb + get("promo_coef") * ld
+            else:
+                u = u - (get("gamma")[rows] * get("lam")[items]).sum(-1) * lb
+                u = u + (get("gamma_promo")[rows] * get("lam_promo")[items]).sum(-1) * ld
         else:
-            u = u - (get("gamma")[rows] * get("lam")[items]).sum(-1) * p
+            p = d.price[items, sess_col]                   # [B, M]
+            if self.homogeneous:
+                u = u - get("price_coef") * p
+            else:
+                u = u - (get("gamma")[rows] * get("lam")[items]).sum(-1) * p
+
+        # Substitution kernel: item j's utility responds to every *other* item's
+        # price move in the same category, with strength psi_j . psi_k.
+        #   sum_{k != j} (psi_j . psi_k) g_k  =  psi_j . (sum_k psi_k g_k) - |psi_j|^2 g_j
+        # so the whole thing is two contractions rather than a loop over pairs.
+        if self.Ks > 0:
+            psi = get("psi")[items]                        # [B, M, Ks]
+            g = self.log_price_dev[items, sess_col] * mask  # [B, M]
+            # Substitution is a within-category story, but callers may hand over the
+            # whole grid, so accumulate psi_k * g_k into the slot's own category and
+            # read it back per slot.  Padding contributes nothing because g is
+            # already masked to zero.
+            slot_cat = d.item_cat[items]                   # [B, M]
+            B, M = items.shape
+            agg = torch.zeros(B, d.n_cats, self.Ks, dtype=psi.dtype, device=psi.device)
+            agg.scatter_add_(1, slot_cat.unsqueeze(-1).expand(B, M, self.Ks),
+                             psi * g.unsqueeze(-1))        # [B, C, Ks]
+            agg_slot = torch.gather(agg, 1, slot_cat.unsqueeze(-1).expand(B, M, self.Ks))
+            cross = (psi * agg_slot).sum(-1) - (psi * psi).sum(-1) * g
+            u = u + cross * mask
 
         for e in self.extras:
             if e == "coupon":
@@ -316,7 +453,7 @@ class ProductChoice(nn.Module):
 
     def log_prob(self, users, items, sessions, stoch=True):
         block, mask = self.choice_block(users, items, sessions)
-        u = self.utility(users, sessions, block, stoch=stoch)
+        u = self.utility(users, sessions, block, stoch=stoch, mask=mask)
         u = u.masked_fill(mask == 0, -1e9)
         logp = torch.log_softmax(u, dim=1)
         pos = (block == items.unsqueeze(1))
@@ -364,7 +501,7 @@ class ProductChoice(nn.Module):
             B = uu.shape[0]
             items = d.cat_items.unsqueeze(0).expand(B, -1, -1).reshape(B, -1)
             mask = d.cat_mask.unsqueeze(0).expand(B, -1, -1).reshape(B, -1)
-            u = self.utility(uu, ss, items, stoch=False)
+            u = self.utility(uu, ss, items, stoch=False, mask=mask)
             u = u.masked_fill(mask == 0, -1e9)
             u = u.reshape(B, d.n_cats, -1)
             out.append(torch.logsumexp(u, dim=2))

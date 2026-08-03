@@ -44,7 +44,7 @@ def check_analytic(d):
     m = nf.ProductChoice(d, K=6, Kp=4, seed=1)
     u, i, s = d.obs["train"]
     block, mask = m.choice_block(u[:256], i[:256], s[:256])
-    util = m.utility(u[:256], s[:256], block, stoch=False).masked_fill(mask == 0, -1e9)
+    util = m.utility(u[:256], s[:256], block, stoch=False, mask=mask).masked_fill(mask == 0, -1e9)
     p = torch.softmax(util, 1) * mask
     r["softmax_rows_sum_to_1_max_error"] = float((p.sum(1) - 1).abs().max())
 
@@ -236,11 +236,12 @@ def simulate_and_recover(d, K=8, Kp=4, n_rep=6, seed=0, iters=3000):
         # utilities and choice probabilities on a sample of trips
         sub = torch.randint(0, n, (4000,), generator=g)
         it_ = d.cat_items[d.item_cat[chosen[sub]]]
-        uh = m.utility(trips_u[sub], trips_s[sub], it_, stoch=False)
+        mm_ = d.cat_mask[d.item_cat[chosen[sub]]]
+        uh = m.utility(trips_u[sub], trips_s[sub], it_, stoch=False, mask=mm_)
         ut = (lam0[it_] + torch.einsum("tk,tmk->tm", theta[trips_u[sub]], beta[it_])
               - torch.gather(b_true[trips_u[sub]], 1, it_)
               * d.price[it_, trips_s[sub].unsqueeze(1)])
-        mm = d.cat_mask[d.item_cat[chosen[sub]]] > 0
+        mm = mm_ > 0
         ph = torch.softmax(uh.masked_fill(~mm, -1e9), 1)[mm].numpy()
         pt = torch.softmax(ut.masked_fill(~mm, -1e9), 1)[mm].numpy()
 

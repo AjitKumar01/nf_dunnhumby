@@ -1,0 +1,19 @@
+{
+  "trips": 5688,
+  "purchases_actual": 13736.0,
+  "purchases_simulated": 11785.4609375,
+  "total_ratio": 0.8579980134963989,
+  "item_level_corr": 0.9889615382773678,
+  "category_level_corr": 0.9946760336480805,
+  "item_mean_abs_pct_err": 0.20668375492095947,
+  "rollout": {
+    "episodes": 40,
+    "explore": 0.15,
+    "margin_rate": 0.25,
+    "share_actions_clamped_to_support": 0.3166785195182724,
+    "margin_at_observed_prices": 4190.9287109375,
+    "best_episode_margin": 4318.8505859375,
+    "corr_multiplier_units": -0.33759586068641484,
+    "corr_multiplier_margin": 0.4200757451263364
+  }
+}

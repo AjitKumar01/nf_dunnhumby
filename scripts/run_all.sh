@@ -70,6 +70,24 @@ fi
 python3 16_inspect_embeddings.py > $L/log_embeddings.txt 2>&1 && echo "  embeddings ok"
 python3 17_store_diagnostics.py  > $L/log_stores.txt 2>&1     && echo "  store diagnostics ok"
 
+step "18-20 substitution kernel: EDA, model, test, simulator"
+python3 18_substitution_eda.py   > $L/log_sub_eda.txt 2>&1 && echo "  category-variation EDA ok"
+# Changes 1 and 3 together, plus the two ablations that attribute the gain, plus a
+# second seed of each arm -- the effects are ~0.02 nats and run-to-run spread is
+# ~0.01, so a single run of each cannot tell them apart.
+for spec in "nf_split|--price-split" "nf_ks|--Ks 8" "nf_sub|--Ks 8 --price-split" \
+            "nf_ctl|" "ctl_s1|--seed 1" "sub_s1|--Ks 8 --price-split --seed 1"; do
+  lab=${spec%%|*}; extra=${spec#*|}
+  # shellcheck disable=SC2086
+  python3 05_train_nf.py --label "$lab" $TRAIN $extra > $L/log_$lab.txt 2>&1
+  echo "  trained $lab"
+done
+python3 07_evaluate.py --labels nf nf_promo nf_nopool logit nf_ctl nf_split nf_ks nf_sub \
+  --device cpu > $L/log_eval_sub.txt 2>&1
+python3 19_substitution_test.py --labels nf nf_ks nf_sub > $L/log_sub_test.txt 2>&1 \
+  && tail -8 $L/log_sub_test.txt
+python3 20_simulate.py --label nf_sub > $L/log_simulate.txt 2>&1 && tail -6 $L/log_simulate.txt
+
 step "retrain on the placebo-clean subset"
 python3 02_select_sample.py --exclude-placebo-failures > $L/log_clean_select.txt 2>&1
 python3 03_make_model_inputs.py --outdir model_input_clean > $L/log_clean_inputs.txt 2>&1

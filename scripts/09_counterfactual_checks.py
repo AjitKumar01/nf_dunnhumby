@@ -50,7 +50,7 @@ def household_item_elasticity(m1, m2, d, dev):
             B = uu.shape[0]
             items = d.cat_items.unsqueeze(0).expand(B, -1, -1).reshape(B, -1)
             mask = d.cat_mask.unsqueeze(0).expand(B, -1, -1).reshape(B, -1)
-            u = m1.utility(uu, ss, items, stoch=False).masked_fill(mask == 0, -1e9)
+            u = m1.utility(uu, ss, items, stoch=False, mask=mask).masked_fill(mask == 0, -1e9)
             u = u.reshape(B, d.n_cats, -1)
             iv = torch.logsumexp(u, 2)
             if getattr(m1, "iv_bar", None) is not None:

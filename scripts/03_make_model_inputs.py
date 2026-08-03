@@ -187,20 +187,35 @@ def main(cfg):
           lambda r: f"{r.user_id}\t{r.item_id}\t{r.session_id}\t{r.units}\n")
 
     # ---- complete item x session price grid
-    pr = price[["PRODUCT_ID", "session_id", "price"]].copy()
+    # price is the loyalty price the shopper faces; base_price is the regular posted
+    # price and promo_depth = 1 - price/base_price the temporary cut.  The nf models
+    # read only item_sess_price.tsv, so the extra two files cost nothing and let the
+    # substitution-kernel model separate a regular-price move from a promotion.
+    pcols = ["price", "base_price", "promo_depth"]
+    pr = price[["PRODUCT_ID", "session_id"] + pcols].copy()
     pr["item_id"] = pr.PRODUCT_ID.map(iid)
     pr = pr.dropna(subset=["item_id"])
     grid = pd.MultiIndex.from_product([items.item_id.values, sess.session_id.values],
                                       names=["item_id", "session_id"]).to_frame(index=False)
-    pr = grid.merge(pr[["item_id", "session_id", "price"]], on=["item_id", "session_id"], how="left")
+    pr = grid.merge(pr[["item_id", "session_id"] + pcols], on=["item_id", "session_id"], how="left")
     n_missing = pr.price.isna().sum()
     if n_missing:
-        med = pr.groupby("item_id").price.transform("median")
-        pr["price"] = pr.price.fillna(med)
+        for c in pcols:
+            pr[c] = pr[c].fillna(pr.groupby("item_id")[c].transform("median"))
         log(f"filled {n_missing:,} missing item-session prices with the item median")
-    assert pr.price.notna().all(), "price grid still incomplete"
-    w("item_sess_price.tsv", pr.astype({"item_id": int, "session_id": int}),
+    # An item never seen on promotion has no depth to fill; that is a real zero.
+    pr["promo_depth"] = pr.promo_depth.fillna(0.0)
+    pr["base_price"] = pr.base_price.fillna(pr.price)
+    assert pr[pcols].notna().all().all(), "price grid still incomplete"
+    pr = pr.astype({"item_id": int, "session_id": int})
+    w("item_sess_price.tsv", pr,
       lambda r: f"{r.item_id}\t{r.session_id}\t{r.price:.4f}\n")
+    w("item_sess_base_price.tsv", pr,
+      lambda r: f"{r.item_id}\t{r.session_id}\t{r.base_price:.4f}\n")
+    w("item_sess_promo_depth.tsv", pr,
+      lambda r: f"{r.item_id}\t{r.session_id}\t{r.promo_depth:.4f}\n")
+    log(f"promotion depth: active on {(pr.promo_depth > 0.01).mean():.3f} of "
+        f"item-sessions, mean depth when active {pr.promo_depth[pr.promo_depth > 0.01].mean():.3f}")
 
     # ---- groups, sessions, observables
     w("itemGroup.tsv", items[["item_id", "group_id"]].astype(int),

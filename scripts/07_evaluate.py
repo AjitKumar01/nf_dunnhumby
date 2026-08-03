@@ -46,8 +46,11 @@ def load_model(label, d, dev):
                           price_prior_var=cfg.get("price_prior_var"),
                           price_prior_mean=cfg.get("price_prior_mean", 0.5),
                           scale_prior=not cfg.get("no_scale_prior", False),
-                          pool_across_categories=not cfg.get("no_pool", False)).to(dev)
-    m1.load_state_dict(torch.load(os.path.join(OUT, f"{label}_stage1.pt"), map_location=dev))
+                          pool_across_categories=not cfg.get("no_pool", False),
+                          Ks=cfg.get("Ks", 0),
+                          sub_prior_var=cfg.get("sub_prior_var", 0.05),
+                          price_split=cfg.get("price_split", False)).to(dev)
+    nf.load_stage1_state(m1, os.path.join(OUT, f"{label}_stage1.pt"), dev)
     m2 = nf.CategoryChoice(d, K=cfg["K2"], Kiv=cfg["Kiv"], Ktime=cfg["Ktime"],
                            use_user_obs=cfg["cat_user_obs"], homogeneous=cfg["homogeneous"],
                            prior_var=cfg["prior_var"],
@@ -70,7 +73,7 @@ def trip_predictions(m1, m2, d, split, chunk=1024):
         B = uu.shape[0]
         items = d.cat_items.unsqueeze(0).expand(B, -1, -1).reshape(B, -1)
         mask = d.cat_mask.unsqueeze(0).expand(B, -1, -1).reshape(B, -1)
-        u = m1.utility(uu, ss, items, stoch=False).masked_fill(mask == 0, -1e9)
+        u = m1.utility(uu, ss, items, stoch=False, mask=mask).masked_fill(mask == 0, -1e9)
         u = u.reshape(B, C, M)
         iv = torch.logsumexp(u, dim=2)
         if getattr(m1, "iv_bar", None) is not None:

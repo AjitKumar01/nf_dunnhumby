@@ -1,0 +1,49 @@
+[05] device: cpu   label: sub_s2   extras: []   input: /Users/ajit/Projects/Causal/nf_dunnhumby/scripts/../model_input
+[05] data: 2084 users, 560 items, 56 categories, 172 sessions, 86 pair-weeks
+[05] stage 1: 46,432 training observations, 1,711 of 6,469 validation observations in price-change weeks
+[05]   it    100  elbo/obs -3.9475  val -1.7338  val(price wks) -1.5850  b  0.583  *
+[05]   it    200  elbo/obs -2.6812  val -1.6405  val(price wks) -1.5260  b  0.540  *
+[05]   it    300  elbo/obs -2.2498  val -1.6185  val(price wks) -1.5073  b  0.524  *
+[05]   it    400  elbo/obs -2.1623  val -1.6103  val(price wks) -1.4960  b  0.511  *
+[05]   it    500  elbo/obs -2.1521  val -1.6108  val(price wks) -1.4958  b  0.492  *
+[05]   it    600  elbo/obs -2.0980  val -1.6135  val(price wks) -1.4979  b  0.477
+[05]   it    700  elbo/obs -2.1269  val -1.6121  val(price wks) -1.4957  b  0.468  *
+[05]   it    800  elbo/obs -2.1203  val -1.6136  val(price wks) -1.5025  b  0.462
+[05]   it    900  elbo/obs -2.0691  val -1.6169  val(price wks) -1.5004  b  0.457
+[05]   it   1000  elbo/obs -2.1072  val -1.6148  val(price wks) -1.5011  b  0.458
+[05]   it   1100  elbo/obs -2.0842  val -1.6128  val(price wks) -1.4981  b  0.460
+[05]   it   1200  elbo/obs -2.0843  val -1.6135  val(price wks) -1.4992  b  0.457
+[05]   it   1300  elbo/obs -2.0507  val -1.6165  val(price wks) -1.5015  b  0.456
+[05]   it   1400  elbo/obs -2.0564  val -1.6167  val(price wks) -1.5030  b  0.457
+[05]   it   1500  elbo/obs -2.0549  val -1.6176  val(price wks) -1.5014  b  0.456
+[05]   it   1600  elbo/obs -2.0911  val -1.6196  val(price wks) -1.5099  b  0.458
+[05]   it   1700  elbo/obs -2.0758  val -1.6183  val(price wks) -1.5090  b  0.455
+[05]   it   1800  elbo/obs -2.1138  val -1.6190  val(price wks) -1.5105  b  0.454
+[05]   it   1900  elbo/obs -2.0636  val -1.6207  val(price wks) -1.5050  b  0.453
+[05]   it   2000  elbo/obs -2.0676  val -1.6180  val(price wks) -1.5073  b  0.457
+[05]   it   2100  elbo/obs -2.0864  val -1.6178  val(price wks) -1.5008  b  0.456
+[05]   it   2200  elbo/obs -2.0946  val -1.6170  val(price wks) -1.5074  b  0.457
+[05]   it   2300  elbo/obs -2.0682  val -1.6193  val(price wks) -1.5043  b  0.457
+[05]   it   2400  elbo/obs -2.0879  val -1.6193  val(price wks) -1.5058  b  0.461
+[05]   it   2500  elbo/obs -2.0919  val -1.6179  val(price wks) -1.5022  b  0.460
+[05]   it   2600  elbo/obs -2.0459  val -1.6177  val(price wks) -1.5046  b  0.455
+[05]   it   2700  elbo/obs -2.0590  val -1.6165  val(price wks) -1.5035  b  0.457
+[05]   it   2800  elbo/obs -2.0748  val -1.6202  val(price wks) -1.5057  b  0.460
+[05]   it   2900  elbo/obs -2.0461  val -1.6186  val(price wks) -1.5008  b  0.461
+[05]   it   3000  elbo/obs -2.0688  val -1.6194  val(price wks) -1.5048  b  0.458
+[05] stage 2: computing inclusive values from the stage-1 posterior means ...
+[05]   inclusive values centred by the household-category mean over all sessions (sd of the remaining variation: 0.1074)
+[05]   IV computed for 27,853 trips x 56 categories
+[05]   it    250  elbo/cell -0.17898  val loglik/cell -0.14919  nest  1.064
+[05]   it    500  elbo/cell -0.16644  val loglik/cell -0.14409  nest  1.047
+[05]   it    750  elbo/cell -0.16106  val loglik/cell -0.14356  nest  1.053
+[05]   it   1000  elbo/cell -0.16211  val loglik/cell -0.14304  nest  1.062
+[05]   it   1250  elbo/cell -0.16231  val loglik/cell -0.14297  nest  1.064
+[05]   it   1500  elbo/cell -0.15828  val loglik/cell -0.14283  nest  1.055
+[05]   it   1750  elbo/cell -0.15454  val loglik/cell -0.14265  nest  1.041
+[05]   it   2000  elbo/cell -0.15827  val loglik/cell -0.14232  nest  1.061
+[05]   it   2250  elbo/cell -0.15836  val loglik/cell -0.14260  nest  1.033
+[05]   it   2500  elbo/cell -0.15360  val loglik/cell -0.14240  nest  1.048
+[05]   it   2750  elbo/cell -0.15744  val loglik/cell -0.14265  nest  1.045
+[05]   it   3000  elbo/cell -0.15990  val loglik/cell -0.14221  nest  1.055
+[05] saved sub_s2_stage1.pt / sub_s2_stage2.pt / sub_s2_iv.pt

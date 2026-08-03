@@ -240,15 +240,23 @@ def main(cfg):
     pw = pw[pw.PRODUCT_ID.isin(top_ids)]
     weeks = np.arange(int(tx.WEEK_NO.min()), int(tx.WEEK_NO.max()) + 1)
     grid = pd.MultiIndex.from_product([top_ids, weeks], names=["PRODUCT_ID", "WEEK_NO"]).to_frame(index=False)
-    pw = grid.merge(pw[["PRODUCT_ID", "WEEK_NO", "price", "n_tx"]], on=["PRODUCT_ID", "WEEK_NO"], how="left")
+    pw = grid.merge(pw[["PRODUCT_ID", "WEEK_NO", "price", "base_price", "n_tx"]],
+                    on=["PRODUCT_ID", "WEEK_NO"], how="left")
     pw = pw.sort_values(["PRODUCT_ID", "WEEK_NO"])
     pw["price_obs"] = pw.price.notna()
-    pw["price"] = pw.groupby("PRODUCT_ID").price.ffill()
-    pw["price"] = pw.groupby("PRODUCT_ID").price.bfill()
-    log(f"price panel: {pw.price_obs.mean():.3f} of item-weeks directly observed")
+    for col in ["price", "base_price"]:
+        pw[col] = pw.groupby("PRODUCT_ID")[col].ffill()
+        pw[col] = pw.groupby("PRODUCT_ID")[col].bfill()
+    # Promotion depth, carried alongside the price so the substitution-kernel model
+    # can separate a regular-price change from a temporary cut (see PREPROCESSING 1).
+    # base_price can only be >= price by construction, so this is in [0, 1).
+    pw["promo_depth"] = (1.0 - pw.price / pw.base_price).clip(lower=0.0)
+    log(f"price panel: {pw.price_obs.mean():.3f} of item-weeks directly observed; "
+        f"promotion active on {(pw.promo_depth > 0.01).mean():.3f} of item-weeks")
 
     price_sess = day_map[["DAY", "WEEK_NO", "weekday", "pair_week"]].merge(
-        pw[["PRODUCT_ID", "WEEK_NO", "price", "price_obs"]], on="WEEK_NO", how="left")
+        pw[["PRODUCT_ID", "WEEK_NO", "price", "base_price", "promo_depth", "price_obs"]],
+        on="WEEK_NO", how="left")
     price_sess = price_sess.dropna(subset=["price"])
 
     # ---- filter 3 (app. 8.1 #3): within-category price co-movement

@@ -1,0 +1,104 @@
+[07] device cpu;  extras loaded: -
+[07] evaluating nf_ctl ...
+[07] evaluating ctl_s1 ...
+[07] evaluating ctl_s2 ...
+[07] evaluating nf_sub ...
+[07] evaluating sub_s1 ...
+[07] evaluating sub_s2 ...
+
+ label  K  Kp  homogeneous  pooled extras  train_loglik  test_loglik  train_mse  test_mse  event_own_price_change_loglik  event_cross_price_change_loglik  cv_upc  cv_category  slope_upc  slope_category  own_elasticity_median  own_elasticity_sd_across_items  own_elasticity_mean_sd_across_users  nesting_coef_mean  crosscond_same_subclass  crosscond_diff_subclass  crosscond_gap_subclass  crosscond_share_cats_higher_inside_subclass  crosscond_gap_manufacturer  crosscond_share_cats_higher_inside_manufacturer  cross_gap_subclass  cross_share_cats_higher_inside_subclass
+nf_ctl 40  20        False    True      -       -3.3954      -4.2550     0.8979    0.9371                        -3.9541                          -4.2732  2.5557       1.1121     1.1053          1.0961                -1.1772                          1.1504                               0.7089             1.0278                   0.0797                   0.0803                  0.0045                                       0.6000                      0.0076                                           0.6727              0.0003                                   0.4222
+ctl_s1 40  20        False    True      -       -3.3674      -4.2697     0.8969    0.9365                        -3.9733                          -4.2928  2.7036       1.1237     1.1171          1.1087                -1.1543                          1.1676                               0.7624             0.9951                   0.0776                   0.0784                  0.0061                                       0.6000                      0.0089                                           0.6727              0.0002                                   0.4444
+ctl_s2 40  20        False    True      -       -3.3986      -4.2701     0.8979    0.9371                        -3.9764                          -4.2924  2.5770       1.1287     1.1054          1.0861                -1.1651                          1.1357                               0.7061             1.0138                   0.0787                   0.0795                  0.0047                                       0.5778                      0.0073                                           0.6909             -0.0010                                   0.4667
+nf_sub 40  20        False    True      -       -3.4889      -4.2386     0.9010    0.9360                        -3.8932                          -4.2596  2.0604       1.1029     1.1808          1.1142                -0.9481                          1.4639                               0.5879             1.0466                   0.0907                   0.0872                  0.0013                                       0.6000                     -0.0019                                           0.5636             -0.0024                                   0.4444
+sub_s1 40  20        False    True      -       -3.4646      -4.2402     0.8990    0.9360                        -3.8956                          -4.2674  2.1441       1.1237     1.1570          1.1110                -0.9278                          1.4215                               0.5941             1.0798                   0.0910                   0.0854                  0.0031                                       0.6444                      0.0000                                           0.5818             -0.0024                                   0.5333
+sub_s2 40  20        False    True      -       -3.4805      -4.2495     0.9000    0.9363                        -3.8890                          -4.2705  2.1529       1.1233     1.1618          1.1014                -0.9333                          1.4311                               0.5849             1.0582                   0.0918                   0.0849                  0.0043                                       0.6222                     -0.0001                                           0.5455             -0.0017                                   0.5333
+
+per-category ranking (paper Table 2)
+        mean_rank_ll  mean_rank_se  best_ll  best_se
+label                                               
+ctl_s1         4.089         3.089    0.054    0.232
+ctl_s2         3.804         3.500    0.179    0.196
+nf_ctl         3.179         3.411    0.268    0.179
+nf_sub         2.929         3.464    0.232    0.196
+sub_s1         3.304         3.768    0.214    0.089
+sub_s2         3.696         3.768    0.054    0.107
+
+never-bought-this-UPC deciles, nf_ctl (top/bottom lift 28.9x)
+ decile  predicted   actual     n
+      0   0.000066 0.000403 89451
+      1   0.000219 0.000673 89450
+      2   0.000389 0.000801 89450
+      3   0.000583 0.000831 89450
+      4   0.000820 0.001330 89450
+      5   0.001134 0.001537 89450
+      6   0.001585 0.001764 89450
+      7   0.002325 0.002888 89450
+      8   0.003865 0.003787 89450
+      9   0.012861 0.011634 89450
+
+never-bought-this-UPC deciles, ctl_s1 (top/bottom lift 27.8x)
+ decile  predicted   actual     n
+      0   0.000048 0.000420 89451
+      1   0.000176 0.000646 89450
+      2   0.000332 0.000816 89450
+      3   0.000517 0.000843 89450
+      4   0.000748 0.001242 89450
+      5   0.001054 0.001494 89450
+      6   0.001498 0.002121 89450
+      7   0.002233 0.002696 89450
+      8   0.003791 0.003694 89450
+      9   0.012970 0.011677 89450
+
+never-bought-this-UPC deciles, ctl_s2 (top/bottom lift 30.7x)
+ decile  predicted   actual     n
+      0   0.000063 0.000380 89451
+      1   0.000208 0.000751 89450
+      2   0.000373 0.000786 89450
+      3   0.000565 0.000911 89450
+      4   0.000799 0.001123 89450
+      5   0.001107 0.001596 89450
+      6   0.001549 0.002052 89450
+      7   0.002280 0.002552 89450
+      8   0.003794 0.003834 89450
+      9   0.012575 0.011662 89450
+
+never-bought-this-UPC deciles, nf_sub (top/bottom lift 25.4x)
+ decile  predicted   actual     n
+      0   0.000118 0.000462 89451
+      1   0.000307 0.000576 89450
+      2   0.000492 0.000727 89450
+      3   0.000695 0.001005 89450
+      4   0.000938 0.001098 89450
+      5   0.001255 0.001575 89450
+      6   0.001709 0.001971 89450
+      7   0.002442 0.002595 89450
+      8   0.003946 0.003918 89450
+      9   0.012714 0.011721 89450
+
+never-bought-this-UPC deciles, sub_s1 (top/bottom lift 24.6x)
+ decile  predicted   actual     n
+      0   0.000103 0.000484 89451
+      1   0.000282 0.000574 89450
+      2   0.000458 0.000761 89450
+      3   0.000652 0.000950 89450
+      4   0.000889 0.001101 89450
+      5   0.001202 0.001575 89450
+      6   0.001647 0.001914 89450
+      7   0.002371 0.002611 89450
+      8   0.003875 0.003783 89450
+      9   0.012718 0.011896 89450
+
+never-bought-this-UPC deciles, sub_s2 (top/bottom lift 26.4x)
+ decile  predicted   actual     n
+      0   0.000102 0.000449 89451
+      1   0.000280 0.000673 89450
+      2   0.000455 0.000716 89450
+      3   0.000648 0.000906 89450
+      4   0.000883 0.001252 89450
+      5   0.001192 0.001538 89450
+      6   0.001636 0.001739 89450
+      7   0.002356 0.002701 89450
+      8   0.003845 0.003829 89450
+      9   0.012628 0.011846 89450
+[07] wrote out/evaluation.json, evaluation_summary.csv, evaluation_by_category.csv

@@ -53,7 +53,10 @@ def train_stage1(d, cfg, dev):
                          intercept_var=cfg.intercept_var, price_prior_var=cfg.price_prior_var,
                          price_prior_mean=cfg.price_prior_mean,
                          scale_prior=not cfg.no_scale_prior,
-                         pool_across_categories=not cfg.no_pool, seed=cfg.seed).to(dev)
+                         pool_across_categories=not cfg.no_pool, seed=cfg.seed,
+                         Ks=getattr(cfg, "Ks", 0),
+                         sub_prior_var=getattr(cfg, "sub_prior_var", 0.05),
+                         price_split=getattr(cfg, "price_split", False)).to(dev)
     opt = torch.optim.Adam(m.parameters(), lr=cfg.lr)
     uu, ii, ss = d.obs["train"]
     n = uu.shape[0]
@@ -251,6 +254,17 @@ if __name__ == "__main__":
     # reproduces the numbers in the reports.  run_all.sh passes them explicitly too.
     p.add_argument("--K", type=int, default=40)
     p.add_argument("--Kp", type=int, default=20)
+    # Change 1: substitution kernel.  Ks=0 keeps the paper's IIA stage 1.
+    p.add_argument("--Ks", type=int, default=0,
+                   help="dimension of the substitution embedding psi; 0 disables the "
+                        "kernel and reproduces the paper's within-category IIA")
+    p.add_argument("--sub-prior-var", type=float, default=0.05,
+                   help="prior variance of psi_j . psi_k; tight by design, so IIA is "
+                        "given up only where the data insists")
+    # Change 2: split the own-price effect into regular price and promotional cut.
+    p.add_argument("--price-split", action="store_true",
+                   help="use log(base_price) and -log(1-promo_depth) as two separate "
+                        "price terms instead of the single linear price")
     p.add_argument("--no-user-obs", action="store_true")
     p.add_argument("--item-obs", action="store_true")
     p.add_argument("--lr", type=float, default=0.005)
