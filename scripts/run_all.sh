@@ -88,6 +88,21 @@ python3 19_substitution_test.py --labels nf nf_ks nf_sub > $L/log_sub_test.txt 2
   && tail -8 $L/log_sub_test.txt
 python3 20_simulate.py --label nf_sub > $L/log_simulate.txt 2>&1 && tail -6 $L/log_simulate.txt
 
+step "21-24 the basket model: exploration, data, fit, embedding test"
+python3 21_basket_eda.py     > $L/log_basket_eda.txt  2>&1 && echo "  basket EDA ok"
+python3 22_basket_data.py    > $L/log_basket_data.txt 2>&1 && echo "  basket dataset ok"
+BT="--tie-context --K 64 --l2 1e-2 --lr 0.005 --iters 9000 --eval-every 500"
+for spec in "tied_k64_r|" "tied_noctx|--no-context" "tied_nostate|--no-state" \
+            "tied_noprice|--no-price" "tied_notaste|--no-taste" "tied_s1|--seed 1"; do
+  lab=${spec%%|*}; extra=${spec#*|}
+  # shellcheck disable=SC2086
+  python3 23_basket_model.py --label "$lab" $BT $extra > $L/log_$lab.txt 2>&1
+  echo "  trained $lab"
+done
+python3 24_embedding_eval.py --labels tied_k64_r tied_noctx tied_nostate tied_noprice \
+  tied_notaste tied_s1 --primary tied_k64_r > $L/log_embed_eval.txt 2>&1
+tail -8 $L/log_embed_eval.txt
+
 step "retrain on the placebo-clean subset"
 python3 02_select_sample.py --exclude-placebo-failures > $L/log_clean_select.txt 2>&1
 python3 03_make_model_inputs.py --outdir model_input_clean > $L/log_clean_inputs.txt 2>&1

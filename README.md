@@ -43,14 +43,25 @@ run_all.sh                  everything below, in dependency order (~20 min,
 15_cpp_crosscheck.py        this port vs the authors' C++ on identical files
 16_inspect_embeddings.py    what the latent vectors encode; ablations
 17_store_diagnostics.py     does pooling 561 stores cost anything
+18_substitution_eda.py      re-asks category selection for a substitution kernel
+19_substitution_test.py     does the kernel learn similarity it was never shown
+20_simulate.py              the fitted model as a simulator; emits transitions
 run_bemb_loc.sh             run the authors' C++ stage-1 binary on the same files
+
+--- the basket model (replaces 02/03/05 rather than extending them) ---
+21_basket_eda.py            exploration behind DATA_EXPLORATION.md
+22_basket_data.py           full 711-day basket dataset, no unit-demand filter
+23_basket_model.py          basket model: interactions, household state, price
+24_embedding_eval.py        do the embeddings recover sub-commodity clusters?
 ```
 
 ## Where to start
 
 | document | what it is | read it if |
 |---|---|---|
-| **`FLOW.md`** | the end-to-end map: vocabulary, one real shopping trip followed all the way through, every file and row count, where the numbers shrink | **start here** |
+| **`DATA_EXPLORATION.md`** | what the data looks like once the paper's three structural assumptions are dropped: unit demand, category independence, no state | **start here for the basket model** |
+| **`BASKET_MODEL.md`** | the replacement model — 5,455 items, 188 categories, product interactions, household state — and whether its embeddings recover sub-commodity structure | you want the current results |
+| **`FLOW.md`** | the end-to-end map of the *paper's* port: vocabulary, one real shopping trip followed through, every file and row count | you want the paper replication |
 | `RUNNING.md` | how to install, run and debug the pipeline | you want to execute it |
 | `PREPROCESSING.md` | every data decision, with figures and the evidence for each | you want to know why the data looks the way it does |
 | `REPORT.md` | what the paper does, and how the model performs here | you want the results |

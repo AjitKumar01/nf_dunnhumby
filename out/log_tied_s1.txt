@@ -1,0 +1,22 @@
+[23] data: 2,066 households, 5,455 items, 758 sub-commodities; test 202,703 rows / 24,768 baskets, train 1,228,695 rows / 157,464 baskets, validation 134,665 rows / 17,113 baskets
+[23] model tied_s1: K=64 Kp=8 context=True tied=True state=True price=True taste=True -> 568,787 parameters
+[23]   it   500  loss 2.3327  val loglik -2.3156  top1 0.314 *
+[23]   it  1000  loss 2.1516  val loglik -2.2168  top1 0.342 *
+[23]   it  1500  loss 2.1690  val loglik -2.1539  top1 0.362 *
+[23]   it  2000  loss 2.0625  val loglik -2.1639  top1 0.361
+[23]   it  2500  loss 2.0893  val loglik -2.1492  top1 0.368 *
+[23]   it  3000  loss 2.0752  val loglik -2.1406  top1 0.367 *
+[23]   it  3500  loss 2.1602  val loglik -2.1375  top1 0.365 *
+[23]   it  4000  loss 2.0261  val loglik -2.1379  top1 0.365
+[23]   it  4500  loss 2.0670  val loglik -2.1484  top1 0.366
+[23]   it  5000  loss 2.0121  val loglik -2.1271  top1 0.371 *
+[23]   it  5500  loss 2.1084  val loglik -2.1250  top1 0.371 *
+[23]   it  6000  loss 1.9728  val loglik -2.1246  top1 0.371 *
+[23]   it  6500  loss 2.0046  val loglik -2.1306  top1 0.371
+[23]   it  7000  loss 2.0916  val loglik -2.1127  top1 0.373 *
+[23]   it  7500  loss 2.0796  val loglik -2.1380  top1 0.364
+[23]   it  8000  loss 2.1009  val loglik -2.1151  top1 0.372
+[23]   it  8500  loss 2.1008  val loglik -2.1099  top1 0.375 *
+[23]   it  9000  loss 2.1256  val loglik -2.1335  top1 0.368
+[23] best validation -2.1099 at iteration 8500; test loglik -2.1741, top1 0.356
+[23] saved tied_s1_basket.pt

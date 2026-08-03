@@ -35,3 +35,6 @@ scripts/emb
 .idea/
 .vscode/
 *.swp
+
+# rebuilt by 22_basket_data.py (~120 MB, derived from dunnhumby transaction data)
+basket_input/
