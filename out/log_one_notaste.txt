@@ -1,0 +1,6 @@
+[23] data: 2,066 households, 5,455 items, 758 sub-commodities; test 202,703 rows / 24,768 baskets, train 1,228,695 rows / 157,464 baskets, validation 134,665 rows / 17,113 baskets
+[23] model one_notaste: K=64 Kp=8 context=True tied=True state=True price=True taste=False Kt=8 placebo=none -> 480,619 parameters
+[23]   it  2000  loss 2.4054  val loglik -2.3349  top1 0.299  purity 0.253  price +0.540 *
+[23]   it  4000  loss 2.3180  val loglik -2.3362  top1 0.298  purity 0.274  price +0.723
+[23]   it  6000  loss 2.2566  val loglik -2.3259  top1 0.304  purity 0.286  price +0.770 *
+[23]   it  8000  loss 2.2342  val loglik -2.3356  top1 0.299  purity 0.295  price +0.787

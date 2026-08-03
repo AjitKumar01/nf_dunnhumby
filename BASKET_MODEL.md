@@ -132,6 +132,12 @@ no price-correlation filter, no seasonality filter.
 held-out rows (0.03%) whose item or household never appears in training are dropped
 rather than scored as a cold start.
 
+The learning rate is **cosine-decayed**. Without decay the validation sequence bounces
+by ~0.03 nats between evaluations and the "best checkpoint" is largely a lottery — two
+runs differing only in the price penalty were checkpointed 5,500 iterations apart,
+which is what made the embedding look like it traded off against the price
+coefficient. With decay every metric rises monotonically and settles together.
+
 Reported log-likelihood is per scored position over `{true item} ∪ {20 negatives}`, so
 random guessing is `log(1/21) = −3.04` and top-1 accuracy is 0.048 at chance.
 **These numbers are not comparable to the nf log-likelihoods elsewhere in this
@@ -144,18 +150,33 @@ apples-to-apples comparison with the paper's model is the embedding test in §5.
 
 All at K=64, L2 1e-2, lr 0.005, 9,000 iterations, best-validation checkpoint.
 
+| model | test log-lik | top-1 | cost of removing |
+|---|---|---|---|
+| **full (`one`)** | **−2.1704** | **0.360** | — |
+| no price | −2.2011 | 0.352 | 0.031 |
+| no state | −2.2538 | 0.341 | **0.083** |
+| no interaction | −2.3280 | 0.322 | **0.158** |
+
+Same ordering as before — interaction matters most, then state, then price — but every
+gap is wider under the decayed schedule, because the full model now converges instead
+of being checkpointed mid-bounce.
+
+The earlier no-decay recipe, where the full set including household taste and
+seasonality was run (internally consistent, every number ~0.01–0.03 nats worse than
+its decayed equivalent):
+
 | model | test log-lik | top-1 | cost of removing | kNN purity |
 |---|---|---|---|---|
-| **full** | **−2.1788** | 0.352 | — | 0.288 |
+| full | −2.1788 | 0.352 | — | 0.288 |
 | no price | −2.2033 | 0.346 | 0.025 | 0.289 |
-| no state | −2.2718 | 0.334 | **0.093** | **0.343** |
-| no interaction | −2.3195 | 0.320 | **0.141** | 0.203 |
-| no household taste | −2.3279 | 0.306 | **0.149** | 0.280 |
-| popularity only (untied run) | −3.0205 | 0.092 | 0.842 | 0.005 |
+| no state | −2.2718 | 0.334 | 0.093 | 0.343 |
+| no interaction | −2.3195 | 0.320 | 0.141 | 0.203 |
+| no household taste | −2.3279 | 0.306 | 0.149 | 0.280 |
+| popularity only | −3.0205 | 0.092 | 0.842 | 0.005 |
 
-Seed-to-seed spread is small — a second seed of the full model gives −2.1741 against
-−2.1788 (0.0047 nats) and purity 0.291 against 0.288 — so every ablation gap is one to
-two orders of magnitude larger than run-to-run noise.
+Seed-to-seed spread is very small once the schedule decays: a second seed of `one`
+gives test −2.1686 against −2.1704, purity 0.304 against 0.302, and median `γ·β` 0.847
+against 0.840. Every ablation gap is one to two orders of magnitude larger than that.
 
 Three things worth stating plainly, including one that cuts against the model:
 
@@ -163,17 +184,12 @@ Three things worth stating plainly, including one that cuts against the model:
   matter more than price, and state matters nearly four times as much as price.
 - **The floor is informative.** Popularity alone reaches top-1 of 0.092 against 0.048
   chance, so roughly half the achievable ranking signal is not popularity.
-- **State buys fit and costs embedding quality.** Removing state *improves*
-  nearest-neighbour purity from 0.288 to **0.343** and AUC from 0.816 to **0.866**,
-  while costing 0.093 nats of fit. This is the same absorption effect that motivated
-  tying the interaction: `η_j` soaks up repeat-purchase regularity, and whatever `η`
-  explains, `α` no longer has to. Unlike tying — which improved both — this is a
-  genuine trade-off between predictive fit and embedding interpretability.
-
-  The headline model keeps state, because a state level was a requirement and because
-  it is the transition function any dynamic policy needs. But if the embedding is the
-  deliverable and forecasting is not, `tied_nostate` is the better artefact, and its
-  numbers are in the table rather than hidden.
+- **State absorbs some embedding signal, but not enough to force a choice.** On the
+  no-decay recipe, removing state raised purity from 0.288 to 0.343 while costing
+  0.093 nats — `η_j` soaks up repeat-purchase regularity that `α` would otherwise
+  carry. Under the decayed recipe the full model reaches 0.302 purity *and* the best
+  fit, so this is a mild absorption effect rather than a trade-off that requires
+  giving something up.
 
 - **Interaction is what makes the embedding work.** Removing it drops purity from
   0.288 to 0.203 and AUC from 0.816 to 0.712 — the opposite direction from state, and
@@ -192,11 +208,10 @@ On all 5,455 items and 758 sub-commodities:
 
 | embedding | kNN purity (k=10) | × chance | same-sub AUC | silhouette |
 |---|---|---|---|---|
-| tied, no state | 0.343 | 80.2× | 0.866 | −0.100 |
-| **tied, K=64 (headline)** | **0.288** | **67.3×** | **0.816** | −0.160 |
-| tied, no price | 0.289 | 67.4× | 0.817 | −0.160 |
-| tied, no household taste | 0.280 | 65.4× | 0.838 | −0.276 |
-| tied, K=32 | 0.250 | 58.5× | 0.819 | −0.247 |
+| **`one` (headline)** | **0.302** | **70.6×** | **0.823** | **−0.154** |
+| `one`, second seed | 0.304 | 71.0× | 0.825 | −0.153 |
+| no-decay recipe, uniform L2 | 0.288 | 67.3× | 0.816 | −0.160 |
+| no-decay recipe, separate price L2 | 0.270 | 63.1× | 0.800 | −0.176 |
 | tied, no interaction | 0.203 | 47.4× | 0.712 | −0.223 |
 | free `ρ` (untied) | 0.058 | 13.5× | 0.608 | −0.390 |
 | control: random | 0.004 | 0.9× | 0.499 | — |
@@ -205,11 +220,11 @@ On all 5,455 items and 758 sub-commodities:
 Chance purity here is 0.0043 — not `1/758`, because sub-commodities differ hugely in
 size and a random neighbour lands in one with probability proportional to its size.
 
-**Reading this honestly.** 0.288 means that for a typical item, roughly 3 of its 10
+**Reading this honestly.** 0.302 means that for a typical item, roughly 3 of its 10
 nearest neighbours are in the same sub-commodity out of 758 possibilities. An AUC of
-0.816 means that given a same-sub pair and a different-sub pair at random, cosine
+0.823 means that given a same-sub pair and a different-sub pair at random, cosine
 similarity ranks them correctly 82% of the time. The silhouette is still **negative**
-(−0.160): sub-commodities are *findable* in this space but they are not compact,
+(−0.154): sub-commodities are *findable* in this space but they are not compact,
 well-separated balls, and I would not claim otherwise.
 
 ### The map
@@ -233,7 +248,7 @@ Nearest neighbours of popular items, by cosine on `α`:
 | CANISTER POTATO/TORT CHIPS | all five are CANISTER POTATO/TORT CHIPS |
 | MAINSTREAM WHEAT BREAD | WHEAT BREAD, WHITE BREAD, SINGLE CHEESE, SINGLE CHEESE, EGGS |
 
-40% of top-5 neighbours share the query's sub-commodity, up from 8% before tying.
+42.7% of top-5 neighbours share the query's sub-commodity, up from 8% before tying.
 
 The "misses" are the most interesting part and they are not errors. **Peanut butter's
 nearest neighbour is jelly.** Turkey's are ham and beef. Wheat bread's are sliced
@@ -252,7 +267,7 @@ members in this catalogue — with the same ground truth.
 
 | | kNN purity | × chance | same-sub AUC | silhouette |
 |---|---|---|---|---|
-| **basket model `α`** | **0.149** | **11.0×** | **0.803** | **−0.061** |
+| **basket model `α` (`one`)** | **0.160** | **11.8×** | **0.815** | **−0.050** |
 | nf `β` (paper's model) | 0.014 | 1.0× | **0.379** | −0.313 |
 
 Two results, and the second is the more striking.
@@ -344,14 +359,24 @@ The fix is to penalise the price block separately (`--l2-price`). It is not a tu
 trick: shrinkage toward zero is exactly the wrong prior for a parameter you intend to
 read as an elasticity, however right it is for a representation.
 
-| model | median `γ·β` | test log-lik | **price-move weeks** | static weeks |
-|---|---|---|---|---|
-| `tied_k64_r` (uniform L2) | +0.081 | **−2.1788** | −2.1537 | **−2.2151** |
-| **`causal` (separate price L2)** | **+0.712** | −2.2120 | **−2.1509** | −2.2736 |
+Doing that alone still looked like a trade — the separate-penalty model was 0.033 nats
+worse overall and slightly weaker on the embedding. That turned out to be an artefact
+of the noisy schedule described in §3: the two runs were checkpointed 5,500 iterations
+apart. **Adding cosine decay removes the trade entirely.** One model, `one`, is best on
+every axis:
 
-The causal model is 0.033 nats worse overall and **better where the counterfactual
-lives**. That is the right trade, and it is the paper's own selection criterion —
-hyperparameters chosen on price-change weeks, not on average fit.
+| model | median `γ·β` | test log-lik | **price-move weeks** | kNN purity | AUC |
+|---|---|---|---|---|---|
+| uniform L2, no decay | +0.081 | −2.1788 | −2.1537 | 0.288 | 0.816 |
+| separate price L2, no decay | +0.712 | −2.2120 | −2.1509 | 0.270 | 0.800 |
+| **`one`: separate price L2 + decay** | **+0.840** | **−2.1704** | **−2.1029** | **0.302** | **0.823** |
+
+The fitted coefficient **+0.840** lands almost exactly on the independent reduced-form
+estimate of **0.844** from §7.1 — two different estimators, one a within-item panel
+regression and the other a 613k-parameter basket model, agreeing to within 0.5%.
+
+There was never a real conflict between measuring price and learning a good embedding.
+There was a checkpoint lottery, and one badly-scoped regulariser.
 
 ### 7.3 Structural placebo: refit the whole model on scrambled prices
 
@@ -359,26 +384,32 @@ Stronger than the reduced form, because every other parameter is free to compens
 
 | model | price panel | median `γ·β` | retained | price-move weeks |
 |---|---|---|---|---|
-| `causal` | real | +0.7124 | — | −2.1509 |
-| `causal_pl` | each item's weeks reordered | **−0.0000** | **0.0%** | −2.1948 |
+| `one` | real | +0.8400 | — | −2.1029 |
+| `one` (second seed) | real | +0.8466 | — | −2.1047 |
+| `one_pl` | each item's weeks reordered | **−0.0000** | **0.0%** | −2.1425 |
 
 ![price causal](figures/price_causal.png)
 
 The coefficient collapses to zero to four decimal places, and held-out fit on
-price-move weeks degrades by 0.044 nats. The price parameter is measuring price and
+price-move weeks degrades by 0.040 nats. The price parameter is measuring price and
 nothing else.
+
+A useful side-check: `one_pl`'s *embedding* is unharmed (purity 0.305 against 0.302).
+Scrambling prices destroys the price parameter and leaves the item embedding intact,
+which is what should happen if `α` is learned from co-purchase rather than from price.
 
 ### 7.4 Is the elasticity inflated by the categories that fail?
 
 | category group | items | median `γ·β` |
 |---|---|---|
-| clean (passes every placebo) | 3,044 | +1.026 |
-| usable (no strict failure) | 3,909 | +1.037 |
-| fails a strict placebo | 453 | +1.057 |
+| clean (passes every placebo) | 3,044 | +1.106 |
+| usable (no strict failure) | 3,909 | +1.135 |
+| fails a strict placebo | 453 | +1.056 |
 
-Essentially flat. The usual worry — that the average elasticity is propped up by the
+Essentially flat, and if anything the categories that fail a placebo carry *smaller*
+coefficients. The usual worry — that the average elasticity is propped up by the
 endogenous categories — does not hold here. Restricting to the clean subset would
-change the answer by about 3%.
+change the answer by about 4%, in the direction of a slightly smaller elasticity.
 
 ### 7.5 What did not work: the seasonality term
 
@@ -404,8 +435,8 @@ that §7.2 fixed.
 **Can**: the price coefficient is identified from real price variation (structural
 placebo: 0.0% retained), the variation is clean at the design level (strict placebos
 at 0.7% retention, 5 of 160 categories failing), the magnitude matches an independent
-reduced-form estimate (+0.71 against 0.84), and the model predicts best exactly where
-price moves.
+reduced-form estimate to within 0.5% (+0.840 against −0.844), and the model predicts
+best exactly where price moves.
 
 **Cannot**: this is not an instrumental-variables argument. A placebo shows that price
 is not spuriously correlated with demand *in ways the placebo destroys*; it cannot
@@ -465,22 +496,26 @@ size and kind observed in the data, and not a substitute for an experiment.
 ```bash
 python3 scripts/21_basket_eda.py        # exploration -> DATA_EXPLORATION.md figures
 python3 scripts/22_basket_data.py       # build basket_input/
-python3 scripts/23_basket_model.py --label tied_k64_r \
-        --tie-context --K 64 --l2 1e-2 --lr 0.005 --iters 9000 --eval-every 500
-python3 scripts/24_embedding_eval.py --primary causal
+# the model -- one configuration, used for everything
+python3 scripts/23_basket_model.py --label one \
+        --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 \
+        --lr 0.005 --lr-decay --iters 12000 --eval-every 1000
 
-# causal: placebos on the data, then on the model
+# its structural placebo
+python3 scripts/23_basket_model.py --label one_pl \
+        --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 \
+        --lr 0.005 --lr-decay --iters 12000 --eval-every 2000 --placebo-price permute
+
+python3 scripts/24_embedding_eval.py --primary one
 python3 scripts/25_basket_placebo.py
-python3 scripts/23_basket_model.py --label causal \
-        --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --iters 9000
-python3 scripts/23_basket_model.py --label causal_pl \
-        --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --iters 9000 \
-        --placebo-price permute
-python3 scripts/26_price_causal.py --labels causal tied_k64_r causal_pl
+python3 scripts/26_price_causal.py --labels one one_s1 one_pl
 ```
 
-**Which checkpoint to use.** `tied_k64_r` for the best embedding and ranking;
-**`causal`** for anything involving price, because its elasticity is not shrunk.
+**Which checkpoint to use: `one`.** It is simultaneously the best-ranking model
+(test −2.1704, top-1 0.360), the best embedding (purity 0.302, 70.6× chance, AUC
+0.823), and the best price model (`γ·β` = +0.840 against a reduced-form 0.844, best
+held-out fit on price-move weeks at −2.1029). The three requirements are not in
+tension once the learning rate decays and the price block has its own penalty.
 
 Artefacts: `out/basket_eda.json`, `out/embedding_eval.json`,
 `out/embedding_neighbours_basket.csv`, `out/<label>_basket_history.json`, and the

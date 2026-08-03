@@ -275,6 +275,23 @@ def make_batch(d: BasketData, split, bidx, n_neg, rng, model_K, device, alpha_de
 
 
 @torch.no_grad()
+def knn_purity_probe(model, labels, k=10, n_sample=1500, seed=0):
+    """Share of an item's k nearest neighbours (cosine on alpha) sharing its label.
+
+    Subsampled so it costs a fraction of a second; the full version lives in
+    24_embedding_eval.py.
+    """
+    E = model.alpha.detach().cpu().numpy()
+    rng = np.random.default_rng(seed)
+    sel = rng.choice(len(E), min(n_sample, len(E)), replace=False)
+    U = E / np.clip(np.linalg.norm(E, axis=1, keepdims=True), 1e-9, None)
+    sim = U[sel] @ U.T
+    sim[np.arange(len(sel)), sel] = -np.inf
+    idx = np.argpartition(-sim, k, axis=1)[:, :k]
+    return float((labels[idx] == labels[sel][:, None]).mean())
+
+
+@torch.no_grad()
 def evaluate(model, d, split, n_neg, rng, device, max_baskets=4000):
     sp = d.splits[split]
     nb = min(sp["n_baskets"], max_baskets)
@@ -304,6 +321,7 @@ def main(a):
                         use_taste=not a.no_taste, seed=a.seed,
                         tie_context=a.tie_context,
                         Kt=0 if a.no_season else a.Kt, n_weeks=n_weeks).to(dev)
+    sub_labels = d.items.sort_values("item_id").sub_id.to_numpy()
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} Kp={a.Kp} context={not a.no_context} "
         f"tied={a.tie_context} state={not a.no_state} price={not a.no_price} "
@@ -311,6 +329,13 @@ def main(a):
         f"placebo={a.placebo_price} -> {n_par:,} parameters")
 
     opt = torch.optim.Adam(model.parameters(), lr=a.lr)
+    # Cosine decay to lr * final_lr_frac.  Without it the validation sequence bounces
+    # by ~0.03 nats between evaluations and "best checkpoint" is largely a lottery:
+    # two runs differing only in the price penalty were checkpointed 5,500 iterations
+    # apart, which is what made the embedding look like it traded off against the
+    # price coefficient when it was really just a different draw.
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+        opt, T_max=a.iters, eta_min=a.lr * a.final_lr_frac) if a.lr_decay else None
     rng = np.random.default_rng(a.seed)
     ev_rng = np.random.default_rng(12345)      # fixed, so evals are comparable
     sp = d.splits["train"]
@@ -324,18 +349,27 @@ def main(a):
         loss = (-torch.log_softmax(s, dim=1)[:, 0].mean()
                 + (a.l2 * model.l2() + a.l2_price * model.l2_price()) / cand.shape[0])
         opt.zero_grad(); loss.backward(); opt.step()
+        if sched is not None:
+            sched.step()
 
         if it % a.eval_every == 0 or it == a.iters:
             vll, vacc = evaluate(model, d, "validation", a.n_neg, ev_rng, dev)
+            # Diagnostic only.  Selection stays on validation log-likelihood, so the
+            # "the model is never shown sub-commodity" claim is untouched -- this just
+            # makes it visible whether ranking and embedding peak together.
+            pur = knn_purity_probe(model, sub_labels)
+            pcoef = float((model.gamma.detach() @ model.beta.detach().T).median()) \
+                if model.gamma is not None else float("nan")
             hist.append({"iter": it, "train_loss": float(loss.detach()), "val_loglik": vll,
-                         "val_top1": vacc, "secs": time.time() - t0})
+                         "val_top1": vacc, "knn_purity": pur, "median_price_coef": pcoef,
+                         "secs": time.time() - t0})
             star = ""
             if vll > best:
                 best, best_it = vll, it
                 torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_basket.pt"))
                 star = " *"
             log(f"  it {it:5d}  loss {float(loss.detach()):.4f}  val loglik {vll:.4f}  "
-                f"top1 {vacc:.3f}{star}")
+                f"top1 {vacc:.3f}  purity {pur:.3f}  price {pcoef:+.3f}{star}")
 
     # Reload the best checkpoint before the final report, so the numbers describe the
     # model that is actually saved rather than the last (possibly overfit) step.
@@ -363,6 +397,10 @@ if __name__ == "__main__":
     p.add_argument("--eval-every", type=int, default=250)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--l2", type=float, default=1e-4)
+    p.add_argument("--lr-decay", action="store_true",
+                   help="cosine-decay the learning rate; makes the end of training "
+                        "stable so the saved checkpoint is not a lottery")
+    p.add_argument("--final-lr-frac", type=float, default=0.05)
     p.add_argument("--l2-price", type=float, default=1e-4,
                    help="separate penalty on gamma and beta; heavy shrinkage here "
                         "biases the price response toward zero and destroys any "

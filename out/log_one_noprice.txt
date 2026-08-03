@@ -1,0 +1,10 @@
+[23] data: 2,066 households, 5,455 items, 758 sub-commodities; test 202,703 rows / 24,768 baskets, train 1,228,695 rows / 157,464 baskets, validation 134,665 rows / 17,113 baskets
+[23] model one_noprice: K=64 Kp=8 context=True tied=True state=True price=False taste=True Kt=8 placebo=none -> 552,675 parameters
+[23]   it  2000  loss 2.1942  val loglik -2.1881  top1 0.352  purity 0.263  price +nan *
+[23]   it  4000  loss 2.0599  val loglik -2.1774  top1 0.356  purity 0.284  price +nan *
+[23]   it  6000  loss 1.9748  val loglik -2.1356  top1 0.367  purity 0.297  price +nan *
+[23]   it  8000  loss 1.9098  val loglik -2.1572  top1 0.367  purity 0.304  price +nan
+[23]   it 10000  loss 1.9578  val loglik -2.1465  top1 0.368  purity 0.308  price +nan
+[23]   it 12000  loss 1.9671  val loglik -2.1288  top1 0.372  purity 0.310  price +nan *
+[23] best validation -2.1288 at iteration 12000; test loglik -2.2011, top1 0.352
+[23] saved one_noprice_basket.pt

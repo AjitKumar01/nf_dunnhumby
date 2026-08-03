@@ -1,0 +1,10 @@
+usage: 23_basket_model.py [-h] [--label LABEL] [--K K] [--Kp KP]
+                          [--n-neg N_NEG] [--batch-baskets BATCH_BASKETS]
+                          [--iters ITERS] [--eval-every EVAL_EVERY] [--lr LR]
+                          [--l2 L2] [--lr-decay]
+                          [--final-lr-frac FINAL_LR_FRAC]
+                          [--l2-price L2_PRICE] [--no-context] [--tie-context]
+                          [--no-state] [--no-price] [--no-taste] [--Kt KT]
+                          [--no-season] [--placebo-price {none,permute,swap}]
+                          [--seed SEED] [--device DEVICE]
+23_basket_model.py: error: unrecognized arguments: --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --lr-decay --iters 12000 --eval-every 2000
