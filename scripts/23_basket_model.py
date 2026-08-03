@@ -64,12 +64,28 @@ def log(m):
 class BasketData:
     """Arrays plus the vectorised state lookup described in 22_basket_data.py."""
 
-    def __init__(self, indir, device="cpu"):
+    def __init__(self, indir, device="cpu", placebo_price="none",
+                 placebo_seed=0):
         self.meta = json.load(open(os.path.join(indir, "meta.json")))
         bk = pd.read_parquet(os.path.join(indir, "baskets.parquet"))
         self.items = pd.read_parquet(os.path.join(indir, "items.parquet"))
-        self.log_price_dev = torch.as_tensor(
-            np.load(os.path.join(indir, "log_price_dev.npy")), device=device)
+        lpd = np.load(os.path.join(indir, "log_price_dev.npy"))
+        # A structural placebo: scramble the price panel before fitting.  If the
+        # fitted price coefficient survives a scrambled panel, it was never
+        # measuring price.  "permute" reorders each item's own days, keeping its
+        # exact price distribution; "swap" hands each item another item's series.
+        if placebo_price != "none":
+            rng = np.random.default_rng(placebo_seed)
+            if placebo_price == "permute":
+                for j in range(lpd.shape[0]):
+                    lpd[j] = rng.permutation(lpd[j])
+            elif placebo_price == "swap":
+                lpd = lpd[rng.permutation(lpd.shape[0])]
+            else:
+                raise ValueError(f"unknown placebo_price {placebo_price!r}")
+            log(f"PLACEBO: price panel scrambled with '{placebo_price}' -- any "
+                f"surviving price coefficient is spurious by construction")
+        self.log_price_dev = torch.as_tensor(lpd, device=device)
         z = np.load(os.path.join(indir, "state.npz"))
         self.keys = z["keys"]
         self.sub_gap = z["sub_gap"].astype(np.float32)
@@ -93,6 +109,8 @@ class BasketData:
                 "user": g.user_id.to_numpy(np.int64),
                 "item": g.item_id.to_numpy(np.int64),
                 "day": g.DAY.to_numpy(np.int64),
+                # week-of-year, so seasonality generalises to held-out weeks
+                "week": (g.WEEK_NO.to_numpy(np.int64) - 1) % 52,
                 "starts": starts.astype(np.int64),
                 "ends": ends.astype(np.int64),
                 "n_baskets": len(starts),
@@ -140,7 +158,7 @@ class BasketData:
 class BasketModel(nn.Module):
     def __init__(self, data: BasketData, K=32, Kp=8, use_context=True,
                  use_state=True, use_price=True, use_taste=True, seed=0,
-                 tie_context=False):
+                 tie_context=False, Kt=8, n_weeks=1):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N = data.J, data.N
@@ -166,8 +184,13 @@ class BasketModel(nn.Module):
         self.gamma = emb(N, Kp, 0.1) if use_price else None
         self.beta = emb(J, Kp, 0.1) if use_price else None
         self.eta = emb(J, N_STATE_FEATURES, 0.01) if use_state else None
+        # mu_j . delta_w: seasonality.  Without it the price coefficient absorbs any
+        # week-frequency co-movement of price and demand -- the placebo battery
+        # measures that at 11.3% of the coefficient (25_basket_placebo.py).
+        self.mu = emb(J, Kt, 0.02) if Kt > 0 else None
+        self.delta = emb(n_weeks, Kt, 0.02) if Kt > 0 else None
 
-    def score(self, users, items, ctx, dlogp, state):
+    def score(self, users, items, ctx, dlogp, state, weeks=None):
         """users [B], items [B, M], ctx [B, K], dlogp [B, M], state [B, M, F]."""
         s = self.lam[items]
         a = self.alpha[items]                                   # [B, M, K]
@@ -183,11 +206,31 @@ class BasketModel(nn.Module):
             s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
         if self.eta is not None:
             s = s + (self.eta[items] * state).sum(-1)
+        if self.mu is not None and weeks is not None:
+            s = s + (self.mu[items] * self.delta[weeks].unsqueeze(1)).sum(-1)
         return s
 
     def l2(self):
+        """Penalty on the representation parameters, excluding price.
+
+        The price block gets its own coefficient because it is doing a different job.
+        Everything else is there to fit the basket well and benefits from heavy
+        shrinkage; gamma and beta exist to measure a causal price response, and
+        shrinking them biases that response toward zero.  Penalising all 500k
+        parameters at one rate drove the median gamma.beta from +0.89 at l2=1e-4 to
+        +0.08 at l2=1e-2 -- an order of magnitude below the reduced-form elasticity
+        of 0.84 that 25_basket_placebo.py estimates from the same data.  A model that
+        shrunk is useless for what-if questions no matter how well it ranks items.
+        """
         t = 0.0
-        for p in [self.alpha, self.theta, self.rho, self.gamma, self.beta, self.eta]:
+        for p in [self.alpha, self.theta, self.rho, self.eta, self.mu, self.delta]:
+            if p is not None:
+                t = t + (p ** 2).sum()
+        return t
+
+    def l2_price(self):
+        t = 0.0
+        for p in [self.gamma, self.beta]:
             if p is not None:
                 t = t + (p ** 2).sum()
         return t
@@ -202,6 +245,7 @@ def make_batch(d: BasketData, split, bidx, n_neg, rng, model_K, device, alpha_de
     user = sp["user"][rows]
     item = sp["item"][rows]
     day = sp["day"][rows]
+    week = sp["week"][rows]
     B = len(rows)
 
     # Context: mean alpha over the *other* items of the same basket.  Computed from
@@ -226,7 +270,8 @@ def make_batch(d: BasketData, split, bidx, n_neg, rng, model_K, device, alpha_de
     return (torch.as_tensor(user, device=device),
             torch.as_tensor(cand, device=device),
             ctx, dlogp,
-            torch.as_tensor(st, device=device))
+            torch.as_tensor(st, device=device),
+            torch.as_tensor(week, device=device))
 
 
 @torch.no_grad()
@@ -238,9 +283,9 @@ def evaluate(model, d, split, n_neg, rng, device, max_baskets=4000):
     alpha_det = model.alpha.detach()
     for a in range(0, nb, 256):
         b = idx[a:a + 256]
-        users, cand, ctx, dlogp, st = make_batch(d, split, b, n_neg, rng, model.K,
-                                                 device, alpha_det)
-        s = model.score(users, cand, ctx, dlogp, st)
+        users, cand, ctx, dlogp, st, wk = make_batch(d, split, b, n_neg, rng, model.K,
+                                                    device, alpha_det)
+        s = model.score(users, cand, ctx, dlogp, st, wk)
         lp = torch.log_softmax(s, dim=1)[:, 0]
         tot += float(lp.sum()); cnt += lp.shape[0]
         hits += int((s.argmax(1) == 0).sum())
@@ -251,15 +296,19 @@ def main(a):
     os.makedirs(OUT, exist_ok=True)
     dev = torch.device(a.device)
     torch.manual_seed(a.seed)
-    d = BasketData(IN, device=dev)
+    d = BasketData(IN, device=dev, placebo_price=a.placebo_price,
+                   placebo_seed=a.seed)
+    n_weeks = 52          # week-of-year index; see BasketData.splits
     model = BasketModel(d, K=a.K, Kp=a.Kp, use_context=not a.no_context,
                         use_state=not a.no_state, use_price=not a.no_price,
                         use_taste=not a.no_taste, seed=a.seed,
-                        tie_context=a.tie_context).to(dev)
+                        tie_context=a.tie_context,
+                        Kt=0 if a.no_season else a.Kt, n_weeks=n_weeks).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} Kp={a.Kp} context={not a.no_context} "
         f"tied={a.tie_context} state={not a.no_state} price={not a.no_price} "
-        f"taste={not a.no_taste} -> {n_par:,} parameters")
+        f"taste={not a.no_taste} Kt={0 if a.no_season else a.Kt} "
+        f"placebo={a.placebo_price} -> {n_par:,} parameters")
 
     opt = torch.optim.Adam(model.parameters(), lr=a.lr)
     rng = np.random.default_rng(a.seed)
@@ -269,10 +318,11 @@ def main(a):
     t0 = time.time()
     for it in range(1, a.iters + 1):
         bidx = rng.integers(0, sp["n_baskets"], size=a.batch_baskets)
-        users, cand, ctx, dlogp, st = make_batch(d, "train", bidx, a.n_neg, rng,
-                                                 model.K, dev, model.alpha.detach())
-        s = model.score(users, cand, ctx, dlogp, st)
-        loss = -torch.log_softmax(s, dim=1)[:, 0].mean() + a.l2 * model.l2() / cand.shape[0]
+        users, cand, ctx, dlogp, st, wk = make_batch(d, "train", bidx, a.n_neg, rng,
+                                                    model.K, dev, model.alpha.detach())
+        s = model.score(users, cand, ctx, dlogp, st, wk)
+        loss = (-torch.log_softmax(s, dim=1)[:, 0].mean()
+                + (a.l2 * model.l2() + a.l2_price * model.l2_price()) / cand.shape[0])
         opt.zero_grad(); loss.backward(); opt.step()
 
         if it % a.eval_every == 0 or it == a.iters:
@@ -313,6 +363,10 @@ if __name__ == "__main__":
     p.add_argument("--eval-every", type=int, default=250)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--l2", type=float, default=1e-4)
+    p.add_argument("--l2-price", type=float, default=1e-4,
+                   help="separate penalty on gamma and beta; heavy shrinkage here "
+                        "biases the price response toward zero and destroys any "
+                        "counterfactual use of the model")
     p.add_argument("--no-context", action="store_true", help="ablate product interaction")
     p.add_argument("--tie-context", action="store_true",
                    help="use alpha_j itself as the interaction coefficient instead of a "
@@ -321,6 +375,13 @@ if __name__ == "__main__":
     p.add_argument("--no-state", action="store_true", help="ablate household state")
     p.add_argument("--no-price", action="store_true")
     p.add_argument("--no-taste", action="store_true", help="ablate household taste vectors")
+    p.add_argument("--Kt", type=int, default=8,
+                   help="rank of the item x week seasonality term mu_j . delta_w")
+    p.add_argument("--no-season", action="store_true", help="ablate seasonality")
+    p.add_argument("--placebo-price", default="none",
+                   choices=["none", "permute", "swap"],
+                   help="scramble the price panel before fitting; a price coefficient "
+                        "that survives this was never measuring price")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cpu")
     main(p.parse_args())

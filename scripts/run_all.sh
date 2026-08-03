@@ -103,6 +103,16 @@ python3 24_embedding_eval.py --labels tied_k64_r tied_noctx tied_nostate tied_no
   tied_notaste tied_s1 --primary tied_k64_r > $L/log_embed_eval.txt 2>&1
 tail -8 $L/log_embed_eval.txt
 
+step "25-26 price causality: placebos on the data, then on the model"
+python3 25_basket_placebo.py > $L/log_basket_placebo.txt 2>&1; tail -14 $L/log_basket_placebo.txt
+# The price block needs its own, much lighter penalty: a single L2 tuned for the
+# embedding shrinks the elasticity by an order of magnitude (see BASKET_MODEL.md 7.2).
+CT="--tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --iters 9000 --eval-every 1000"
+python3 23_basket_model.py --label causal    $CT                         > $L/log_causal.txt    2>&1
+python3 23_basket_model.py --label causal_pl $CT --placebo-price permute > $L/log_causal_pl.txt 2>&1
+python3 26_price_causal.py --labels causal tied_k64_r causal_pl > $L/log_price_causal.txt 2>&1
+grep -E "^\[26\]" $L/log_price_causal.txt | tail -18
+
 step "retrain on the placebo-clean subset"
 python3 02_select_sample.py --exclude-placebo-failures > $L/log_clean_select.txt 2>&1
 python3 03_make_model_inputs.py --outdir model_input_clean > $L/log_clean_inputs.txt 2>&1

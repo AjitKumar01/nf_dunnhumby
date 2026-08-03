@@ -272,7 +272,152 @@ That is the clearest statement of why this needed a rebuild rather than an extra
 
 ---
 
-## 7. What this enables that the paper's model could not
+## 7. Can it answer what-if questions about price?
+
+This is the part the model exists for, and it needed both a test and a fix.
+
+### 7.1 Is the price variation clean? (reduced form, `25_basket_placebo.py`)
+
+An item × week panel of log purchase rate on log price, item fixed effects always
+absorbed, week fixed effects optionally, standard errors clustered by item. Four
+placebos, run per category on the 160 categories large enough to estimate (of 188).
+
+With week fixed effects:
+
+| price series | median coefficient | categories significant at 1% |
+|---|---|---|
+| **real prices** | **−0.844** | 52.5% |
+| shifted forward 6 weeks | −0.082 | 10.6% |
+| shifted backward 6 weeks | −0.048 | 9.4% |
+| **weeks reordered within item** | **−0.006** | 3.1% |
+| **another item's price series** | **+0.002** | 4.4% |
+
+![placebo](figures/basket_placebo.png)
+
+The two strict placebos — the only ones that fully break the link with the real price
+path — collapse to essentially zero. The design passes.
+
+**It passes more cleanly than the paper's.** On the 56-category Sunday/Monday sample
+the randomised placebo retained −0.117 against a real −0.586, i.e. **20% of the real
+effect survived**, with 10.7% of categories still significant (`PREPROCESSING.md` §9).
+Here the strict placebo retains **0.7%**, with 3.1% significant. Widening the
+catalogue and using all 711 days *improved* identification rather than degrading it,
+because item-level idiosyncratic price moves dominate once you stop conditioning on a
+two-day window.
+
+The shift placebos still misbehave (10.6% and 9.4%), exactly as they do in the paper —
+a shifted series stays correlated with the real one, so those were never clean nulls.
+
+**Per-category verdict** (with week effects, at 1%):
+
+| | categories |
+|---|---|
+| scored | 160 |
+| real price effect significantly negative | 82 |
+| fail at least one placebo | 26 |
+| **fail a strict placebo (reorder or swap)** | **5** |
+| clean (real effect, no placebo failure) | 59 |
+| usable (real effect, no strict failure) | 79 |
+
+Only **5 of 160** categories fail a strict placebo, against 34 of 56 failing at least
+one on the paper's sample.
+
+### 7.2 The bug this exposed: the price coefficient was shrunk to nothing
+
+The reduced form says the elasticity is about **0.84**. The headline model
+(`tied_k64_r`) had a median fitted `γ_i·β_j` of **+0.081** — an order of magnitude too
+small. Tracing it across regularisation settings made the cause obvious:
+
+| L2 | median `γ·β` |
+|---|---|
+| 1e-4 | +0.890 |
+| 1e-3 | +0.62 |
+| **1e-2 (headline)** | **+0.081** |
+
+A single L2 coefficient was applied to all ~500k parameters. That setting was chosen
+because it maximises embedding quality and held-out ranking — and the price block,
+60k parameters whose entire job is to measure a causal response, was collateral
+damage. The model ranked items beautifully and would have predicted almost no
+response to a price change.
+
+The fix is to penalise the price block separately (`--l2-price`). It is not a tuning
+trick: shrinkage toward zero is exactly the wrong prior for a parameter you intend to
+read as an elasticity, however right it is for a representation.
+
+| model | median `γ·β` | test log-lik | **price-move weeks** | static weeks |
+|---|---|---|---|---|
+| `tied_k64_r` (uniform L2) | +0.081 | **−2.1788** | −2.1537 | **−2.2151** |
+| **`causal` (separate price L2)** | **+0.712** | −2.2120 | **−2.1509** | −2.2736 |
+
+The causal model is 0.033 nats worse overall and **better where the counterfactual
+lives**. That is the right trade, and it is the paper's own selection criterion —
+hyperparameters chosen on price-change weeks, not on average fit.
+
+### 7.3 Structural placebo: refit the whole model on scrambled prices
+
+Stronger than the reduced form, because every other parameter is free to compensate.
+
+| model | price panel | median `γ·β` | retained | price-move weeks |
+|---|---|---|---|---|
+| `causal` | real | +0.7124 | — | −2.1509 |
+| `causal_pl` | each item's weeks reordered | **−0.0000** | **0.0%** | −2.1948 |
+
+![price causal](figures/price_causal.png)
+
+The coefficient collapses to zero to four decimal places, and held-out fit on
+price-move weeks degrades by 0.044 nats. The price parameter is measuring price and
+nothing else.
+
+### 7.4 Is the elasticity inflated by the categories that fail?
+
+| category group | items | median `γ·β` |
+|---|---|---|
+| clean (passes every placebo) | 3,044 | +1.026 |
+| usable (no strict failure) | 3,909 | +1.037 |
+| fails a strict placebo | 453 | +1.057 |
+
+Essentially flat. The usual worry — that the average elasticity is propped up by the
+endogenous categories — does not hold here. Restricting to the clean subset would
+change the answer by about 3%.
+
+### 7.5 What did not work: the seasonality term
+
+The reduced form says week effects remove **11.3%** of the price coefficient, so the
+model should have a time term. Adding a low-rank item × week one made held-out fit
+**worse**, −2.2170 against −2.1788.
+
+The first attempt was worse still and for an instructive reason: it indexed
+seasonality by *absolute* week, and the split is chronological, so the held-out weeks'
+effects were never estimated and stayed at their random initialisation. Re-indexing by
+**week-of-year** fixed the leak — every held-out week-of-year value appears in
+training — and the term still costs fit. With a 102-week panel there are at most two
+observations per item per week-of-year, which is not enough to estimate 44k seasonal
+parameters.
+
+So the headline model carries **no seasonality term**, and the 11.3% is a known,
+measured, uncorrected bias in the price coefficient. It is reported here rather than
+hidden, and it is smaller than the gap between the shrunk and unshrunk coefficient
+that §7.2 fixed.
+
+### 7.6 What can and cannot be claimed
+
+**Can**: the price coefficient is identified from real price variation (structural
+placebo: 0.0% retained), the variation is clean at the design level (strict placebos
+at 0.7% retention, 5 of 160 categories failing), the magnitude matches an independent
+reduced-form estimate (+0.71 against 0.84), and the model predicts best exactly where
+price moves.
+
+**Cannot**: this is not an instrumental-variables argument. A placebo shows that price
+is not spuriously correlated with demand *in ways the placebo destroys*; it cannot
+rule out a confounder that moves with price at item × week frequency in the real data
+and is destroyed by reordering. Retailer promotions timed to anticipated demand are
+exactly such a confounder, and the 11.3% seasonality bias is the visible part of it.
+The honest summary is that the design is credible enough for counterfactuals of the
+size and kind observed in the data, and not a substitute for an experiment.
+
+---
+
+## 8. What this enables that the paper's model could not
 
 - **Multi-item baskets.** 56.1% of baskets are now representable rather than filtered
   or truncated; 132 previously discarded categories are back.
@@ -288,13 +433,13 @@ That is the clearest statement of why this needed a rebuild rather than an extra
 
 ---
 
-## 8. Limitations, stated plainly
+## 9. Limitations, stated plainly
 
-- **Nothing here is causal.** The placebo battery in `PREPROCESSING.md` §9 found 34 of
-  56 categories failing at least one price-endogeneity test, and it has **not** been
-  re-run on the 188-category catalogue. Every price coefficient in this model should
-  be read as predictive. A pricing policy optimised against it would chase the
-  endogeneity.
+- **The causal claim is a placebo argument, not an instrument.** §7 establishes that
+  the price coefficient is driven by real price variation and that the variation
+  survives four placebos, but a placebo cannot rule out a confounder that moves with
+  price at item × week frequency. The 11.3% seasonality bias is measured and
+  uncorrected.
 - **The silhouette is still negative.** Sub-commodities are recoverable but not
   compact. The embedding is good enough to retrieve, cluster and inspect; it is not
   good enough to treat cluster boundaries as meaningful.
@@ -322,8 +467,20 @@ python3 scripts/21_basket_eda.py        # exploration -> DATA_EXPLORATION.md fig
 python3 scripts/22_basket_data.py       # build basket_input/
 python3 scripts/23_basket_model.py --label tied_k64_r \
         --tie-context --K 64 --l2 1e-2 --lr 0.005 --iters 9000 --eval-every 500
-python3 scripts/24_embedding_eval.py --primary tied_k64_r
+python3 scripts/24_embedding_eval.py --primary causal
+
+# causal: placebos on the data, then on the model
+python3 scripts/25_basket_placebo.py
+python3 scripts/23_basket_model.py --label causal \
+        --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --iters 9000
+python3 scripts/23_basket_model.py --label causal_pl \
+        --tie-context --K 64 --l2 1e-2 --l2-price 1e-4 --lr 0.005 --iters 9000 \
+        --placebo-price permute
+python3 scripts/26_price_causal.py --labels causal tied_k64_r causal_pl
 ```
+
+**Which checkpoint to use.** `tied_k64_r` for the best embedding and ranking;
+**`causal`** for anything involving price, because its elasticity is not shrunk.
 
 Artefacts: `out/basket_eda.json`, `out/embedding_eval.json`,
 `out/embedding_neighbours_basket.csv`, `out/<label>_basket_history.json`, and the

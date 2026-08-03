@@ -248,11 +248,11 @@ The model built on this is specified and evaluated in **`BASKET_MODEL.md`**.
 
 ## Appendix: what this exploration does *not* establish
 
-- **Causality of price.** Nothing here re-opens the price-endogeneity question. The
-  placebo tests in `PREPROCESSING.md` §9 were run on the paper's sample and found 34
-  of 56 categories failing at least one placebo. They have **not** been re-run on the
-  expanded catalogue, so every elasticity from the basket model should be read as
-  predictive, not causal.
+- **Causality of price.** This document establishes only that price *varies* in the
+  expanded catalogue (30.5% of item-weeks). Whether that variation is exogenous is
+  tested separately in `BASKET_MODEL.md` §7 — the answer is that the strict placebos
+  retain 0.7% of the real effect and only 5 of 160 categories fail one, which is a
+  cleaner result than the paper's own sample gives.
 - **Store heterogeneity.** Prices are still pooled to chain level across 561 stores,
   with the cost measured in `VERIFICATION.md` §1 (0.077 nats between the closest and
   furthest quartile of store price deviation).
