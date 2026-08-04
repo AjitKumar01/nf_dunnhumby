@@ -458,3 +458,41 @@ fits is real, and now measured model-free rather than assumed.
 | fix 11 | generator draws units from the quantity head | it accumulated the category pick-count directly, giving every item exactly 1 unit — 1.007 against a real 1.348, while the head itself predicted 1.389 |
 | fix 12 | `--no-state` flag added | criterion 3 was written but could not be tested; the flag did not exist |
 | fix 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ~1.0–1.1 items per purchased category against a real 1.284. Generation: items 6.94 → **8.27** against 8.36 |
+
+---
+
+## 11. How the exploration was sequenced, and what that cost
+
+`DATA_EXPLORATION.md` describes the data on its own terms and makes no reference to
+this model. That separation is deliberate and was arrived at late — this section
+records why, because the sequencing error was expensive and is easy to repeat.
+
+The first version of the exploration examined only the three assumptions this model
+set out to overturn: unit demand, category independence, no state. It was silent on
+price response, quantity, stores, household heterogeneity and base rates. Everything
+it omitted was later discovered by a **bug**, not by looking at the data:
+
+| what was missing | how it surfaced | cost |
+|---|---|---|
+| does demand respond to price, and by how much? | the elasticity first appeared inside `25_basket_placebo.py`, long after the model was built | a fitted coefficient of +0.081 against a true ≈0.95 went unnoticed until an unrelated test caught it (`BASKET_MODEL.md` §7.2) |
+| units per line, and the quantity margin | only measured when challenged | a quarter of the price response was assumed away |
+| store price dispersion and assortment | only measured when challenged | prices pooled across 115 stores; unstocked items scored as "rejected" |
+| **category incidence base rate** | only after the generator produced **58 categories per basket** against a real 6.5 | a `log(30)` calibration error and **five full retrains** |
+| **household taste and price sensitivity** | only when asked directly whether the exploration was exhaustive | the premise of the whole model went unmeasured through every version of it |
+| breadth — distinct items per category purchase | caught by the coverage audit, before a bug | none |
+
+### The two lessons
+
+**Explore what the model will have to reproduce, not what you intend to change.** The
+base rate of 3.25% is one line of pandas; the entire demand exploration runs in 1.9
+seconds. Both were sitting in the same parquet file the whole time.
+
+**Audit every model term against the exploration, mechanically.** Household taste and
+price sensitivity never registered as things to check *because the model already had
+parameters for them* — having `θ_i` in the specification made it feel established. A
+model fits per-household parameters whether or not the heterogeneity is real. Only the
+split-half correlation of +0.24 distinguishes signal from noise, and computing it took
+a direct challenge.
+
+The audit is mechanical and takes minutes. It has now caught three gaps: two
+retrospectively, and one — breadth — before it caused a bug.
