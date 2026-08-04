@@ -2,3 +2,7 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
 [27] model nested_noqty: K=64 nest=True quantity=False store=True store_price=True avail_only=False -> 780,507 parameters
 [27]   froze IV reference at iteration 500: mean 2.330, 188 of 188 categories observed
+[27]   it  6000  item -1.9547  top1 0.391  qNLL 0.0000  cNLL 0.1115  kappa 0.620  price +0.750  qprice +nan *
+[27]   it 12000  item -1.9412  top1 0.398  qNLL 0.0000  cNLL 0.1131  kappa 0.662  price +0.795  qprice +nan *
+[27] best at 12000; TEST item -1.9925 top1 0.378 qNLL 0.0000 cNLL 0.1104
+[27] saved nested_noqty_nested.pt

@@ -6,12 +6,13 @@
     "Kt": 8,
     "Ks": 4,
     "n_neg": 20,
-    "n_cat": 4,
+    "n_cat": 16,
+    "iv_ref_cats": 24,
     "iv_warmup": 500,
     "iv_cap": 32,
     "batch_baskets": 192,
     "iters": 12000,
-    "eval_every": 3000,
+    "eval_every": 6000,
     "lr": 0.005,
     "l2": 0.01,
     "l2_price": 0.0001,
@@ -30,54 +31,32 @@
   },
   "history": [
     {
-      "iter": 3000,
-      "val_item": -1.9723839155514065,
-      "val_top1": 0.38382032272132577,
-      "val_quantity_nll": 0.0,
-      "val_incidence_nll": 0.46126844851175947,
-      "kappa_median": 0.795811116695404,
-      "price_coef": 0.6283831000328064,
-      "quantity_price_coef": NaN,
-      "secs": 87.69677090644836
-    },
-    {
       "iter": 6000,
-      "val_item": -1.9499424911794896,
-      "val_top1": 0.3884947762156585,
+      "val_item": -1.9547456337903402,
+      "val_top1": 0.3911469690361971,
       "val_quantity_nll": 0.0,
-      "val_incidence_nll": 0.44888861708983213,
-      "kappa_median": 0.7521229982376099,
-      "price_coef": 0.7560859322547913,
+      "val_incidence_nll": 0.1115081661939621,
+      "kappa_median": 0.6196542382240295,
+      "price_coef": 0.7501094937324524,
       "quantity_price_coef": NaN,
-      "secs": 175.1452670097351
-    },
-    {
-      "iter": 9000,
-      "val_item": -1.9218737192555764,
-      "val_top1": 0.39906832298136646,
-      "val_quantity_nll": 0.0,
-      "val_incidence_nll": 0.43066145078341167,
-      "kappa_median": 0.7477297782897949,
-      "price_coef": 0.78568434715271,
-      "quantity_price_coef": NaN,
-      "secs": 264.25550413131714
+      "secs": 313.8519217967987
     },
     {
       "iter": 12000,
-      "val_item": -1.9357075938273482,
-      "val_top1": 0.39707177916684144,
+      "val_item": -1.9411614000523707,
+      "val_top1": 0.3975325276853762,
       "val_quantity_nll": 0.0,
-      "val_incidence_nll": 0.43765538358688355,
-      "kappa_median": 0.7494259476661682,
-      "price_coef": 0.7887985110282898,
+      "val_incidence_nll": 0.11312578399976095,
+      "kappa_median": 0.6624792218208313,
+      "price_coef": 0.7945006489753723,
       "quantity_price_coef": NaN,
-      "secs": 351.8137860298157
+      "secs": 626.7922389507294
     }
   ],
   "n_parameters": 780507,
-  "best_iter": 9000,
-  "test_item": -1.992151797992901,
-  "test_top1": 0.37876146598597105,
+  "best_iter": 12000,
+  "test_item": -1.9925413280941948,
+  "test_top1": 0.3775993027020296,
   "test_quantity_nll": 0.0,
-  "test_incidence_nll": 0.4446588048138817
+  "test_incidence_nll": 0.11036259835958481
 }

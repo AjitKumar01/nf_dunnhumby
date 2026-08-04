@@ -1,0 +1,114 @@
+{
+  "taste": {
+    "households": 2066,
+    "self_similarity_across_time": 0.7838139533996582,
+    "cross_household_similarity": 0.46864446997642517,
+    "ratio": 1.6725130081176758,
+    "share_self_beats_random": 0.9593417231364957
+  },
+  "price_sensitivity": {
+    "households_estimated": 1640,
+    "median_slope": -0.16853053792074235,
+    "p10": -0.42677270226626735,
+    "p90": -0.016307180217017783,
+    "sd": 0.185020518588783,
+    "split_half_correlation": 0.23558773444061296,
+    "households_in_split_half": 1374
+  },
+  "stores_visited": {
+    "median_trips": 71.0,
+    "median_stores": 4.0,
+    "p90_stores": 9.0,
+    "median_primary_share": 0.7573593073593073,
+    "p10_primary_share": 0.4238049184857695,
+    "share_trips_switching_store": 0.3006195289573353,
+    "share_single_store_households": 0.07647628267182963
+  },
+  "trips": {
+    "median_items": 4.0,
+    "median_gap_days": 3.0,
+    "p90_gap_days": 14.0,
+    "corr_gap_and_size": 0.0701604530320277,
+    "median_gap_before_large_trip": 5.0,
+    "median_gap_before_small_trip": 3.0
+  },
+  "demographics": {
+    "coverage_of_modelled_households": 0.3877057115198451,
+    "price_slope_by_attribute": {
+      "classification_1": {
+        "levels": 6,
+        "range_of_median_slope": 0.06120793871464092,
+        "detail": {
+          "Age Group1": -0.2003535248655629,
+          "Age Group2": -0.1830630532663694,
+          "Age Group3": -0.18233032450423386,
+          "Age Group4": -0.16742317094915363,
+          "Age Group5": -0.15739946680001238,
+          "Age Group6": -0.13914558615092198
+        }
+      },
+      "classification_2": {
+        "levels": 3,
+        "range_of_median_slope": 0.005526510769987503,
+        "detail": {
+          "X": -0.16735591759747798,
+          "Y": -0.17288242836746548,
+          "Z": -0.1726723816542346
+        }
+      },
+      "classification_3": {
+        "levels": 6,
+        "range_of_median_slope": 0.0671955628049889,
+        "detail": {
+          "Level1": -0.1808021614331826,
+          "Level2": -0.21790194283167708,
+          "Level3": -0.15563557159795904,
+          "Level4": -0.1524747149252183,
+          "Level5": -0.17450453349372327,
+          "Level6": -0.15070638002668818
+        }
+      },
+      "HOMEOWNER_DESC": {
+        "levels": 2,
+        "range_of_median_slope": 0.0015968407526820438,
+        "detail": {
+          "Homeowner": -0.16994996933910447,
+          "Unknown": -0.16835312858642243
+        }
+      },
+      "classification_5": {
+        "levels": 6,
+        "range_of_median_slope": 0.0760397057371479,
+        "detail": {
+          "Group1": -0.17506854814296133,
+          "Group2": -0.16616249426678578,
+          "Group3": -0.19731125862931626,
+          "Group4": -0.17913413247369647,
+          "Group5": -0.15974351542362772,
+          "Group6": -0.12127155289216836
+        }
+      },
+      "classification_4": {
+        "levels": 5,
+        "range_of_median_slope": 0.027017411995429175,
+        "detail": {
+          "1": -0.17288242836746548,
+          "2": -0.1629189130365375,
+          "3": -0.16742317094915363,
+          "4": -0.18748113927600726,
+          "5+": -0.18993632503196667
+        }
+      },
+      "KID_CATEGORY_DESC": {
+        "levels": 4,
+        "range_of_median_slope": 0.01585221270781237,
+        "detail": {
+          "1": -0.1740104576659416,
+          "2": -0.18580218204691684,
+          "3+": -0.1786124946388845,
+          "None/Unknown": -0.16994996933910447
+        }
+      }
+    }
+  }
+}

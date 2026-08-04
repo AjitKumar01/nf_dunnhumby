@@ -20,14 +20,32 @@ Everything below measures those three commitments directly against the full
 baskets, 711 days, 307 commodities, 2,373 sub-commodities**.
 
 Every number and figure here is produced by a script, none typed by hand:
-§§1–5 by `scripts/21_basket_eda.py`, §6 by `scripts/29_demand_eda.py` (1.9 seconds),
-§7 by `scripts/25_basket_placebo.py`.
+§§1–5 by `scripts/21_basket_eda.py`, §6 by `scripts/29_demand_eda.py` (1.9 s),
+§7 by `scripts/30_household_eda.py` (1.2 s), §8 by `scripts/25_basket_placebo.py`.
 
-**§6 and §9 were added late.** The first version of this document examined only the
-three assumptions it intended to overturn and was silent on price response, quantity,
-stores and base rates — the things the model would actually have to reproduce. §9 is
-an account of what that omission cost, because the lesson is more useful than any
-single number in §6.
+**§§6, 7 and 10 were added late, in that order.** The first version of this document
+examined only the three assumptions it intended to overturn. §6 was added when the
+absence of any demand-response analysis was pointed out; auditing every model term
+against the exploration then revealed that §7 — household taste and price sensitivity,
+*the premise of the entire model* — had never been measured either. §10 is an account
+of what those omissions cost, because the lesson generalises further than any single
+number does.
+
+### Coverage: every model term against the section that establishes it
+
+| model term | what it assumes | established in |
+|---|---|---|
+| `θ_i · α_j` | households differ in taste | **§7.1** |
+| `γ_i · β_j` | households differ in price sensitivity | **§7.2** |
+| `α_j · ᾱ(ctx)` | products interact within a basket | §2 |
+| `η_j · state` | purchase timing carries information | §3 |
+| `μ_j · δ_w` | demand has week-frequency seasonality | §8 |
+| `ζ_j · ξ_s` | stores differ in price and assortment | §6.4, §7.3 |
+| `c₀_c + κ·IV` | category incidence is a separate decision | §6.5 |
+| `q₀_j + γ^q_i·β^q_j` | quantity responds to price separately | §6.1 |
+
+No term is now unexamined. That table is the check that was missing — it is what
+turns "did I explore enough" from a judgement call into something answerable.
 
 ---
 
@@ -311,9 +329,121 @@ the first generator produce **58 categories per basket against a real 6.5**
 
 ---
 
-## 7. Is the price variation exogenous, and how much of it is the calendar?
+## 7. Households: taste, price sensitivity, store visits, trips
 
-## 8. What the exploration implies for the model
+The premise of the whole model is that households differ — in what they like and in
+how they react to price. Every claim about personalisation, targeted promotion or
+heterogeneous elasticity rests on it. **Neither was ever measured** until this section
+existed, which meant a fitted model could have reported confident heterogeneity built
+entirely from noise and there would have been nothing to check it against.
+
+Produced by `scripts/30_household_eda.py`, 1.2 seconds.
+
+![household heterogeneity](figures/household_eda_heterogeneity.png)
+
+### 7.1 Taste is real and stable
+
+Split each household's trips in half by time and compare its category profile across
+the two halves, against the same comparison with a *different* household:
+
+| | cosine similarity |
+|---|---|
+| a household's own two halves | **0.784** |
+| two different households | 0.469 |
+| ratio | **1.67×** |
+| households where own beats random | **95.9%** |
+
+The two distributions barely overlap. Tastes are stable over a year and specific to
+the household — `θ_i · α_j` has something real to fit.
+
+### 7.2 Price sensitivity differs — and it is signal, not noise
+
+Per-household within-item slope of log units on log price, on the
+1,640 households with enough repeat
+purchases:
+
+| | value |
+|---|---|
+| median | **-0.169** |
+| p10 → p90 | **-0.427 → -0.016** |
+| sd across households | 0.185 |
+| **split-half correlation** | **+0.236** |
+
+The spread alone proves nothing — noisy per-household estimates are spread out by
+construction. The **split-half correlation of +0.24** is the test that
+matters: a household's price response in the first half of its trips predicts its
+response in the second half. Modest, but clearly non-zero, on
+1,374 households.
+
+So `γ_i · β_j` is estimating something. It also sets the honest ceiling: with a
+split-half correlation of 0.24, roughly a quarter of the apparent variation is
+stable and the rest is noise. Any claim that this model personalises price response
+*well* should be read against that number.
+
+### 7.3 Store visits
+
+![stores and trips](figures/household_eda_stores_trips.png)
+
+| | value |
+|---|---|
+| median trips per household | 71 |
+| median distinct stores | **4** (p90 9) |
+| trips at the primary store | median **76%**, p10 42% |
+| consecutive trips that switch store | **30.1%** |
+| households using only one store | 7.6% |
+
+This is the section that would have prevented a modelling error rather than just
+informing one. Households are **loyal but not monogamous**: the typical one does 76%
+of its trips at a primary store, yet 30% of consecutive trips switch. Only 7.6% use a
+single store.
+
+Two consequences. Treating the store as a fixed household attribute would be wrong for
+most households. And because a household genuinely shops several stores with different
+assortments and prices, the store terms are identified *within* household, not only
+across — which is a stronger position than the model was designed to assume.
+
+### 7.4 Trip rhythm
+
+| | value |
+|---|---|
+| median items per trip | 4 |
+| median gap between trips | 3 days (p90 14) |
+| correlation, gap vs trip size | **+0.070** |
+| gap before a large trip | 5 days |
+| gap before a small trip | 3 days |
+
+A weak but consistent stock-up pattern: longer gaps precede bigger trips. Weak enough
+that an explicit trip-type latent is not obviously warranted, which is a useful
+negative — it was on the list of things to add.
+
+### 7.5 Demographics
+
+`hh_demographic.csv` covers **39%** of modelled households and had never been
+opened in this analysis. Median price slope by demographic level:
+
+| attribute | levels | span of median slope |
+|---|---|---|
+| `classification_5` | 6 | 0.076 |
+| `classification_3` | 6 | 0.067 |
+| `classification_1` | 6 | 0.061 |
+| `classification_4` | 5 | 0.027 |
+| `KID_CATEGORY_DESC` | 4 | 0.016 |
+| `classification_2` | 3 | 0.006 |
+
+The largest spread across any demographic attribute is **0.076**, against a
+p10–p90 spread of **0.410** across households. **Demographics explain almost none of
+the variation in price sensitivity.**
+
+That is a real finding and it corroborates the port: `VERIFICATION.md` records that
+dropping demographics from the paper's model costs nothing (it slightly *improves*
+held-out fit). Targeting on observables is a poor substitute for latent
+heterogeneity here — which is the argument for a model with `γ_i` in the first place.
+
+---
+
+## 8. Is the price variation exogenous, and how much of it is the calendar?
+
+## 9. What the exploration implies for the model
 
 Each finding maps to a specific modelling decision. Nothing here is a preference.
 
@@ -333,6 +463,11 @@ Each finding maps to a specific modelling decision. Nothing here is a preference
 | median category **−0.95**, p10 −1.57, p90 −0.04, 91% negative | the range a model must reproduce, and the sanity band for any single number |
 | a price cut **doubles demand** in that week, decaying over ~3 weeks, flat before | promotions are a distinct, short-lived event; the flat pre-period is a visual exogeneity check |
 | category incidence base rate **3.25%**, item purchase **0.144%** | any sampled head must be calibrated back to these, or its generated output is meaningless |
+| taste is **1.67×** more self-similar across time than across households | `θ_i` has real structure to fit — the premise holds |
+| price sensitivity split-half correlation **+0.24** | `γ_i` is estimating signal, but only ~a quarter of the apparent spread is stable; that is the ceiling on any personalisation claim |
+| households use a median of **4 stores**, 30% of trips switch | store effects are identified *within* household, not only across; store cannot be a fixed household attribute |
+| demographics span **0.076** of price slope against a **0.411** household spread | observables are a poor substitute for latent heterogeneity — the argument for `γ_i` |
+| gap-vs-size correlation only **+0.07** | a trip-type latent is not obviously warranted — a useful negative |
 
 The resulting sample, built by `scripts/22_basket_data.py`:
 
@@ -359,7 +494,7 @@ the placebo evidence summarised in §6 and the seasonality correction it implies
 
 ---
 
-## 9. What this exploration got wrong, and what it cost
+## 10. What this exploration got wrong, and what it cost
 
 The first version of this document had five sections. All five investigated
 assumptions I had **already decided to attack** — unit demand, category independence,
@@ -377,6 +512,23 @@ data:
 | units per line, and the quantity margin | only measured when the omission was challenged | a quarter of the price response was assumed away |
 | store price dispersion and assortment | only measured when challenged | prices pooled across 115 stores; unstocked items scored as "rejected" |
 | **category incidence base rate** | only after the generator produced **58 categories per basket** against a real 6.5 | an incidence head trained on a balanced sample, a `log(30)` calibration error, and **five full retrains** |
+| **household taste and price sensitivity** | only when asked directly whether the EDA was exhaustive | the premise of the entire model went unmeasured through every version of it |
+| store visit behaviour, trip rhythm, demographics | same | store treated as an item-side attribute only, with no knowledge of how households actually move between stores |
+
+### The second omission was larger than the first
+
+§6 was missing because the exploration only examined assumptions it intended to
+overturn. §7 was missing for a subtler reason: household taste and price sensitivity
+are what the model is *for*, so they never registered as things to check. The model
+has `θ_i` and `γ_i` in it; that made them feel established.
+
+They were not. A model fits per-household parameters whether or not the heterogeneity
+is real, and reports a spread either way. Only the split-half correlation of **+0.24**
+distinguishes signal from noise, and it took a direct challenge to compute it.
+
+The generalisation: **audit every model term against the exploration, one by one.**
+The coverage table at the top of this document is that audit. It is mechanical, it
+takes minutes, and either of these gaps would have shown up as a blank row.
 
 ### The one that should not have happened
 
@@ -410,7 +562,7 @@ the original gap.
 
 ---
 
-## 10. Appendix: what this exploration does *not* establish
+## 11. Appendix: what this exploration does *not* establish
 
 - **Causality of price.** §6 shows the variation survives four placebos, which is a
   statement about the *design*, not a proof of exogeneity. A placebo rules out
