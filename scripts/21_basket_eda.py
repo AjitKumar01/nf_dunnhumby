@@ -306,35 +306,37 @@ def main(a):
               f"{bas.n_items.median():.0f}", "distinct items (clipped at 40)", "baskets")
 
     ax = axes[1]
-    # Cumulative and trip-weighted, for two reasons.  A 40-bin histogram of 307
-    # category-level numbers averages ~10 categories per bin, so its shape is mostly
-    # binning noise -- it cannot support a claim about the distribution being smooth.
-    # And an unweighted histogram counts a category with 200 category-trips the same
-    # as one with 68,000, which answers "how are categories distributed" when the
-    # question is "how often does a shopper meet this behaviour".  Trip-weighting
-    # moves the median from 13.1% to 21.5%.
+    # Two cumulative curves over the same 307 category-level shares.  They answer two
+    # different questions and the legend must say which, or the panel is unreadable:
+    #
+    #   grey  y = share of CATEGORIES whose multi-item rate is <= x
+    #   blue  y = share of CATEGORY-TRIPS occurring in categories whose rate is <= x
+    #
+    # The blue curve sits to the right because the categories shoppers visit most --
+    # soft drinks, snacks, cheese -- are the multi-buy ones.  Reading the medians off
+    # the 50% line: half of categories are below 13%, but half of category-trips
+    # happen in categories above 21%.
     s = cm.sort_values("multi_share")
     x = s.multi_share.to_numpy()
-    ax.plot(x, np.arange(1, len(x) + 1) / len(x), lw=2, color=PALETTE["grey"],
-            label="per category (unweighted)")
     w = s.cat_trips.to_numpy()
+    ax.plot(x, np.arange(1, len(x) + 1) / len(x), lw=2, color=PALETTE["grey"],
+            label="counting categories equally")
     ax.plot(x, np.cumsum(w) / w.sum(), lw=2, color=PALETTE["blue"],
-            label="weighted by category-trips")
+            label="counting category-trips (what a shopper meets)")
     med_u = float(np.median(x))
     med_w = float(x[np.searchsorted(np.cumsum(w), w.sum() / 2)])
     ax.axhline(.5, color="k", lw=.8, ls=":")
-    ax.plot([med_u], [.5], "o", color=PALETTE["grey"], ms=7)
-    ax.plot([med_w], [.5], "o", color=PALETTE["blue"], ms=7)
-    ax.annotate(f"{med_u:.0%}", (med_u, .5), textcoords="offset points",
-                xytext=(-4, -16), fontsize=8, color=PALETTE["grey"], ha="right")
-    ax.annotate(f"{med_w:.0%}", (med_w, .5), textcoords="offset points",
-                xytext=(6, -16), fontsize=8, color=PALETTE["blue"])
-    style(ax, f"Multi-item category purchases\npooled rate "
-              f"{(cm.multi_share * cm.cat_trips).sum() / cm.cat_trips.sum():.1%} of "
-              f"category-trips",
-          "share of a category's trips buying >1 item",
-          "cumulative share")
-    ax.legend(fontsize=8, loc="lower right")
+    ax.plot([med_u, med_w], [.5, .5], "o", color="k", ms=5)
+    ax.annotate(f"median\ncategory\n{med_u:.0%}", (med_u, .5), fontsize=7,
+                color=PALETTE["grey"], ha="right",
+                textcoords="offset points", xytext=(-6, -30))
+    ax.annotate(f"median\ncategory-trip\n{med_w:.0%}", (med_w, .5), fontsize=7,
+                color=PALETTE["blue"], textcoords="offset points", xytext=(8, -30))
+    style(ax, "How often a category purchase takes 2+ items\n"
+              "cumulative: y = share at or below x",
+          "that category's rate of buying >1 item",
+          "cumulative share (categories / trips)")
+    ax.legend(fontsize=7, loc="lower right")
 
     ax = axes[2]
     vc2 = bas.n_cats.clip(upper=25).value_counts().sort_index()
