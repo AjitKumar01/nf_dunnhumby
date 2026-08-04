@@ -249,19 +249,68 @@ sub-commodity on this trip, as a function of days since that household last boug
 Measured on the 60 most widely bought sub-commodities, with the current trip excluded
 from its own history:
 
-**How the hazard is computed.** For each of the 60 most widely bought
-sub-commodities, walk every buyer household's trips in order. At each trip ask two
-things: how long since this household last bought this sub-commodity, and did they buy
-it *now*. That gives one row per (household, trip, sub-commodity) opportunity. Group
-those rows by days-since and take the mean of the yes/no answer:
+**How the hazard is computed.** The question is: *given that a household is in the
+store today, how likely are they to buy milk — and does that depend on how long it has
+been since they last bought milk?*
+
+Answering it needs one row per **opportunity**, not per purchase. An opportunity is a
+household walking into a store on a day when it *could* have bought the
+sub-commodity. Most opportunities end in no purchase, and those rows are the whole
+point — a hazard is purchases ÷ opportunities, so leaving out the misses would make
+every value 1.
+
+Here is one real household's trips, for FLUID MILK WHITE ONLY. Every row is a
+shopping trip; `bought?` says whether milk was in that basket:
+
+| DAY | bought? | buy_day | ffilled | prev_buy | since |
+|---|---|---|---|---|---|
+| 42 | yes | 42 | 42 | — | — |
+| 49 | yes | 49 | 49 | 42 | **7** |
+| 53 | yes | 53 | 53 | 49 | **4** |
+| 54 | yes | 54 | 54 | 53 | **1** |
+| 58 | yes | 58 | 58 | 54 | **4** |
+| 63 | yes | 63 | 63 | 58 | **5** |
+| 64 | no | — | 63 | 63 | **1** |
+| 66 | no | — | 63 | 63 | **3** |
+| 69 | yes | 69 | 69 | 63 | **6** |
+| 73 | no | — | 69 | 69 | **4** |
+| 82 | no | — | 69 | 69 | **13** |
+| 86 | yes | 86 | 86 | 69 | **17** |
+
+Read the four derived columns left to right:
+
+1. **`buy_day`** — the day, but only on rows where milk was actually bought. Blank
+   otherwise.
+2. **`ffilled`** — forward-fill that column: carry the last non-blank value downward.
+   Now every row knows the most recent milk purchase *including today's*. On day 64
+   it reads 63, which is right — the last purchase was day 63.
+3. **`prev_buy`** — shift `ffilled` down by one row. **This is the step the original
+   text failed to explain.** Without it, day 63 would say its last purchase was day
+   63 — itself. Every buying row would report 0 days since, and every buying row is
+   by definition a purchase, so the 0-day bin would be 100% purchases. The shift
+   makes each row look at the state of the world *as it was on arrival*, before
+   today's basket existed.
+4. **`since`** = `DAY − prev_buy`. Day 49 is 7 days after the day-42 purchase; day 82
+   is 13 days after the day-69 one.
+
+The first row has no `prev_buy` and is dropped — there is no prior purchase to measure
+from.
+
+Now pool these rows across all buyer households and the 60 most widely bought
+sub-commodities, group by `since`, and within each group take the share that bought:
 
 ```
-hazard(bin) = opportunities in bin that ended in a purchase / all opportunities in bin
+hazard(bin) = rows in bin with bought? = yes / all rows in bin
 ```
 
-The current trip is excluded from its own history — `ffill` then `shift`, so the "last
-purchase" is always strictly earlier. Without the shift every row would report a
-purchase 0 days ago and the curve would read 100% everywhere.
+From the twelve rows above, the 1-day bin holds day 54 (bought) and day 64 (not), so
+it contributes 1 purchase out of 2 opportunities. The 13-day bin holds day 82 alone,
+contributing 0 out of 1. Millions of such rows give the curve below.
+
+Two consequences worth being explicit about. Only households that **ever** buy the
+sub-commodity are included, so the curve is about repurchase timing among buyers, not
+about the population at large. And the bins have unequal widths (0–3, 3–7, 7–14, …),
+so on the chart horizontal distance is not proportional to elapsed days.
 
 | days since last purchase | P(buy on this trip) |
 |---|---|
