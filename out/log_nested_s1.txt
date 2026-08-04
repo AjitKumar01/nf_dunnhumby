@@ -2,3 +2,7 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
 [27] model nested_s1: K=64 nest=True quantity=True store=True store_price=True avail_only=False -> 870,392 parameters
 [27]   froze IV reference at iteration 500: mean 2.314, 188 of 188 categories observed
+[27]   it  6000  item -1.9472  top1 0.391  qNLL 0.6685  cNLL 0.1115  kappa 0.624  breadth 1.294  price +0.756 *
+[27]   it 12000  item -1.9370  top1 0.398  qNLL 0.6650  cNLL 0.1133  kappa 0.674  breadth 1.282  price +0.794 *
+[27] best at 12000; TEST item -1.9895 top1 0.379 qNLL 0.6693 cNLL 0.1103
+[27] saved nested_s1_nested.pt

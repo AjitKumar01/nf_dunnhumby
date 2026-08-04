@@ -43,9 +43,12 @@ number does.
 | `ζ_j · ξ_s` | stores differ in price and assortment | §6.4, §7.3 |
 | `c₀_c + κ·IV` | category incidence is a separate decision | §6.5 |
 | `q₀_j + γ^q_i·β^q_j` | quantity responds to price separately | §6.1 |
+| `b₀_c + b_i − b^p_c` | a category purchase spans several distinct items, and promotions widen it | **§6.4b** |
 
 No term is now unexamined. That table is the check that was missing — it is what
-turns "did I explore enough" from a judgement call into something answerable.
+turns "did I explore enough" from a judgement call into something answerable, and it
+has already earned its place twice: §7 was written when it showed two blank rows, and
+§6.4b when the model gained a breadth head and the table showed a third.
 
 ---
 
@@ -313,6 +316,31 @@ endogeneity the placebos in §7 test formally.
 | store-item-weeks >1c from the chain price | **15.8%** (sd $0.121) |
 | catalogue a store carries | median 63%, p10 39% |
 
+### 6.4b Breadth: how *wide* is a category purchase?
+
+Breadth and quantity are different things and the model needs both. Three different
+yogurts is breadth 3, units 3. One yogurt bought three times is breadth 1, units 3.
+
+Across 1,219,633 category visits:
+
+| distinct items in the category | share |
+|---|---|
+| 1 | 81.1% |
+| 2 | 13.4% |
+| 3 | 3.4% |
+| 4 | 1.2% |
+| 5+ | 0.9% |
+
+Mean **1.284** distinct items; **18.9%** of category visits buy more than
+one. And breadth responds to price: the within-category elasticity is
+**-0.0689**, so **a promotion widens the basket** as well as deepening it.
+
+Both facts are load-bearing. The 1.284 is the target a generator has to hit — a
+model that derives item counts from a purchase *probability* can only ever produce
+~1.0–1.1 (`NESTED_MODEL.md` §3), which is exactly the gap that showed up in
+generation. The price response is why the breadth head carries a price term rather
+than being a fixed per-category rate.
+
 ### 6.5 Base rates every model head has to reproduce
 
 | event | rate |
@@ -468,6 +496,7 @@ Each finding maps to a specific modelling decision. Nothing here is a preference
 | households use a median of **4 stores**, 30% of trips switch | store effects are identified *within* household, not only across; store cannot be a fixed household attribute |
 | demographics span **0.076** of price slope against a **0.411** household spread | observables are a poor substitute for latent heterogeneity — the argument for `γ_i` |
 | gap-vs-size correlation only **+0.07** | a trip-type latent is not obviously warranted — a useful negative |
+| a category purchase spans **1.284** distinct items; breadth elasticity **−0.069** | breadth needs its own head with a price term — deriving it from P(buy) caps it at ~1.1 |
 
 The resulting sample, built by `scripts/22_basket_data.py`:
 

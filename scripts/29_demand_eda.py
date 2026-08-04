@@ -210,6 +210,48 @@ def main(a):
     log(f"4. quantity: {rq['share_gt1']:.1%} of rows buy >1 unit, carrying "
         f"{rq['share_of_units_in_multi_rows']:.1%} of all units (mean {rq['mean_units']:.2f})")
 
+    # ====================================== 4b. breadth: how WIDE is a category buy?
+    # The model has a breadth head -- distinct items per purchased category -- and
+    # nothing in the exploration established it.  That is the same blank-row failure
+    # section 10 describes, caught by the coverage table this time rather than by a
+    # bug.  Breadth is a separate quantity from units: three different yogurts is
+    # breadth 3, units 3; one yogurt bought three times is breadth 1, units 3.
+    bkc = bk.merge(items[["item_id", "cat_id"]], on="item_id")
+    cv = bkc.groupby(["BASKET_ID", "cat_id"]).agg(
+        breadth=("item_id", "size"), units=("units", "sum"))
+    r["breadth"] = {
+        "category_visits": int(len(cv)),
+        "mean_distinct_items": float(cv.breadth.mean()),
+        "share_over_1": float((cv.breadth > 1).mean()),
+        "mean_units": float(cv.units.mean()),
+        "distribution": {int(k): float(v) for k, v in
+                         cv.breadth.clip(upper=5).value_counts(normalize=True)
+                         .sort_index().items()},
+        "corr_breadth_units": float(cv.corr().iloc[0, 1]),
+    }
+    # does a promotion widen the basket, or only deepen it?
+    cb = bkc.groupby(["BASKET_ID", "cat_id"]).agg(
+        breadth=("item_id", "size"), units=("units", "sum"),
+        lp=("item_id", "size"))
+    pr = (panel.set_index(["item_id", "WEEK_NO"]).logp
+          if "logp" in panel else None)
+    tmp = bkc.merge(panel[["item_id", "WEEK_NO", "logp"]], on=["item_id", "WEEK_NO"],
+                    how="left")
+    cw = tmp.groupby(["BASKET_ID", "cat_id"]).agg(
+        breadth=("item_id", "size"), lp=("logp", "mean"), cat=("cat_id", "first"))
+    cw = cw.dropna()
+    cw["lb"] = np.log(cw.breadth)
+    b_br, n_br = within_slope(cw, "lb", "lp", "cat")
+    r["breadth"]["elasticity_of_breadth_wrt_price"] = b_br
+    rb2 = r["breadth"]
+    log("")
+    log(f"4b. breadth: {rb2['mean_distinct_items']:.3f} distinct items per purchased "
+        f"category; {rb2['share_over_1']:.1%} of category visits buy more than one")
+    log("    distribution: " + ", ".join(f"{k}:{v:.1%}" for k, v in
+                                         rb2["distribution"].items()))
+    log(f"    breadth elasticity wrt price {b_br:+.4f} on {n_br:,} category visits "
+        f"-> a promotion {'widens' if b_br < 0 else 'does not widen'} the basket")
+
     # ============================================================== 5. stores
     tx = pd.read_parquet(os.path.join(DATA, "tx.parquet"),
                          columns=["PRODUCT_ID", "STORE_ID", "WEEK_NO", "unit_price"])
