@@ -14,6 +14,13 @@ are estimable.
 §8 `25_basket_placebo.py`. Every number and figure comes from one of them; none is
 typed by hand.
 
+**Figures.** Every figure carries a **Reading it** note giving what each axis is and
+what one observation represents — per item, per category, per household, per pair —
+along with any transform applied: logs, clipping, binning, normalisation. Several
+panels are not raw data (binned scatters, survival curves over a threshold, cumulative
+distributions, split-half constructions), and in those cases the construction is the
+thing that has to be understood before the shape means anything.
+
 ### What is measured here
 
 | question | section |
@@ -79,6 +86,14 @@ bought two or more times.
 
 ![interaction](figures/basket_eda_interaction.png)
 
+**Reading it.** *Left*: one observation per sub-commodity **pair**, x = `log2(lift)`
+where lift is how much more often the pair shares a basket than independence predicts,
+y = how many pairs. Logs because lift is a ratio — 2× and ½× should sit equally far
+from independence, and on a raw scale they do not. **0 is independence**, +1 means
+twice chance, −1 means half. Clipped to lift ∈ [0.05, 20] so a handful of extremes do
+not set the axis. *Middle and right*: the 12 pairs with the highest and lowest lift,
+x = lift on a linear scale, one bar per pair.
+
 Co-occurrence is the obvious thing to measure and the easy thing to measure wrongly.
 A household buying 30 items co-buys everything, so raw lift is mostly a measure of
 basket size. Two corrections are applied: the analysis is **stratified to baskets
@@ -122,6 +137,15 @@ sub-commodities, not inside them.
 
 ![state](figures/basket_eda_state.png)
 
+**Reading it.** *Left*: one observation per repeat-purchase event, x = days since that
+household last bought that sub-commodity, y = how many events. Clipped at 120 days.
+*Middle*: the hazard curve — x is a **bin** of days-since (unequal widths, so the
+x-axis is categorical, not linear), y is the share of trips in that bin on which the
+household bought the sub-commodity. Built by walking every household's trip sequence
+and, at each trip, looking back to the last purchase; the current trip is excluded from
+its own history, or every point would read 100%. *Right*: one observation per
+household, x = distinct shopping days, y = how many households.
+
 Across **1,082,615 repeat-purchase events**:
 
 - median gap between repeat purchases of a sub-commodity: **27 days** (p25 10, p75 71)
@@ -155,6 +179,13 @@ way — the relationship cannot be summarised by a single "days since" number.
 ## 4. How much of the catalogue is analysable
 
 ![catalogue](figures/basket_eda_catalogue.png)
+
+**Reading it.** Both panels are **survival curves over a threshold**, not
+distributions. x = a minimum purchase-line count; y = how many items (left) or
+sub-commodities (right) clear it. Every point is a re-count of the whole catalogue at
+a stricter cut, so both axes are log-scaled on the left and both curves fall by
+construction. The dashed green line counts only sub-commodities holding **2+** items —
+the ones within which a similarity question can be asked at all.
 
 How many items have enough purchases to say anything reliable about them?
 
@@ -207,9 +238,18 @@ panel by `scripts/29_demand_eda.py`.
 
 ![demand response](figures/demand_eda_price.png)
 
-*Left panel.* Week-on-week change in log price against week-on-week change in log
-buyers per trip, within item, binned into twelve quantiles. Monotone across the whole
-range and passing through the origin.
+**Reading it.** *Left*: this is a **binned scatter**, not raw data. Every item-week
+gives a pair (Δ log price, Δ log buyers) against the previous week for the same item;
+those pairs are sorted by Δ log price into twelve equal-count bins, and each plotted
+point is one bin's mean on both axes. Twelve points from ~500,000 observations, which
+is what makes the relationship legible — the raw scatter is a cloud. Differencing
+within item removes the item's own price level and popularity, so the curve is about
+price *changes*, not expensive versus cheap items. *Middle*: one observation per
+category, x = its estimated elasticity, y = how many categories. *Right*: the event
+study, x = weeks relative to a price cut, y = demand divided by that item's own mean
+so items of different sizes can be averaged together.
+
+The left panel is monotone across the whole range and passes through the origin.
 
 Within-item log-log slopes on 556,410 item-weeks:
 
@@ -261,6 +301,13 @@ to demand rather than causing it. §8 tests that formally.
 ### 6.4 Quantity and stores
 
 ![quantity and stores](figures/demand_eda_quantity_stores.png)
+
+**Reading it.** *Left*: x = units on one purchase line (clipped at 6), y = share of all
+lines — a normalised bar chart, so the bars sum to 1. *Middle*: one observation per
+(item, store, week) where that store's price was observed, x = its price minus the
+chain price that week in dollars, clipped to ±$1; a spike at 0 means the store charged
+the chain price. *Right*: one observation per store, x = the share of the 5,455-item
+catalogue it ever sold, y = how many stores.
 
 | | value |
 |---|---|
@@ -316,6 +363,19 @@ react differently to price. Measured by `scripts/30_household_eda.py`.
 
 ![household heterogeneity](figures/household_eda_heterogeneity.png)
 
+**Reading it.** *Left* needs the construction spelled out. Each household's trips are
+split in half by date, and each half is turned into a 188-long vector counting
+purchases per category, then normalised to unit length. Blue = the cosine similarity
+between a household's **own** two halves; grey = the same household's first half
+against a **different, randomly paired** household's second half. Both are one
+observation per household, y = how many households. Cosine rather than raw counts so
+that a heavy shopper and a light shopper with the same *mix* score as similar.
+*Middle*: one observation per household, x = its own estimated price slope, clipped to
+[−4, 2], y = how many households. *Right*: one point per household, x = its slope
+estimated on the first half of its trips, y = on the second half — if the spread were
+pure noise this would be a formless blob, and the visible positive tilt is the +0.24
+correlation.
+
 ### 7.1 Taste is real and stable
 
 Split each household's trips in half by time and compare its category profile across
@@ -360,6 +420,13 @@ sensitivity from this data.
 ### 7.3 Store visits
 
 ![stores and trips](figures/household_eda_stores_trips.png)
+
+**Reading it.** *Left*: one observation per household, x = the share of its trips at
+whichever store it visits most, y = how many households. *Middle*: x = how many
+distinct stores a household ever visited (clipped at 15), y = how many households.
+*Right*: x = a **bin** of days since the household's previous trip (unequal widths, so
+categorical), y = the mean number of items in the trip that followed a gap of that
+length — one point per bin, not per trip.
 
 | | value |
 |---|---|

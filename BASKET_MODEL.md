@@ -234,6 +234,17 @@ This is the test the previous attempt failed. The model is never shown
 
 ![embedding scores](figures/embedding_scores.png)
 
+**Reading it.** Three bar charts, one bar per model, all measuring the same item
+embedding against sub-commodity labels the model never sees. *Left*: for each item,
+the share of its 10 nearest neighbours by cosine similarity that share its
+sub-commodity, averaged over items — the black ticks mark the chance rate for that
+item set, which is **not** 1/758 because sub-commodities differ hugely in size and a
+random neighbour lands in one with probability proportional to its size. *Middle*:
+AUC — rank every item pair by cosine similarity and ask how well that ranking
+separates same-sub-commodity pairs from the rest; 0.5 is no information. *Right*:
+silhouette, which is positive when clusters are compact and separated and negative
+when they overlap.
+
 On all 5,455 items and 758 sub-commodities:
 
 | embedding | kNN purity (k=10) | × chance | same-sub AUC | silhouette |
@@ -347,6 +358,14 @@ With week fixed effects:
 
 ![placebo](figures/basket_placebo.png)
 
+**Reading it.** *Left*: x = the five price series (real, and four fakes), y = the
+median price coefficient across the 160 categories estimated separately for each. Two
+lines, with and without week fixed effects. A working placebo should sit at zero.
+*Middle*: same x, y = the share of categories significant at 1%; under a true null
+this should be 1%, marked by the dashed line. *Right*: one point per category, x = its
+coefficient without week effects, y = with them; points below the diagonal shrank
+toward zero once seasonality was absorbed.
+
 The two strict placebos — the only ones that fully break the link with the real price
 path — collapse to essentially zero. The design passes.
 
@@ -427,6 +446,15 @@ Stronger than the reduced form, because every other parameter is free to compens
 | `one_pl` | each item's weeks reordered | **−0.0000** | **0.0%** | −2.1425 |
 
 ![price causal](figures/price_causal.png)
+
+**Reading it.** *Left*: one bar per fitted model, x = the median fitted price
+coefficient `γ_i · β_j` over all households and items; red bars are models fitted on a
+deliberately scrambled price panel and should sit at zero. *Middle*: held-out
+log-likelihood split into item-weeks where the price moved and where it did not — the
+same model appears twice, so the comparison is within-model, not across. *Right*: one
+bar per group of categories sorted by placebo verdict, x = median price coefficient;
+a flat profile means the average elasticity is not being propped up by the categories
+that fail.
 
 The coefficient collapses to zero to four decimal places, and held-out fit on
 price-move weeks degrades by 0.040 nats. The price parameter is measuring price and

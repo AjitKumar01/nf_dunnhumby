@@ -2,3 +2,7 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
 [27] model nested_nostore: K=64 nest=True quantity=True store=False store_price=True avail_only=False -> 848,112 parameters
 [27]   froze IV reference at iteration 500: mean 2.606, 188 of 188 categories observed
+[27]   it  6000  item -2.1320  top1 0.370  qNLL 0.6634  cNLL 0.1119  kappa 0.646  breadth 1.290  price +0.786 *
+[27]   it 12000  item -2.1239  top1 0.374  qNLL 0.6598  cNLL 0.1126  kappa 0.727  breadth 1.280  price +0.820 *
+[27] best at 12000; TEST item -2.1820 top1 0.355 qNLL 0.6651 cNLL 0.1102
+[27] saved nested_nostore_nested.pt
