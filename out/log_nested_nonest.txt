@@ -1,7 +1,7 @@
 [27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
-[27] model nested_nonest: K=64 nest=False quantity=True store=True store_price=True avail_only=False -> 722,566 parameters
-[27]   it  6000  item -1.9472  top1 0.395  qNLL 0.6645  cNLL 0.0000  kappa nan  price +0.743  qprice +0.087 *
-[27]   it 12000  item -1.9332  top1 0.399  qNLL 0.6689  cNLL 0.0000  kappa nan  price +0.788  qprice +0.115 *
+[27] model nested_nonest: K=64 nest=False quantity=True store=True store_price=True avail_only=False -> 725,008 parameters
+[27]   it  6000  item -1.9472  top1 0.395  qNLL 0.6645  cNLL 0.0000  kappa nan  breadth 2.000  price +0.743 *
+[27]   it 12000  item -1.9332  top1 0.399  qNLL 0.6689  cNLL 0.0000  kappa nan  breadth 2.000  price +0.788 *
 [27] best at 12000; TEST item -1.9877 top1 0.380 qNLL 0.6677 cNLL 0.0000
 [27] saved nested_nonest_nested.pt

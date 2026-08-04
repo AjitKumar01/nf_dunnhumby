@@ -1,8 +1,8 @@
 [27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
-[27] model nested_nostate: K=64 nest=True quantity=True store=True store_price=True avail_only=False -> 846,130 parameters
+[27] model nested_nostate: K=64 nest=True quantity=True store=True store_price=True avail_only=False -> 848,572 parameters
 [27]   froze IV reference at iteration 500: mean 2.552, 188 of 188 categories observed
-[27]   it  6000  item -2.0287  top1 0.373  qNLL 0.6621  cNLL 0.1118  kappa 0.603  price +0.755  qprice +0.100 *
-[27]   it 12000  item -2.0123  top1 0.379  qNLL 0.6592  cNLL 0.1132  kappa 0.652  price +0.796  qprice +0.131 *
+[27]   it  6000  item -2.0287  top1 0.373  qNLL 0.6621  cNLL 0.1118  kappa 0.603  breadth 1.290  price +0.755 *
+[27]   it 12000  item -2.0123  top1 0.379  qNLL 0.6592  cNLL 0.1132  kappa 0.652  breadth 1.280  price +0.796 *
 [27] best at 12000; TEST item -2.0684 top1 0.360 qNLL 0.6665 cNLL 0.1106
 [27] saved nested_nostate_nested.pt

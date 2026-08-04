@@ -17,7 +17,9 @@
     "mean_units_per_basket": 13.219307773428707,
     "categories_over_15pct": 132,
     "categories_total": 307,
-    "median_category_multi_share": 0.1306875631951466
+    "median_category_multi_share": 0.1306875631951466,
+    "pooled_multi_share": 0.2314304277019919,
+    "trip_weighted_median_multi_share": 0.21493242744258179
   },
   "cooccurrence": {
     "stratum": "baskets with 5-20 distinct sub-commodities",

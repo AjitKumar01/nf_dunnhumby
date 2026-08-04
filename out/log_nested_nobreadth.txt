@@ -3,3 +3,6 @@
 [27] model nested_nobreadth: K=64 nest=True quantity=True store=True store_price=True avail_only=False -> 867,950 parameters
 [27]   froze IV reference at iteration 500: mean 2.333, 188 of 188 categories observed
 [27]   it  6000  item -1.9547  top1 0.392  qNLL 0.6630  cNLL 0.1115  kappa 0.620  breadth nan  price +0.750 *
+[27]   it 12000  item -1.9413  top1 0.397  qNLL 0.6609  cNLL 0.1131  kappa 0.663  breadth nan  price +0.794 *
+[27] best at 12000; TEST item -1.9927 top1 0.378 qNLL 0.6666 cNLL 0.1104
+[27] saved nested_nobreadth_nested.pt

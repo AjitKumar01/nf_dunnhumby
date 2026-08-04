@@ -1,9 +1,5 @@
 # Data exploration: dunnhumby "The Complete Journey"
 
-What 2,500 households actually did over two years of grocery shopping, measured
-directly from the transaction file. This document describes the data. It does not
-argue for or against any model, and nothing in it depends on one having been fitted.
-
 **Source.** `transaction_data.csv`: 2,553,406 purchase lines, 2,500 households, 91,856
 products, 253,183 baskets, 711 days, 307 commodities, 2,373 sub-commodities. Prices
 are reconstructed from `SALES_VALUE` and the three discount columns; that
@@ -47,14 +43,35 @@ A basket is not one item, and it is often not one item per category either.
 | categories where >15% of category-trips buy 2+ items | **132 of 307** |
 | median category's multi-item share | 13.1% |
 
-Read the middle panel carefully. Buying two or more items from the same category is
-not a fringe behaviour concentrated in a few odd categories — the **median category
-does it on 13.1% of its category-trips**, and the distribution is smooth. There is no
-natural cut point separating "single-item categories" from the rest; the behaviour is
-continuous across the catalogue.
+**The middle panel** is cumulative: for a given share on the x-axis, it reads off what
+fraction of categories buy multiple items *at most* that often. Two curves, and the
+gap between them is the point.
 
-Multi-item category purchases are therefore the norm rather than the exception at the
-basket level: **56.1%** of baskets contain at least one.
+- **Grey — one point per category, unweighted.** Median **13.1%**.
+- **Blue — weighted by how many category-trips each category actually gets.** Median
+  **21.5%**, and the pooled rate across all category-trips is **23.1%**.
+
+The unweighted number understates what a shopper meets by nearly half, because it
+counts a category with 200 category-trips the same as one with 68,000. The categories
+shoppers encounter most are precisely the multi-buy ones:
+
+| category | category-trips | buys 2+ items |
+|---|---|---|
+| SOFT DRINKS | 68,000 | **41.5%** |
+| BAG SNACKS | 41,100 | **39.5%** |
+| CHEESE | 46,100 | **37.8%** |
+| BAKED BREAD/BUNS/ROLLS | 59,300 | 29.6% |
+| BEEF | 36,200 | 25.0% |
+| FLUID MILK PRODUCTS | 67,700 | 21.5% |
+| TROPICAL FRUIT | 32,200 | 5.5% |
+| EGGS | 27,600 | 2.2% |
+
+So the behaviour is not confined to a few odd categories. It concentrates in the
+high-traffic ones — drinks, snacks, cheese, bread — while eggs and tropical fruit
+really are close to one-item purchases.
+
+At the basket level this compounds: **56.1%** of baskets contain at least one category
+bought two or more times.
 
 ---
 
