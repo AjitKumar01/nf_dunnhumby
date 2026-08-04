@@ -1,15 +1,16 @@
 [24] 5,455 items, 758 sub-commodities, 19 departments
-[24]   nested             kNN purity 0.3000 (70.1x chance)   AUC 0.8278   silhouette -0.1505   NMI 0.7572
-[24]   nested_nonest      kNN purity 0.2895 (67.7x chance)   AUC 0.8156   silhouette -0.1691   NMI 0.7512
-[24]   nested_noqty       kNN purity 0.2999 (70.1x chance)   AUC 0.8274   silhouette -0.1507   NMI 0.7539
-[24]   nested_nostate     kNN purity 0.3500 (81.8x chance)   AUC 0.8743   silhouette -0.0962   NMI 0.7757
-[24]   nested_nostore     kNN purity 0.3046 (71.2x chance)   AUC 0.8259   silhouette -0.1497   NMI 0.7579
+[24]   nested             kNN purity 0.2976 (69.6x chance)   AUC 0.8222   silhouette -0.1610   NMI 0.7537
+[24]   nested_s1          kNN purity 0.2947 (68.9x chance)   AUC 0.8240   silhouette -0.1593   NMI 0.7523
+[24]   nested_nonest      kNN purity 0.2948 (68.9x chance)   AUC 0.8182   silhouette -0.1667   NMI 0.7541
+[24]   nested_noqty       kNN purity 0.2974 (69.5x chance)   AUC 0.8222   silhouette -0.1610   NMI 0.7548
+[24]   nested_nostate     kNN purity 0.3458 (80.8x chance)   AUC 0.8696   silhouette -0.1050   NMI 0.7727
+[24]   nested_nostore     kNN purity 0.2988 (69.8x chance)   AUC 0.8191   silhouette -0.1591   NMI 0.7566
 [24] headline model for the head-to-head, neighbours and map: nested
 [24]   control: random    kNN purity 0.0037 (0.9x chance)   AUC 0.4986
 [24]   control: popularity kNN purity 0.0038 (0.9x chance)   AUC 0.5100
 [24] head-to-head on 409 items that nf models and whose sub-commodity has 2+ members
 [24]   nf beta            kNN purity 0.0142 (1.0x chance)   AUC 0.3789   silhouette -0.3127
-[24]   nested alpha       kNN purity 0.1782 (13.1x chance)   AUC 0.8421   silhouette -0.0189
-[24] nearest-neighbour examples: 37.3% of the top-5 neighbours of 15 popular items share the query's sub-commodity
+[24]   nested alpha       kNN purity 0.1648 (12.1x chance)   AUC 0.8045   silhouette -0.0535
+[24] nearest-neighbour examples: 45.3% of the top-5 neighbours of 15 popular items share the query's sub-commodity
 [24] t-SNE on the 2500 most-purchased items ...
 [24] wrote out/embedding_eval.json and figures/embedding_*.png

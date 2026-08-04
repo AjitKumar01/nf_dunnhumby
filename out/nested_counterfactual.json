@@ -12,19 +12,32 @@
     "test_quantity_nll": 0.6665549763102107,
     "test_incidence_nll": 0.11036467677354812
   },
+  "nested_s1": {
+    "placebo_price": "none",
+    "nest": true,
+    "quantity": true,
+    "store": true,
+    "price_coef": 0.794188380241394,
+    "quantity_price_coef": 0.10853561013936996,
+    "median_kappa": 0.6739783883094788,
+    "test_item": -1.9894685893675679,
+    "test_top1": 0.37925953596480305,
+    "test_quantity_nll": 0.6693418221176722,
+    "test_incidence_nll": 0.1103109039068222
+  },
   "nested_pl": {
     "placebo_price": "permute",
     "nest": true,
     "quantity": true,
     "store": true,
-    "price_coef": -8.443419079664054e-38,
-    "quantity_price_coef": -3.4818567410525887e-39,
-    "median_kappa": 0.7796821594238281,
-    "test_item": -2.0444747398508514,
-    "test_top1": 0.35917071348524465,
-    "test_quantity_nll": 0.6866568976260456,
-    "test_incidence_nll": 0.4450971535450668,
-    "retained": -1.0627930885810925e-37
+    "price_coef": -2.7944329637964778e-39,
+    "quantity_price_coef": -2.399265395558415e-39,
+    "median_kappa": 0.6751742959022522,
+    "test_item": -2.041602659932021,
+    "test_top1": 0.3624081683476528,
+    "test_quantity_nll": 0.6887091804225116,
+    "test_incidence_nll": 0.11028630220890046,
+    "retained": -3.51741872860377e-39
   },
   "decomposition": {
     "n": 12724,
@@ -46,9 +59,9 @@
       "p90": 21.0
     },
     "generated_items": {
-      "mean": 6.962450777488449,
+      "mean": 6.937140320405364,
       "median": 7.833332399527231,
-      "p90": 15.666668067375818
+      "p90": 15.666668114066123
     },
     "real_categories": {
       "mean": 6.49425,
@@ -56,7 +69,7 @@
       "p90": 16.0
     },
     "generated_categories": {
-      "mean": 6.468375,
+      "mean": 6.388083333333333,
       "median": 7.833333333333333,
       "p90": 15.666666666666666
     },
@@ -66,9 +79,9 @@
       "p90": 28.0
     },
     "generated_units": {
-      "mean": 9.227032482524711,
-      "median": 8.767914026975632,
-      "p90": 23.2111527621746
+      "mean": 9.229352654283245,
+      "median": 8.696184178193409,
+      "p90": 23.27389360666275
     },
     "trips": 4000
   }

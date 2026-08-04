@@ -1,23 +1,24 @@
 [27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
 [28] 1. structural placebo and fitted price coefficients
-/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/28_nested_counterfactual.py:246: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/28_nested_counterfactual.py:261: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
 Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
   pc = float((m.gamma @ m.beta.T).median())
-[28]    nested           placebo=none     price +0.785  qprice +0.122  kappa 0.763  item -1.9920  top1 0.378
-[28]    nested_pl        placebo=permute  price -0.000  qprice -0.000  kappa 0.780  item -2.0445  top1 0.359
+[28]    nested           placebo=none     price +0.794  qprice +0.134  kappa 0.663  item -1.9927  top1 0.378
+[28]    nested_s1        placebo=none     price +0.794  qprice +0.109  kappa 0.674  item -1.9895  top1 0.379
+[28]    nested_pl        placebo=permute  price -0.000  qprice -0.000  kappa 0.675  item -2.0416  top1 0.362
 [28]    -> nested_pl retains -0.0% of the price coefficient
 [28] 
 [28] 2. where does a price cut go?
-[28]    median own-price elasticity -1.1833, split as
-[28]      allocation (share within category)  -0.9750
-[28]      incidence  (category expands)       -0.0650  (5%)
-[28]      quantity   (units per buyer)        -0.1433  (12%)
-[28]    median kappa 0.763; 20% of categories above 1
+[28]    median own-price elasticity -1.1879, split as
+[28]      allocation (share within category)  -0.9912
+[28]      incidence  (category expands)       -0.0580  (5%)
+[28]      quantity   (units per buyer)        -0.1386  (12%)
+[28]    median kappa 0.663; 1% of categories above 1
 [28] 
 [28] 3. can it generate a basket?
-[28]    items       real mean   8.36 median   5.0   generated mean   4.63 median   0.0
-[28]    categories  real mean   6.49 median   4.0   generated mean   4.01 median   0.0
-[28]    units       real mean  11.27 median   6.0   generated mean   4.70 median   0.0
+[28]    items       real mean   8.36 median   5.0   generated mean   6.94 median   7.8
+[28]    categories  real mean   6.49 median   4.0   generated mean   6.39 median   7.8
+[28]    units       real mean  11.27 median   6.0   generated mean   9.23 median   8.7
 [28] 
 [28] wrote out/nested_counterfactual.json and figures/nested_counterfactual.png
