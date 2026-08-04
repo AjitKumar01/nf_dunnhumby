@@ -14,12 +14,12 @@ are estimable.
 §8 `25_basket_placebo.py`. Every number and figure comes from one of them; none is
 typed by hand.
 
-**Figures.** Every figure carries a **Reading it** note giving what each axis is and
+<!-- **Figures.** Every figure carries a **Reading it** note giving what each axis is and
 what one observation represents — per item, per category, per household, per pair —
 along with any transform applied: logs, clipping, binning, normalisation. Several
 panels are not raw data (binned scatters, survival curves over a threshold, cumulative
 distributions, split-half constructions), and in those cases the construction is the
-thing that has to be understood before the shape means anything.
+thing that has to be understood before the shape means anything. -->
 
 ### What is measured here
 
