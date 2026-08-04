@@ -19,7 +19,13 @@ what one observation represents — per item, per category, per household, per p
 along with any transform applied: logs, clipping, binning, normalisation. Several
 panels are not raw data (binned scatters, survival curves over a threshold, cumulative
 distributions, split-half constructions), and in those cases the construction is the
-thing that has to be understood before the shape means anything. -->
+thing that has to be understood before the shape means anything.
+
+**Derived numbers.** Anything that is not a raw count — lift, elasticity, hazard,
+cosine similarity, breadth — is given with the **arithmetic that produced it**, and
+where it helps, a worked example on real rows. A term like "lift" or "elasticity"
+means several different things depending on what was conditioned on and what the
+reference is, so the formula is stated rather than the name. -->
 
 ### What is measured here
 
@@ -105,27 +111,64 @@ bought two or more times.
 
 ![interaction](figures/basket_eda_interaction.png)
 
-**Reading it.** The unit here is a **pair of sub-commodities**, and lift is how much
-more often that pair shares a basket than it would if the two were unrelated. Lift 2
-means twice as often as chance; lift 0.5 means half as often.
+**What "lift" is here, exactly.** Not a definition — the actual computation, so the
+numbers below can be checked.
 
-*Left*: one observation per pair, x = `log2(lift)`, y = how many pairs. Logs because
-lift is a ratio — "twice as often" and "half as often" are equally far from
-independence, but on a raw scale 2 sits 1.0 away and 0.5 sits only 0.5 away, which
-would make the left half of the distribution look artificially compressed. On the log
+Everything is counted inside one **stratum**: baskets holding between 5 and 20
+distinct sub-commodities, after items with fewer than 100 purchase lines are dropped.
+That leaves **n = 83,928 baskets**. Every count below is a count of baskets in that
+set, and a basket either contains a sub-commodity or does not — buying three yogurts
+counts once, so this measures co-*occurrence*, not co-volume.
+
+For a pair of sub-commodities `x` and `y`:
+
+```
+solo[x]  = baskets containing x                        (out of n)
+solo[y]  = baskets containing y
+k        = baskets containing BOTH x and y
+
+observed = k / n
+expected = (solo[x] / n) × (solo[y] / n)      if x and y were independent
+lift     = observed / expected
+```
+
+**Worked example — the highest-lift pair in the data:**
+
+| | value |
+|---|---|
+| x = SQUASH ZUCCHINI | in **700** of the 83,928 baskets |
+| y = YELLOW SUMMER SQUASH | in **236** |
+| both together | **k = 106** |
+
+```
+observed = 106 / 83,928                     = 0.001263
+expected = (700/83,928) × (236/83,928)      = 0.0000235
+lift     = 0.001263 / 0.0000235             = 53.85
+```
+
+So courgettes and yellow squash land in the same basket **54 times more often than
+they would if the two were unrelated**. That is the far right edge of the left panel.
+
+**Two filters, and what each is for:**
+
+- **The 5–20 stratum.** A household buying 30 sub-commodities co-buys everything, so
+  without this, lift would largely measure basket size. Restricting to a band of
+  comparable baskets removes that. The cost is that a pair's lift here is *not* what
+  you would get on all 253,183 baskets — every number in this section lives inside
+  the stratum.
+- **Pairs need k ≥ 30.** A pair seen 3 times together can show a lift of 40 by
+  accident. This leaves **29,117 pairs** of the ~287,000 possible.
+
+**Reading the panels.** *Left*: one observation per pair, x = `log2(lift)`, y = how
+many pairs. Logs because lift is a ratio — "twice as often" (2) and "half as often"
+(0.5) are equally far from independence, but on a raw scale 2 sits 1.0 above 1 and 0.5
+only 0.5 below it, which would squash the left half of the distribution. On the log
 scale **0 is independence**, +1 is twice chance, −1 is half. Clipped to lift ∈
-[0.05, 20] so a few extremes do not set the axis width.
+[0.05, 20] so the 53.85 example above does not stretch the axis.
 
 *Middle and right*: the 12 pairs with the highest and lowest lift, one bar each, x =
-lift on a plain linear scale (not logged, since these are read as individual values
-rather than as a distribution).
-
-Co-occurrence is the obvious thing to measure and the easy thing to measure wrongly.
-A household buying 30 items co-buys everything, so raw lift is mostly a measure of
-basket size. Two corrections are applied: the analysis is **stratified to baskets
-holding 5–20 distinct sub-commodities**, and lift is read against the spread of the
-stratum rather than against 1.0 — at fixed basket size, random allocation already
-produces lift below 1.
+lift on a plain linear scale — these are read as individual values, not as a
+distribution, so no log is needed.
 
 On **83,928 baskets** and **29,117 sub-commodity pairs**:
 
@@ -146,7 +189,25 @@ avoided. The bulk is unstructured; the tails are not.
 Items from the **same sub-commodity** are
 
 > **7.88× more likely to appear in the same basket than chance**
-> (observed 3.23% of within-basket pairs, expected 0.41%)
+
+Computed differently from the pair lifts above, so here is that arithmetic too. Take
+every basket with 2–30 distinct items and enumerate every **item pair** inside it.
+Each pair either shares a sub-commodity or does not:
+
+```
+observed = same-sub pairs / all within-basket pairs        = 0.0323
+```
+
+For the reference, ask what that share would be if items were drawn at random from the
+catalogue. With `c_s` items in sub-commodity `s` and `T` items in total:
+
+```
+expected = Σ_s c_s(c_s − 1) / (T(T − 1))                   = 0.0041
+ratio    = 0.0323 / 0.0041                                 = 7.88
+```
+
+The expected value is small because most sub-commodities hold only a handful of the
+5,455 items, so two randomly chosen items rarely share one.
 
 This is the opposite of what a pure substitution story predicts. If items within a
 sub-commodity were substitutes, buying one would make buying another *less* likely and
@@ -187,6 +248,20 @@ The decisive measurement is the **repurchase hazard**: the probability of buying
 sub-commodity on this trip, as a function of days since that household last bought it.
 Measured on the 60 most widely bought sub-commodities, with the current trip excluded
 from its own history:
+
+**How the hazard is computed.** For each of the 60 most widely bought
+sub-commodities, walk every buyer household's trips in order. At each trip ask two
+things: how long since this household last bought this sub-commodity, and did they buy
+it *now*. That gives one row per (household, trip, sub-commodity) opportunity. Group
+those rows by days-since and take the mean of the yes/no answer:
+
+```
+hazard(bin) = opportunities in bin that ended in a purchase / all opportunities in bin
+```
+
+The current trip is excluded from its own history — `ffill` then `shift`, so the "last
+purchase" is always strictly earlier. Without the shift every row would report a
+purchase 0 days ago and the curve would read 100% everywhere.
 
 | days since last purchase | P(buy on this trip) |
 |---|---|
@@ -302,6 +377,27 @@ The left panel is monotone across the whole range and passes through the origin.
 
 Within-item log-log slopes on 556,410 item-weeks:
 
+**How these are computed.** Build an item × week panel: for every item and week,
+`buyers` = how many purchase lines it got, `units` = how many units, `trips` = how many
+baskets happened that week chain-wide. Then
+
+```
+lbuy   = log((buyers + 0.5) / trips)      the 0.5 keeps zero-purchase weeks in
+lunits = log((units  + 0.5) / trips)
+logp   = mean log price of the item that week
+```
+
+The elasticity is an OLS slope of the outcome on `logp` **after subtracting each
+item's own mean from both** — a within-item regression. That is what makes it a
+statement about a price *changing* rather than about expensive items versus cheap
+ones:
+
+```
+elasticity = Σ (logp − mean_item logp)(y − mean_item y) / Σ (logp − mean_item logp)²
+```
+
+on 556,410 item-weeks.
+
 | response | elasticity |
 |---|---|
 | **buyers per trip** | **−0.792** |
@@ -335,6 +431,19 @@ and magazines are impulse purchases where price is close to irrelevant.
 *Right panel.* Every item-week where price fell by at least 0.15 in logs — **37,132
 events** — lined up and averaged, with demand expressed relative to that item's own
 mean.
+
+**How the event study is built.** Find every item-week where the item's mean log
+price fell by at least 0.15 against the previous week — 37,132 such events. For each,
+look up that item's demand in weeks −3 to +3 around it, and divide by **that item's own
+average demand over the whole panel**:
+
+```
+normalised(item, week) = buyers(item, week) / mean_week buyers(item)
+```
+
+That normalisation is what lets a 5,000-buyer item and a 50-buyer item be averaged into
+one curve — both are expressed as "relative to normal for me", so 1.0 is normal. Then
+average across all 37,132 events at each offset.
 
 | weeks from the cut | −3 | −2 | −1 | **0** | +1 | +2 | +3 |
 |---|---|---|---|---|---|---|---|
@@ -386,9 +495,19 @@ Across 1,219,633 category visits:
 | 4 | 1.2% |
 | 5+ | 0.9% |
 
-Mean **1.284** distinct items; **18.9%** of category visits buy more than
-one. And breadth responds to price: the within-category elasticity is
-**-0.0689**, so **a promotion widens the basket** as well as deepening it.
+Mean **1.284** distinct items; **18.9%** of category visits buy more than one.
+
+Breadth also responds to price. For each (basket, category) visit take `log(breadth)`
+and the mean log price of the category's items on that day, then regress one on the
+other **within category** — so the slope is about a category's price moving, not about
+expensive categories versus cheap ones:
+
+```
+elasticity = Σ (lp − mean_c lp)(log breadth − mean_c log breadth) / Σ (lp − mean_c lp)²
+           = −0.0689     on 1,219,633 category visits
+```
+
+Negative means **a promotion widens the basket** as well as deepening it.
 
 So a promotion changes *what* a shopper takes from a category, not only whether they
 visit it and how many units they take. Breadth, incidence and depth are three
@@ -448,6 +567,20 @@ price-sensitive early look price-sensitive later.
 Split each household's trips in half by time and compare its category profile across
 the two halves, against the same comparison with a *different* household:
 
+**How the comparison is built.** For one household: split its trips at its median
+shopping day. Count purchases per category in each half, giving two vectors of length
+188. Scale each to unit length. Then
+
+```
+similarity = cosine(v_first_half, v_second_half) = Σ v1ᵢ v2ᵢ   (both already unit norm)
+```
+
+1.0 means an identical mix of categories, 0 means no overlap. Repeat for all 2,066
+households — that is the blue distribution. For grey, pair each household's first half
+with a **different, randomly chosen** household's second half and compute the same
+thing. Unit-norming is what makes a 500-item shopper and a 50-item shopper with the
+same *mix* score as similar rather than different.
+
 | | cosine similarity |
 |---|---|
 | a household's own two halves | **0.784** |
@@ -461,9 +594,23 @@ what it buys this year than knowing what an average household buys.
 
 ### 7.2 Price sensitivity differs — and it is signal, not noise
 
-Per-household within-item slope of log units on log price, on the
-1,640 households with enough repeat
-purchases:
+**How the per-household slope is computed.** Restrict to (household, item) pairs the
+household bought at least 3 times, so there is something to fit a slope to. Then for
+each household, regress `log(units)` on `log(price)` after subtracting each
+**(household, item)** mean from both — so the slope comes from that household's own
+repeat purchases of the *same* item at different prices, never from comparing one item
+against another:
+
+```
+slope_i = Σ (logp − mean_hi logp)(logu − mean_hi logu) / Σ (logp − mean_hi logp)²
+```
+
+summed over that household's rows. A household needs 80 such rows to be included,
+which leaves **1,640** of the 2,066.
+
+For the split-half row, the identical calculation runs twice — once on the household's
+first-half trips, once on its second-half — and the two resulting series are correlated
+across the 1,374 households that clear the threshold in both halves.
 
 | | value |
 |---|---|
