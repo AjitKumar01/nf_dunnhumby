@@ -265,6 +265,7 @@ as they are met.
 |---|---|---|---|---|
 | 1 | **multiple items** per category and across categories | likelihood admits multisets; no unit-demand filter | 188 categories retained, none dropped for unit demand | ✅ met by construction |
 | 2 | **multiple quantities**, with interaction | quantity head with its own price coefficient | quantity elasticity distinguishable from zero and from the item one | ✅ +0.134 against the item's +0.794; 12% of total elasticity (§8.4) |
+| 2b | **multiple items per category** | breadth head | generated breadth matches real | ✅ 1.280 implied against a real 1.284 (§8.1) |
 | 3 | **household state as a level** | recency basis per (household, sub-commodity) | ablation cost > seed noise | ✅ 0.076 nats against a 0.0032 seed spread (§8.7) |
 | 4 | **nested theory retained** | κ estimated per category | κ identified, and its ablation reported | ✅ κ = 0.663, stable across seeds — but weakly identified (§8.4) |
 | 5 | **store information used** | prices, affinity, availability | gain reported *split* from the mechanical availability effect | ✅ split reported: 99.7% is the availability mask (§8.2) |
@@ -292,16 +293,35 @@ gap below larger than ~0.01 is real.
 | no store | −2.1820 | 0.355 | 0.6651 | 0.1102 | **0.189** |
 | no state | −2.0684 | 0.360 | 0.6665 | 0.1106 | **0.076** |
 | prices scrambled | −2.0416 | 0.362 | 0.6887 | 0.1103 | 0.049 |
-| availability only | −1.9932 | 0.375 | 0.6651 | 0.1104 | 0.000 |
+| availability only | −1.9932 | 0.375 | 0.6651 | 0.1104 | 0.001 |
+| no breadth | −1.9927 | 0.378 | 0.6666 | 0.1104 | 0.000 |
 | no quantity | −1.9925 | 0.378 | — | 0.1104 | 0.000 |
 | no nest | −1.9877 | 0.380 | 0.6677 | — | **−0.005** |
 
-**The nest and the quantity head cost nothing on item ranking, and the nest is
-marginally better without.** That is the expected result, not a failure: neither head
-exists to rank items. Scoring them on item log-likelihood is the wrong axis, which is
-why §7 scores them on incidence NLL and on the elasticity decomposition instead. A
-model that ranked items better *because* it carried an incidence stage would be
-suspicious, not reassuring.
+**Three of the four heads cost nothing on item ranking, and the nest is marginally
+better without.** That is the design working, not failing. The item head ranks items;
+the nest, quantity and breadth heads answer questions the item head does not ask, and
+they share only the item utility `u_ijt`. A head that improved item ranking *because*
+it also modelled category incidence would mean the two were entangled — which is what
+`BASKET_MODEL.md` §2 had to fix in the flat model, where a free `ρ` absorbed structure
+that belonged in `α`.
+
+So each head has to be scored on its own quantity:
+
+| head | scored on | result |
+|---|---|---|
+| item | item log-lik, top-1 | −1.9927, 0.378 |
+| incidence | incidence NLL, and κ | 0.1104; κ = 0.663 |
+| quantity | units per item in generation | 1.343 against a real 1.348 (§8.6) |
+| breadth | distinct items per category | 1.280 implied against a real 1.284 |
+
+The breadth head is a case in point. On item log-likelihood it is worth **0.000** — the
+two runs agree to four decimals — yet without it generated baskets hold 6.94 items
+against a real 8.36, and with it 8.27 (§8.6). Judging it by the ablation column alone
+would have deleted the fix for the only criterion that was failing.
+
+**Seed spread is 0.0032 nats**, so the store, state and placebo gaps are 15–60× noise,
+and the three zero-cost heads are genuinely zero rather than small.
 
 ### 8.2 Criterion 5 — stores, split honestly
 
