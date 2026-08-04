@@ -272,6 +272,7 @@ as they are met.
 | 5 | **store information used** | prices, affinity, availability | gain reported *split* from the mechanical availability effect | ✅ split reported: 99.7% is the availability mask (§8.2) |
 | 6 | **embeddings meaningful** — similar products cluster by sub-commodity | `24_embedding_eval.py --suffix _nested`, against random / popularity / nf controls | ≥ the flat model's 70.6× chance and AUC 0.823 | ✅ 70.1× and AUC 0.828 on the full catalogue; 12.1× against nf's 1.0× head-to-head (§8.5) |
 | 7 | **data generation** | roll incidence → breadth → items → units forward, compare basket shape with held-out | items, categories and units within ~10% of real | ✅ items −1.1%, units −1.4%, categories −3.7% (§8.6) |
+| 9 | **beats a simpler alternative** | one scorer, identical candidate sets, validation-tuned baselines | clear margin over household repeat-purchase | ✅ +0.394 nats, +8.6 pts top-1 (§8.1c) |
 | 8 | **what-if on price** | structural placebo + elasticity decomposition | placebo retains ~0% of the coefficient; decomposition sums | ✅ placebo retains 0.0%; decomposition sums exactly (§8.3) |
 
 ---
@@ -359,6 +360,63 @@ changes *what else lands in the basket* is not counted in the −1.188. The four
 limitation of the sampler rather than the model — a sequential generator that built
 the basket incrementally could condition on what it had already placed. Both are now
 in §9.
+
+### 8.1c Benchmarks against simpler alternatives
+
+![benchmark](figures/benchmark.png)
+
+**Reading it.** One bar per model, both panels on the same 51,167 held-out purchases
+and the same candidate sets. *Left*: mean log-probability assigned to the item that
+was actually bought, among 1 true + 20 sampled alternatives; the dashed line is
+uniform over that set. *Right*: how often the true item is ranked first, with ties
+broken at random — without that, a model with no information ranks the true item
+first every time, because it sits in column 0.
+
+
+Everything in §8.1 is an **ablation** — the model against itself with a piece removed.
+That shows each piece is used; it does not show the model beats something a
+practitioner would actually reach for. This section does, with every model scored
+through **one scorer on identical candidate sets**: same positives, same negatives,
+same availability mask.
+
+That protocol detail matters. The nested model masks unstocked items out of its choice
+set, which shrinks the softmax denominator and mechanically raises its log-likelihood
+(§8.2 measures this at 99.7% of the apparent store gain). Comparing its own reported
+number against a differently-evaluated baseline would credit it for an easier
+question.
+
+| model | log-lik | top-1 | vs popularity |
+|---|---|---|---|
+| **nested** | **−2.0011** | **0.371** | **+0.736** |
+| nested, no interaction | −2.1195 | 0.342 | +0.618 |
+| household repeat-purchase | −2.3428 | 0.285 | +0.395 |
+| popularity | −2.7375 | 0.091 | — |
+| random | −2.7378 | 0.067 | −0.000 |
+| household + co-occurrence | −3.0526 | 0.182 | −0.315 |
+| item–item co-occurrence | −3.0655 | 0.078 | −0.328 |
+
+51,167 held-out purchases, 20 negatives each. Baseline weights and temperatures are
+**tuned on validation**, because the fitted model had its hyperparameters selected and
+an untuned baseline is not a fair reference.
+
+**The honest reading.** The strongest baseline is not popularity, it is
+**household repeat-purchase** — "this household bought it before" — which reaches
+top-1 of 0.285 against the model's 0.371. Grocery is repetitive, and most of what a
+model can predict is that people rebuy what they always rebuy. The model's real margin
+over a serious baseline is **0.394 nats and 8.6 points of top-1**, not the +0.736
+against popularity that a friendlier framing would quote.
+
+Two results worth stating because they cut against the model:
+
+- **Popularity ≈ random here (−2.7375 vs −2.7378).** Negatives are drawn
+  unigram^0.75, i.e. popularity-weighted, so popularity is being asked to separate a
+  popular true item from popular decoys. That is a deliberately hard test, and it
+  means "we beat popularity by 0.74 nats" is a much weaker claim than it sounds.
+- **Item–item co-occurrence scores below random.** Counting which items co-occur is a
+  model-free stand-in for the interaction term, and on its own it is worse than
+  nothing at this task — the signal exists (§2 of `DATA_EXPLORATION.md`) but raw
+  counts cannot exploit it against popularity-matched decoys. The learned tied
+  embedding can: removing it costs 0.118 nats here.
 
 ### 8.2 Criterion 5 — stores, split honestly
 
@@ -516,6 +574,7 @@ fits is real, and now measured model-free rather than assumed.
 | fix 10 | **incidence sampling switched from case-control to uniform** | the `log(π₁/π₀)` offset corrects the intercept but not `κ·(IV − ref)`, whose mean differs between sample and population. Uniform removes both biases at source: generated categories 6.39 against a real 6.49 |
 | fix 11 | generator draws units from the quantity head | it accumulated the category pick-count directly, giving every item exactly 1 unit — 1.007 against a real 1.348, while the head itself predicted 1.389 |
 | fix 12 | `--no-state` flag added | criterion 3 was written but could not be tested; the flag did not exist |
+| fix 15 | benchmark scorer gives each model its own basket context | the shared batch builder computed context from a stub with zero `alpha`, so the nested model was scored with its interaction disabled and lost to its own no-interaction ablation |
 | fix 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here. It costs 0.115 nats and 0.086 of embedding purity |
 | fix 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ~1.0–1.1 items per purchased category against a real 1.284. Generation: items 6.94 → **8.27** against 8.36 |
 
