@@ -1,0 +1,74 @@
+{
+  "overall": {
+    "item_weeks": 556410,
+    "elasticity_buyers": -0.7918154858215481,
+    "elasticity_units": -0.9453265988932703,
+    "elasticity_units_per_buyer": -0.23514815429387181,
+    "share_of_units_elasticity_from_quantity": 0.2487480565649678
+  },
+  "by_category": {
+    "categories": 160,
+    "median": -0.9510928019650753,
+    "p10": -1.5649993746570008,
+    "p90": -0.043033572148013406,
+    "share_negative": 0.90625,
+    "most_elastic": [
+      "FRZN ICE",
+      "CORN",
+      "PIES",
+      "MELONS",
+      "ISOTONIC DRINKS"
+    ],
+    "least_elastic": [
+      "VALUE ADDED FRUIT",
+      "CAKES",
+      "VALUE ADDED VEGETABLES",
+      "GREETING CARDS/WRAP/PARTY SPLY",
+      "MAGAZINE"
+    ]
+  },
+  "promotion_event_study": {
+    "events": 37132,
+    "min_log_price_cut": 0.15,
+    "profile_relative_to_item_mean": {
+      "-3": 1.0031700439911295,
+      "-2": 0.9483169182633094,
+      "-1": 0.958674404713624,
+      "0": 1.9400423013138426,
+      "1": 1.283815128555179,
+      "2": 1.1686282347006498,
+      "3": 1.1510814890132781
+    },
+    "lift_at_cut": 2.0236717406608697
+  },
+  "quantity": {
+    "rows": 1566063,
+    "mean_units": 1.3542392611280645,
+    "share_gt1": 0.22326177171671893,
+    "share_of_units_in_multi_rows": 0.4264394405193453,
+    "distribution": {
+      "1": 0.7767382282832811,
+      "2": 0.16080834551355852,
+      "3": 0.03060732550350784,
+      "4": 0.01802098638432809,
+      "5": 0.005200940192061239,
+      "6": 0.00862417412326324
+    }
+  },
+  "stores": {
+    "stores": 115,
+    "share_store_weeks_over_1c_from_chain": 0.15817414537582936,
+    "sd_across_stores_within_item_week": 0.12132266827302195,
+    "median_catalogue_share_carried": 0.6339138405132906,
+    "p10_catalogue_share_carried": 0.3869110907424381
+  },
+  "base_rates": {
+    "categories_per_basket": 6.118202111916527,
+    "n_categories": 188,
+    "category_incidence_rate": 0.03254362825487514,
+    "items_per_basket": 7.856043542602022,
+    "n_items": 5455,
+    "item_purchase_rate": 0.0014401546365906547,
+    "units_per_basket": 10.638962602523264
+  }
+}

@@ -191,7 +191,7 @@ class NestedData:
 class NestedModel(nn.Module):
     def __init__(self, d: NestedData, K=64, Kp=8, Kt=8, Ks=4, n_weeks=52, seed=0,
                  use_nest=True, use_quantity=True, use_store=True,
-                 use_store_price=True, avail_only=False):
+                 use_store_price=True, avail_only=False, use_state=True):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -206,7 +206,8 @@ class NestedModel(nn.Module):
         self.alpha = emb(J, K)
         self.theta = emb(N, K)
         self.gamma = emb(N, Kp, 0.1); self.beta = emb(J, Kp, 0.1)
-        self.eta = emb(J, N_STATE_FEATURES, 0.01)
+        self.use_state = use_state
+        self.eta = emb(J, N_STATE_FEATURES, 0.01) if use_state else None
         self.mu = emb(J, Kt, 0.02); self.delta = emb(n_weeks, Kt, 0.02)
         # store x item affinity: format and assortment differ, and a low-rank term
         # keeps it to 115*Ks + J*Ks parameters instead of 115*5455
@@ -224,6 +225,8 @@ class NestedModel(nn.Module):
 
         # --- incidence head: per category, with the nesting coefficient on IV
         if use_nest:
+            self.register_buffer("iv_ref", torch.zeros(C))
+            self.register_buffer("iv_ref_set", torch.zeros(1))
             self.c0 = nn.Parameter(torch.zeros(C))
             self.c_user = emb(N, K, 0.05); self.c_cat = emb(C, K, 0.05)
             # kappa parameterised as softplus so it stays positive; init near 1, which
@@ -240,7 +243,8 @@ class NestedModel(nn.Module):
         s = s + torch.einsum("bk,bmk->bm", self.theta[users], a)
         s = s + (a * ctx.unsqueeze(1)).sum(-1)
         s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
-        s = s + (self.eta[items] * state).sum(-1)
+        if self.eta is not None:
+            s = s + (self.eta[items] * state).sum(-1)
         s = s + (self.mu[items] * self.delta[weeks].unsqueeze(1)).sum(-1)
         if self.store_vec is not None:
             s = s + (self.item_store[items] * self.store_vec[stores].unsqueeze(1)).sum(-1)
@@ -312,26 +316,30 @@ def make_batch(d, model, split, bidx, n_neg, rng, device):
 def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     """Sampled (trip, category) pairs with the inclusive value over stocked items."""
     sp = d.splits[split]
-    # Categories are sampled case-control: a few bought ones and a few not, because
-    # uniform sampling would give 0.13 positives per trip (the true base rate is 6.1
-    # of 188 categories, 3.25%).  That over-samples positives about 30x, so the fitted
-    # intercept is calibrated to the *sample* and not to reality -- generation from an
-    # uncorrected head produced 58 categories per basket against a real 6.5.
-    # The standard fix is an offset log(pi_1 / pi_0) inside the logit during training,
-    # dropped at prediction time so probabilities come out on the population scale.
+    # Categories are sampled UNIFORMLY, and this is the third attempt at getting it
+    # right, so the reasoning is worth recording.
+    #
+    # Case-control sampling (a few bought, a few not) is tempting because the true
+    # base rate is only 3.37% -- 6.3 of 188 categories -- so uniform sampling sees few
+    # positives.  But it biases the fit in two separate ways:
+    #
+    #   1. the intercept, which the standard offset log(pi_1/pi_0) does correct;
+    #   2. the term kappa * (IV - ref), whose *mean differs between the sample and the
+    #      population* because bought categories have higher inclusive values.  The
+    #      offset does not touch this, c0 absorbs the training-sample average, and at
+    #      generation a uniform sample sits ~0.9 lower in (IV - ref).  With kappa
+    #      around 0.8 that is a 0.73 drop in the logit, which emptied the generated
+    #      baskets: 4.0 categories against a real 6.5, median basket 0 items.
+    #
+    # Uniform sampling removes both at the source and needs no correction at all.
+    # The cost is more categories per trip to see enough positives, hence the higher
+    # n_cat default for this sampler.
     cats, ys, trip, off = [], [], [], []
     for ti, i in enumerate(bidx):
         s = set(sp["cat"][sp["starts"][i]:sp["ends"][i]].tolist())
-        n_pos_avail = max(len(s), 1)
-        n_neg_avail = max(d.C - len(s), 1)
-        pos = list(s)[:max(1, n_cat // 2)]
-        neg = [c for c in rng.choice(d.C, size=n_cat, replace=False).tolist()
-               if c not in s][:max(n_cat - len(pos), 1)]
-        o = np.log((len(pos) / n_pos_avail) / (max(len(neg), 1) / n_neg_avail))
-        for c in pos:
-            cats.append(c); ys.append(1.0); trip.append(ti); off.append(o)
-        for c in neg:
-            cats.append(c); ys.append(0.0); trip.append(ti); off.append(o)
+        for c in rng.integers(0, d.C, size=n_cat).tolist():
+            cats.append(c); ys.append(1.0 if c in s else 0.0)
+            trip.append(ti); off.append(0.0)
     if not cats:
         return None
     cats = np.asarray(cats, dtype=np.int64); trip = np.asarray(trip)
@@ -380,16 +388,66 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     any_stocked = msk.sum(1) > 0
     iv = torch.logsumexp(u.masked_fill(msk == 0, -1e9), dim=1) + iv_scale
     # A category the store stocks nothing from has IV = -1e9, which would dominate the
-    # incidence logit.  Centring on the batch and zeroing those rows leaves the
-    # category intercept to explain them, which is what they are: not on offer.
-    iv = torch.where(any_stocked, iv, torch.zeros_like(iv))
-    iv = iv - iv[any_stocked].mean() if bool(any_stocked.any()) else iv
+    # incidence logit; zero it and let the category intercept explain it, which is
+    # what it is: not on offer.  Centring happens in losses(), against the frozen
+    # per-category reference, so training and generation share one constant.
     iv = torch.where(any_stocked, iv, torch.zeros_like(iv))
     cst = d.state(user, blk_np[:, 0], day)
     return dict(cat=ct, user=torch.as_tensor(user, device=device), iv=iv,
                 state=torch.as_tensor(cst, device=device),
                 offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
                 y=torch.as_tensor(np.asarray(ys, dtype=np.float32), device=device))
+
+
+@torch.no_grad()
+def uniform_iv(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
+    """Inclusive values for categories drawn UNIFORMLY, ignoring what was bought.
+
+    Used only to set the frozen per-category IV reference.  incidence_batch cannot be
+    reused for this: it is case-control sampled by design, so its category mix is not
+    the population's.
+    """
+    sp = d.splits[split]
+    T = len(bidx)
+    cats = rng.integers(0, d.C, size=(T, n_cat)).ravel()
+    trip = np.repeat(np.arange(T), n_cat)
+    first = sp["starts"][bidx][trip]
+    user, day = sp["user"][first], sp["day"][first]
+    week, store, rw = sp["week"][first], sp["store"][first], sp["raw_week"][first]
+    ct = torch.as_tensor(cats, device=device)
+    blk, msk = d.cat_items[ct], d.cat_mask[ct].clone()
+    n_valid = msk.sum(1)
+    if iv_cap and blk.shape[1] > iv_cap:
+        m_ = torch.clamp(n_valid, max=iv_cap)
+        r = torch.rand(len(cats), iv_cap, device=device)
+        pick = (r * n_valid.clamp_min(1).unsqueeze(1)).long().clamp_max(blk.shape[1] - 1)
+        blk, msk = torch.gather(blk, 1, pick), torch.gather(msk, 1, pick)
+        iv_scale = torch.log(n_valid.clamp_min(1) / m_.clamp_min(1))
+    else:
+        iv_scale = torch.zeros(len(cats), device=device)
+    Mx = blk.shape[1]
+    blk_np = blk.cpu().numpy()
+    day_r = np.repeat(day[:, None], Mx, 1)
+    user_r = np.repeat(user[:, None], Mx, 1)
+    store_r = np.repeat(store[:, None], Mx, 1)
+    rw_r = np.repeat(rw[:, None], Mx, 1)
+    st = d.state(user_r.ravel(), blk_np.ravel(), day_r.ravel()).reshape(
+        len(cats), Mx, N_STATE_FEATURES)
+    dlogp = d.log_price_dev[blk, torch.as_tensor(day_r, device=device)]
+    if model.use_store:
+        if model.use_store_price:
+            dlogp = dlogp + d.store_dev(blk_np.ravel(), store_r.ravel(),
+                                        rw_r.ravel()).reshape(len(cats), Mx)
+        msk = msk * d.carried[blk, torch.as_tensor(store_r, device=device)].float()
+    u = model.item_utility(torch.as_tensor(user, device=device), blk,
+                           torch.zeros(len(cats), model.K, device=device), dlogp,
+                           torch.as_tensor(st, device=device),
+                           torch.as_tensor(week, device=device),
+                           torch.as_tensor(store, device=device))
+    ok = msk.sum(1) > 0
+    iv = torch.logsumexp(u.masked_fill(msk == 0, -1e9), dim=1) + iv_scale
+    iv = torch.where(ok, iv, torch.zeros_like(iv))
+    return {"cat": ct[ok], "iv": iv[ok]}
 
 
 def losses(model, bt, ib, iv_center):
@@ -414,8 +472,7 @@ def losses(model, bt, ib, iv_center):
         lin = (model.c0[ib["cat"]]
                + (model.c_user[ib["user"]] * model.c_cat[ib["cat"]]).sum(-1)
                + (model.c_state[ib["cat"]] * ib["state"]).sum(-1)
-               + kap * (ib["iv"] - iv_center)
-               + ib["offset"])          # case-control correction; see incidence_batch
+               + kap * (ib["iv"] - model.iv_ref[ib["cat"]]))
         out["incidence"] = nn.functional.binary_cross_entropy_with_logits(lin, ib["y"])
     return out
 
@@ -441,7 +498,7 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
         if "quantity" in L:
             s_q += float(L["quantity"]) * lp.shape[0]; n_q += lp.shape[0]
         if model.use_nest:
-            ib = incidence_batch(d, model, split, b, 4, rng, device, iv_cap)
+            ib = incidence_batch(d, model, split, b, 16, rng, device, iv_cap)
             if ib is not None:
                 Lc = losses(model, bt, ib, iv_center)
                 s_c += float(Lc["incidence"]) * ib["y"].shape[0]; n_c += ib["y"].shape[0]
@@ -459,7 +516,7 @@ def main(a):
                         use_nest=not a.no_nest, use_quantity=not a.no_quantity,
                         use_store=not a.no_store,
                         use_store_price=not (a.no_store_price or a.avail_only),
-                        avail_only=a.avail_only).to(dev)
+                        avail_only=a.avail_only, use_state=not a.no_state).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"store={not a.no_store} store_price={model.use_store_price} "
@@ -478,6 +535,34 @@ def main(a):
         bt = make_batch(d, model, "train", bidx, a.n_neg, rng, dev)
         ib = incidence_batch(d, model, "train", bidx, a.n_cat, rng, dev, a.iv_cap) \
             if model.use_nest else None
+        # Freeze the per-category IV reference once the utilities have settled.  Any
+        # fixed constant is absorbed by c0, so this does not change the fit -- it only
+        # guarantees training and generation subtract the same thing.
+        if model.use_nest and it == a.iv_warmup:
+            with torch.no_grad():
+                acc = torch.zeros(d.C, device=dev)
+                cnt = torch.zeros(d.C, device=dev)
+                # The reference must come from a UNIFORM sample of categories.  Taking
+                # it from incidence_batch instead uses the case-control sample, which
+                # over-represents categories the trip bought and whose IV is therefore
+                # higher; the frozen reference then sits above the IV of a typical
+                # category, (IV - ref) is negative at generation time, and most
+                # generated baskets come out empty.  That is what happened on the
+                # first attempt: kappa 1.411 -> 0.763 and 4.0 categories against 6.5.
+                for _ in range(8):
+                    bb = rng.integers(0, sp["n_baskets"], size=a.batch_baskets)
+                    w = uniform_iv(d, model, "train", bb, a.iv_ref_cats, rng, dev,
+                                   a.iv_cap)
+                    if w is None:
+                        continue
+                    acc.index_add_(0, w["cat"], w["iv"])
+                    cnt.index_add_(0, w["cat"], torch.ones_like(w["iv"]))
+                model.iv_ref.copy_(torch.where(cnt > 0, acc / cnt.clamp_min(1),
+                                               torch.zeros_like(acc)))
+                model.iv_ref_set.fill_(1.0)
+            log(f"  froze IV reference at iteration {it}: "
+                f"mean {float(model.iv_ref.mean()):.3f}, "
+                f"{int((cnt > 0).sum())} of {d.C} categories observed")
         L = losses(model, bt, ib, a.iv_center)
         loss = (L["item"] + a.w_quantity * L.get("quantity", 0.0)
                 + a.w_incidence * L.get("incidence", 0.0)
@@ -526,7 +611,14 @@ if __name__ == "__main__":
     p.add_argument("--Kt", type=int, default=8)
     p.add_argument("--Ks", type=int, default=4)
     p.add_argument("--n-neg", type=int, default=20)
-    p.add_argument("--n-cat", type=int, default=4)
+    p.add_argument("--n-cat", type=int, default=16,
+                   help="categories sampled uniformly per trip for the "
+                        "incidence head")
+    p.add_argument("--iv-ref-cats", type=int, default=24,
+                   help="categories sampled uniformly per trip when freezing the "
+                        "per-category IV reference")
+    p.add_argument("--iv-warmup", type=int, default=500,
+                   help="iteration at which the per-category IV reference is frozen")
     p.add_argument("--iv-cap", type=int, default=32,
                    help="items sampled per category for the inclusive value; 0 uses "
                         "the full padded block, which is 5x slower for no gain")
@@ -544,6 +636,8 @@ if __name__ == "__main__":
                    choices=["none", "permute", "swap"])
     p.add_argument("--no-nest", action="store_true")
     p.add_argument("--no-quantity", action="store_true")
+    p.add_argument("--no-state", action="store_true",
+                   help="ablate the household recency state")
     p.add_argument("--no-store", action="store_true")
     p.add_argument("--no-store-price", action="store_true",
                    help="keep availability and store affinity, drop store-level prices")

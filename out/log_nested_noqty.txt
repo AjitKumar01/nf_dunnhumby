@@ -1,9 +1,4 @@
 [27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
 [27] model nested_noqty: K=64 nest=True quantity=False store=True store_price=True avail_only=False -> 780,507 parameters
-[27]   it  3000  item -1.9758  top1 0.382  qNLL 0.0000  cNLL 0.4671  kappa 1.396  price +0.556  qprice +nan *
-[27]   it  6000  item -1.9544  top1 0.390  qNLL 0.0000  cNLL 0.4537  kappa 1.385  price +0.716  qprice +nan *
-[27]   it  9000  item -1.9229  top1 0.397  qNLL 0.0000  cNLL 0.4403  kappa 1.402  price +0.749  qprice +nan *
-[27]   it 12000  item -1.9417  top1 0.397  qNLL 0.0000  cNLL 0.4479  kappa 1.388  price +0.757  qprice +nan
-[27] best at 9000; TEST item -1.9911 top1 0.378 qNLL 0.0000 cNLL 0.4569
-[27] saved nested_noqty_nested.pt
+[27]   froze IV reference at iteration 500: mean 2.330, 188 of 188 categories observed

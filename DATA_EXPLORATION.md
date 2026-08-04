@@ -19,8 +19,15 @@ Everything below measures those three commitments directly against the full
 `transaction_data.csv`: **2,553,406 lines, 2,500 households, 91,856 products, 253,183
 baskets, 711 days, 307 commodities, 2,373 sub-commodities**.
 
-Every number and figure in §§1–5 is produced by `scripts/21_basket_eda.py`; §6 comes
-from `scripts/25_basket_placebo.py`. Nothing is typed in by hand.
+Every number and figure here is produced by a script, none typed by hand:
+§§1–5 by `scripts/21_basket_eda.py`, §6 by `scripts/29_demand_eda.py` (1.9 seconds),
+§7 by `scripts/25_basket_placebo.py`.
+
+**§6 and §9 were added late.** The first version of this document examined only the
+three assumptions it intended to overturn and was silent on price response, quantity,
+stores and base rates — the things the model would actually have to reproduce. §9 is
+an account of what that omission cost, because the lesson is more useful than any
+single number in §6.
 
 ---
 
@@ -208,52 +215,105 @@ response.
 
 ---
 
-## 6. Is the price variation exogenous, and how much of it is the calendar?
+## 6. Does demand actually respond to price?
 
-Sections 1–5 establish that the expanded catalogue *has* price variation. Whether that
-variation can support a counterfactual is a separate question, and it is answered by
-`scripts/25_basket_placebo.py` rather than here. The headline is worth stating in this
-document because it changes how the sample should be read.
+This section exists because it was missing, and its absence was expensive. See §9.
 
-Four placebos per category on the 160 categories large enough to estimate, from an
-item × week panel of log purchase rate on log price with item fixed effects absorbed:
+Everything here is produced by `scripts/29_demand_eda.py` — **1.9 seconds** of pandas
+on the item × week panel. No model involved.
 
-| price series | median coefficient | categories significant at 1% |
-|---|---|---|
-| **real prices** | **−0.844** | 52.5% |
-| shifted ±6 weeks | −0.08 / −0.05 | 10.6% / 9.4% |
-| **weeks reordered within item** | **−0.006** | 3.1% |
-| **another item's price series** | **+0.002** | 4.4% |
+### 6.1 The demand curve
 
-The two strict placebos retain **0.7%** of the real effect, and only **5 of 160**
-categories fail one. On the paper's 56-category Sunday/Monday sample the randomised
-placebo retained **20%** and 34 of 56 categories failed at least one
-(`PREPROCESSING.md` §9).
+![demand response](figures/demand_eda_price.png)
 
-**Widening the catalogue and using all 711 days improved identification rather than
-degrading it.** That is the opposite of what one might expect from dropping a narrow,
-carefully-chosen identification window, and the reason is that item-level idiosyncratic
-price moves dominate once you are no longer conditioning on a two-day slice.
+*Left panel.* Week-on-week change in log price against week-on-week change in log
+buyers per trip, within item, binned into twelve quantiles. It is monotone across the
+whole range and passes through the origin — a textbook demand curve, and the single
+most basic thing a price study should establish before fitting anything.
 
-### How much of the price effect is seasonality
+Within-item log-log slopes on 556,410 item-weeks:
 
-The same regression, run with and without week fixed effects, isolates the part of the
-price coefficient that is really the calendar:
-
-| specification | median coefficient |
+| response | elasticity |
 |---|---|
-| no week effects | −0.951 |
-| week effects | −0.844 |
+| **buyers per trip** | **−0.792** |
+| units per trip | −0.945 |
+| **units per buyer** | **−0.235** |
 
-**11.3% of the raw price coefficient is seasonality** — prices and demand moving
-together over the year rather than one causing the other. This is small enough to be
-easy to miss and large enough to matter for a counterfactual, and it is the reason the
-model carries a seasonality term at all (`BASKET_MODEL.md` §7.5, where the fitted model
-reproduces both numbers to within a few percent).
+The third line is the finding that matters. A price cut works through two channels —
+more buyers, *and* each buyer taking more — and the quantity margin is **25% of the
+total units response**. Any model that treats purchase as binary is throwing away a
+quarter of the price effect by construction. That is a much stronger statement than
+the "22.3% of rows buy more than one unit" descriptive I had before.
+
+### 6.2 Elasticity varies enormously across categories
+
+*Middle panel.* Across the 160 categories large enough to estimate:
+
+| | value |
+|---|---|
+| median | **−0.951** |
+| p10 | −1.565 |
+| p90 | −0.043 |
+| negative | **91%** |
+| most elastic | FRZN ICE, CORN, PIES |
+| least elastic | VALUE ADDED VEGETABLES, GREETING CARDS/WRAP/PARTY SPLY, MAGAZINE |
+
+Two things follow. The **range** is what a model should be expected to reproduce —
+knowing it in advance would have made a fitted median of −0.95 immediately
+recognisable as right, and the shrunk +0.081 in `BASKET_MODEL.md` §7.2 immediately
+recognisable as wrong. And the tails are face-valid: ice and corn are seasonal
+commodities bought on price; greeting cards and magazines are impulse items where
+price is nearly irrelevant.
+
+### 6.3 Promotions, as a raw event study
+
+*Right panel.* Every item-week where price fell by at least 0.15 in logs — **37,132
+events** — lined up and averaged, with demand expressed relative to that item's own
+mean.
+
+| weeks from the cut | −3 | −2 | −1 | **0** | +1 | +2 | +3 |
+|---|---|---|---|---|---|---|---|
+| demand ÷ item mean | 1.00 | 0.95 | 0.96 | **1.94** | 1.28 | 1.17 | 1.15 |
+
+**Demand roughly doubles in the week of the cut** (2.02× the week before), then decays
+over about three weeks without returning to baseline. Flat before, sharp spike, slow
+decay — the shape is clean enough to read off the raw data with no model at all.
+
+The pre-period being flat is the important part: it is a visual check that promotions
+are not being timed to demand that was already rising, which is exactly the
+endogeneity the placebos in §7 test formally.
+
+### 6.4 Quantity and stores
+
+![quantity and stores](figures/demand_eda_quantity_stores.png)
+
+| | value |
+|---|---|
+| rows buying > 1 unit | 22.3% |
+| share of all units in those rows | **42.6%** |
+| mean units per line | 1.35 |
+| store-item-weeks >1c from the chain price | **15.8%** (sd $0.121) |
+| catalogue a store carries | median 63%, p10 39% |
+
+### 6.5 Base rates every model head has to reproduce
+
+| event | rate |
+|---|---|
+| **category incidence** | **6.12 of 188 = 3.25%** |
+| item purchase | 7.86 of 5,455 = 0.144% |
+| units per basket | 10.64 |
+
+This table is three lines of pandas and it is the most expensive omission in the
+project. An incidence head trained on a balanced sample is calibrated to 50%, not to
+3.25% — a logit error of about `log(30) ≈ 3.4`. That is precisely the bug that made
+the first generator produce **58 categories per basket against a real 6.5**
+(`NESTED_MODEL.md` §5). The number was always one line away.
 
 ---
 
-## 7. What the exploration implies for the model
+## 7. Is the price variation exogenous, and how much of it is the calendar?
+
+## 8. What the exploration implies for the model
 
 Each finding maps to a specific modelling decision. Nothing here is a preference.
 
@@ -268,6 +328,11 @@ Each finding maps to a specific modelling decision. Nothing here is a preference
 | price still moves on 30.5% of item-weeks | price stays in the model; elasticity remains identified |
 | strict placebos retain **0.7%** of the real price effect; 5 of 160 categories fail | the design supports counterfactuals — more cleanly than the paper's own sample |
 | **11.3%** of the raw price coefficient is week-frequency seasonality | add a low-rank seasonality term, or accept a biased elasticity |
+| demand is monotone in price; within-item elasticity **−0.79** on buyers, **−0.95** on units | a fitted elasticity should land near −0.95; anything an order of magnitude smaller is a bug, not a finding |
+| **25%** of the units response is units-per-buyer, not more buyers | purchase cannot be binary — a quarter of the price effect is unreachable |
+| median category **−0.95**, p10 −1.57, p90 −0.04, 91% negative | the range a model must reproduce, and the sanity band for any single number |
+| a price cut **doubles demand** in that week, decaying over ~3 weeks, flat before | promotions are a distinct, short-lived event; the flat pre-period is a visual exogeneity check |
+| category incidence base rate **3.25%**, item purchase **0.144%** | any sampled head must be calibrated back to these, or its generated output is meaningless |
 
 The resulting sample, built by `scripts/22_basket_data.py`:
 
@@ -294,7 +359,58 @@ the placebo evidence summarised in §6 and the seasonality correction it implies
 
 ---
 
-## Appendix: what this exploration does *not* establish
+## 9. What this exploration got wrong, and what it cost
+
+The first version of this document had five sections. All five investigated
+assumptions I had **already decided to attack** — unit demand, category independence,
+no state. There was nothing on price response, nothing on quantity, nothing on stores,
+nothing on base rates.
+
+That is not exploration. It is justification, written after the decision.
+
+Every one of those gaps was eventually discovered by a **bug**, not by looking at the
+data:
+
+| what was missing | how it actually surfaced | cost |
+|---|---|---|
+| does demand respond to price, and by how much? | the elasticity first appeared inside `25_basket_placebo.py`, long after the model was built | a fitted coefficient of +0.081 against a true ≈0.95 sat unnoticed until an unrelated test caught it (`BASKET_MODEL.md` §7.2) |
+| units per line, and the quantity margin | only measured when the omission was challenged | a quarter of the price response was assumed away |
+| store price dispersion and assortment | only measured when challenged | prices pooled across 115 stores; unstocked items scored as "rejected" |
+| **category incidence base rate** | only after the generator produced **58 categories per basket** against a real 6.5 | an incidence head trained on a balanced sample, a `log(30)` calibration error, and **five full retrains** |
+
+### The one that should not have happened
+
+The base rate is **6.12 of 188 categories = 3.25%**. One line of pandas. The entire
+`29_demand_eda.py` script — every number in §6 — runs in **1.9 seconds**.
+
+The generator bugs cost several hours of retraining. The data that would have
+prevented them cost two seconds and was sitting in the same parquet file the whole
+time.
+
+### The rule this suggests
+
+**Explore what the model will have to reproduce, not what you intend to change.**
+
+A concrete version: before fitting anything, tabulate the base rate of every event the
+model has a head for, and the response of the outcome to the main treatment. Both are
+cheap, neither depends on the model, and both are what you check the fitted model
+against. Had §6 existed first:
+
+- the shrunk price coefficient would have been obviously wrong on sight
+- the quantity margin would have been in the specification from the start, not added
+  under challenge
+- the incidence sampler would never have been built balanced
+
+### A second-order failure
+
+When this was queued, it was queued *behind* a 40-minute training chain — a
+1.9-second script waiting on work it does not depend on. The instinct to treat
+exploration as the thing that fits around modelling is the same instinct that produced
+the original gap.
+
+---
+
+## 10. Appendix: what this exploration does *not* establish
 
 - **Causality of price.** §6 shows the variation survives four placebos, which is a
   statement about the *design*, not a proof of exogeneity. A placebo rules out

@@ -194,26 +194,44 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             u = u.masked_fill(msk == 0, -1e9)
             iv = torch.logsumexp(u, dim=1)
             ok = msk.sum(1) > 0
-            iv = torch.where(ok, iv - iv[ok].mean() if bool(ok.any()) else iv,
-                             torch.zeros_like(iv))
+            # same frozen per-category reference the model trained against
+            iv = torch.where(ok, iv - m.iv_ref[ct], torch.zeros_like(iv))
             cst = d.state(user, blk_np[:, 0], day)
             lin = (m.c0[ct] + (m.c_user[torch.as_tensor(user, device=dev)] * m.c_cat[ct]).sum(-1)
                    + (m.c_state[ct] * torch.as_tensor(cst, device=dev)).sum(-1)
                    + m.kappa()[ct] * iv)
-            buy = (torch.rand(T, device=dev) < torch.sigmoid(lin)) & ok
-            if not bool(buy.any()):
-                continue
-            pick = torch.multinomial(torch.softmax(u, dim=1), 1).squeeze(1)
-            j = torch.gather(blk, 1, pick.unsqueeze(1)).squeeze(1)
-            z = (m.q0[j] - (m.q_gamma[torch.as_tensor(user, device=dev)]
-                            * m.q_beta[j]).sum(-1)
-                 * torch.gather(dlogp, 1, pick.unsqueeze(1)).squeeze(1)).clamp(-6, 4) \
-                if m.use_quantity else torch.zeros(T, device=dev)
-            units = 1.0 + torch.poisson(torch.exp(z))
-            bn = buy.float().cpu().numpy()
-            # one item drawn per purchased category, so items and categories coincide
-            # by construction here -- see the note in main()
-            n_items += bn; n_c += bn; n_u += bn * units.cpu().numpy()
+            # Recover the Poisson rate from the fitted Bernoulli head.  The model is
+            # a Poisson-multinomial (see NESTED_MODEL.md 3): Q_ic ~ Poisson(Lambda)
+            # allocated across items, and the incidence head fits P(Q > 0), so
+            # Lambda = -log(1 - p).  Drawing one item per category instead -- as an
+            # earlier version did -- forced generated items and categories to coincide,
+            # which contradicts the 56%-of-baskets finding this rebuild is founded on.
+            p_buy = torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)
+            lam_c = -torch.log1p(-p_buy)
+            # Q is the number of *item picks* from the category, not units.
+            Q = torch.poisson(lam_c) * ok.float()
+            pi = torch.softmax(u, dim=1) * (msk > 0).float()
+            pi = pi / pi.sum(1, keepdim=True).clamp_min(1e-9)
+            # expected number of distinct items when Q picks are allocated by pi
+            distinct = (1.0 - torch.pow((1.0 - pi).clamp_min(0.0),
+                                        Q.unsqueeze(1))).sum(1) * ok.float()
+            # Units must come from the quantity head.  An earlier version accumulated
+            # Q directly, which silently gave every purchased item exactly one unit --
+            # generated units per item 1.007 against a real 1.348, even though the
+            # head itself predicts 1.389.  The model was calibrated; the sampler
+            # simply never called it.
+            if m.use_quantity:
+                # expected units per picked item, averaged over the category's items
+                zj = (m.q0.unsqueeze(0).expand(T, -1).gather(1, blk)
+                      - (m.q_gamma[torch.as_tensor(user, device=dev)].unsqueeze(1)
+                         * m.q_beta[blk]).sum(-1) * dlogp).clamp(-6, 4)
+                eu = (1.0 + torch.exp(zj))                      # E[units | picked]
+                eu_bar = (eu * pi).sum(1)                       # weighted by choice prob
+            else:
+                eu_bar = torch.ones(T, device=dev)
+            n_items += distinct.cpu().numpy()
+            n_c += (Q > 0).float().cpu().numpy()
+            n_u += (Q * eu_bar).cpu().numpy()
         scale = d.C / n_cat_eval
         gen_sizes.extend(n_items * scale); gen_cats.extend(n_c * scale)
         gen_units.extend(n_u * scale)
