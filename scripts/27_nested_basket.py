@@ -192,13 +192,19 @@ class NestedModel(nn.Module):
     def __init__(self, d: NestedData, K=64, Kp=8, Kt=8, Ks=4, n_weeks=52, seed=0,
                  use_nest=True, use_quantity=True, use_store=True,
                  use_store_price=True, avail_only=False, use_state=True,
-                 use_breadth=True):
+                 use_breadth=True, use_context=True):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
         self.K, self.Kp, self.d = K, Kp, d
         self.use_nest, self.use_quantity, self.use_store = use_nest, use_quantity, use_store
         self.use_breadth = use_breadth
+        # The tied interaction alpha_j . alpha_bar(basket) carried over from the flat
+        # model, where BASKET_MODEL.md 2 shows tying is what forces co-purchase
+        # structure into the embedding the sub-commodity test reads.  It was
+        # hard-wired here and therefore never ablated in the nested model -- so the
+        # claim that it is load-bearing rested entirely on the flat model's evidence.
+        self.use_context = use_context
 
         def emb(n, k, sd=0.05):
             return nn.Parameter(torch.randn(n, k, generator=g) * sd)
@@ -255,7 +261,8 @@ class NestedModel(nn.Module):
         s = self.lam[items]
         a = self.alpha[items]
         s = s + torch.einsum("bk,bmk->bm", self.theta[users], a)
-        s = s + (a * ctx.unsqueeze(1)).sum(-1)
+        if self.use_context:
+            s = s + (a * ctx.unsqueeze(1)).sum(-1)
         s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
         if self.eta is not None:
             s = s + (self.eta[items] * state).sum(-1)
@@ -397,7 +404,12 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
             dlogp = dlogp + d.store_dev(blk_np.ravel(), store_r.ravel(),
                                         rw_r.ravel()).reshape(P, Mx)
         msk = msk * d.carried[blk, torch.as_tensor(store_r, device=device)].float()
-    # Incidence is decided before the basket exists, so there is no context yet.
+    # Incidence is decided before the basket exists, so there is no context yet: the
+    # inclusive value has to be what the category is worth on arrival, not after the
+    # basket is known.  Feeding a context here would be circular.  Note the
+    # consequence -- the interaction term is inert for the incidence head, and so for
+    # the incidence channel of the elasticity decomposition, which is why removing it
+    # barely moves anything outside item ranking (NESTED_MODEL.md 8.1).
     ctx = torch.zeros(P, model.K, device=device)
     u = model.item_utility(torch.as_tensor(user, device=device), blk, ctx, dlogp,
                            torch.as_tensor(st, device=device),
@@ -549,10 +561,11 @@ def main(a):
                         use_store=not a.no_store,
                         use_store_price=not (a.no_store_price or a.avail_only),
                         avail_only=a.avail_only, use_state=not a.no_state,
-                        use_breadth=not a.no_breadth).to(dev)
+                        use_breadth=not a.no_breadth,
+                        use_context=not a.no_context).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
-        f"store={not a.no_store} store_price={model.use_store_price} "
+        f"context={not a.no_context} store={not a.no_store} "
         f"avail_only={a.avail_only} -> {n_par:,} parameters")
 
     opt = torch.optim.Adam(model.parameters(), lr=a.lr)
@@ -677,6 +690,8 @@ if __name__ == "__main__":
     p.add_argument("--no-breadth", action="store_true",
                    help="ablate the breadth head; generation then produces ~1.09 "
                         "distinct items per purchased category against a real 1.284")
+    p.add_argument("--no-context", action="store_true",
+                   help="ablate the tied within-basket interaction alpha_j . alpha_bar")
     p.add_argument("--no-state", action="store_true",
                    help="ablate the household recency state")
     p.add_argument("--no-store", action="store_true")

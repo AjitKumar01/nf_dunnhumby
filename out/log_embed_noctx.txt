@@ -1,0 +1,12 @@
+[24] 5,455 items, 758 sub-commodities, 19 departments
+[24]   nested             kNN purity 0.2976 (69.6x chance)   AUC 0.8222   silhouette -0.1610   NMI 0.7537
+[24]   nested_noctx       kNN purity 0.2119 (49.5x chance)   AUC 0.7267   silhouette -0.2250   NMI 0.7143
+[24] headline model for the head-to-head, neighbours and map: nested
+[24]   control: random    kNN purity 0.0037 (0.9x chance)   AUC 0.4986
+[24]   control: popularity kNN purity 0.0038 (0.9x chance)   AUC 0.5100
+[24] head-to-head on 409 items that nf models and whose sub-commodity has 2+ members
+[24]   nf beta            kNN purity 0.0142 (1.0x chance)   AUC 0.3789   silhouette -0.3127
+[24]   nested alpha       kNN purity 0.1648 (12.1x chance)   AUC 0.8045   silhouette -0.0535
+[24] nearest-neighbour examples: 45.3% of the top-5 neighbours of 15 popular items share the query's sub-commodity
+[24] t-SNE on the 2500 most-purchased items ...
+[24] wrote out/embedding_eval.json and figures/embedding_*.png

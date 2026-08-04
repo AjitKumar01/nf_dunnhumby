@@ -104,6 +104,10 @@ def elasticity_decomposition(m, d, dev, n_trips=3000, seed=0):
     dlogp = d.log_price_dev[blk, torch.as_tensor(day_r, device=dev)]
     if m.use_store:
         msk = msk * d.carried[blk, torch.as_tensor(store_r, device=dev)].float()
+    # Context zeroed: the elasticity is evaluated at the point of category choice, so
+    # it is the pre-basket utility that matters.  This means the reported allocation
+    # channel excludes any interaction effect -- a price cut that changes what else
+    # lands in the basket is not counted here.  See NESTED_MODEL.md 9.
     u = m.item_utility(ut, blk, torch.zeros(len(rows), m.K, device=dev), dlogp,
                        torch.as_tensor(st, device=dev),
                        torch.as_tensor(week, device=dev),
@@ -187,6 +191,10 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             if m.use_store:
                 msk = msk * d.carried[blk, torch.as_tensor(store_r, device=dev)].float()
             u = m.item_utility(torch.as_tensor(user, device=dev), blk,
+                               # Context zeroed: baskets are generated category by
+                               # category, so no basket exists yet to condition on.
+                               # A sequential generator that built the basket
+                               # incrementally could use it; this one cannot.
                                torch.zeros(T, m.K, device=dev), dlogp,
                                torch.as_tensor(st, device=dev),
                                torch.as_tensor(week, device=dev),

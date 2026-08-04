@@ -1,0 +1,8 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 57.2% of the item x store grid
+[27] model nested_noctx: K=64 nest=True quantity=True context=False store=True avail_only=False -> 870,392 parameters
+[27]   froze IV reference at iteration 500: mean 2.387, 188 of 188 categories observed
+[27]   it  6000  item -2.0728  top1 0.360  qNLL 0.6630  cNLL 0.1115  kappa 0.605  breadth 1.290  price +0.776 *
+[27]   it 12000  item -2.0521  top1 0.367  qNLL 0.6609  cNLL 0.1130  kappa 0.640  breadth 1.280  price +0.822 *
+[27] best at 12000; TEST item -2.1074 top1 0.347 qNLL 0.6666 cNLL 0.1101
+[27] saved nested_noctx_nested.pt

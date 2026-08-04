@@ -266,6 +266,7 @@ as they are met.
 | 1 | **multiple items** per category and across categories | likelihood admits multisets; no unit-demand filter | 188 categories retained, none dropped for unit demand | ✅ met by construction |
 | 2 | **multiple quantities**, with interaction | quantity head with its own price coefficient | quantity elasticity distinguishable from zero and from the item one | ✅ +0.134 against the item's +0.794; 12% of total elasticity (§8.4) |
 | 2b | **multiple items per category** | breadth head | generated breadth matches real | ✅ 1.280 implied against a real 1.284 (§8.1) |
+| 2c | **product interaction** | tied `α_j · ᾱ(basket)` | ablation cost > seed noise, and it moves the embedding | ✅ 0.115 nats; purity 0.298 → 0.212 without it (§8.1b) — but inert outside the item head |
 | 3 | **household state as a level** | recency basis per (household, sub-commodity) | ablation cost > seed noise | ✅ 0.076 nats against a 0.0032 seed spread (§8.7) |
 | 4 | **nested theory retained** | κ estimated per category | κ identified, and its ablation reported | ✅ κ = 0.663, stable across seeds — but weakly identified (§8.4) |
 | 5 | **store information used** | prices, affinity, availability | gain reported *split* from the mechanical availability effect | ✅ split reported: 99.7% is the availability mask (§8.2) |
@@ -291,6 +292,7 @@ gap below larger than ~0.01 is real.
 | **`nested`** | **−1.9927** | 0.378 | 0.6666 | 0.1104 | — |
 | seed 1 | −1.9895 | 0.379 | 0.6693 | 0.1103 | — |
 | no store | −2.1820 | 0.355 | 0.6651 | 0.1102 | **0.189** |
+| no interaction | −2.1074 | 0.347 | 0.6666 | 0.1101 | **0.115** |
 | no state | −2.0684 | 0.360 | 0.6665 | 0.1106 | **0.076** |
 | prices scrambled | −2.0416 | 0.362 | 0.6887 | 0.1103 | 0.049 |
 | availability only | −1.9932 | 0.375 | 0.6651 | 0.1104 | 0.001 |
@@ -311,6 +313,7 @@ So each head has to be scored on its own quantity:
 | head | scored on | result |
 |---|---|---|
 | item | item log-lik, top-1 | −1.9927, 0.378 |
+| interaction (tied `α·ᾱ`) | item log-lik, and embedding purity | 0.115 nats; purity 0.298 → 0.212 without it |
 | incidence | incidence NLL, and κ | 0.1104; κ = 0.663 |
 | quantity | units per item in generation | 1.343 against a real 1.348 (§8.6) |
 | breadth | distinct items per category | 1.280 implied against a real 1.284 |
@@ -320,8 +323,42 @@ two runs agree to four decimals — yet without it generated baskets hold 6.94 i
 against a real 8.36, and with it 8.27 (§8.6). Judging it by the ablation column alone
 would have deleted the fix for the only criterion that was failing.
 
-**Seed spread is 0.0032 nats**, so the store, state and placebo gaps are 15–60× noise,
-and the three zero-cost heads are genuinely zero rather than small.
+**Seed spread is 0.0032 nats**, so the store, interaction, state and placebo gaps are
+15–60× noise, and the three zero-cost heads are genuinely zero rather than small.
+
+### 8.1b The interaction term, and where it is inert
+
+The tied interaction `α_j · ᾱ(basket)` was carried over from the flat model and was
+**hard-wired here until this audit** — there was no `--no-context` flag, so the claim
+that it is load-bearing rested entirely on the flat model's evidence rather than on
+anything measured in this one. It now has a flag, and it is:
+
+| | with interaction | without |
+|---|---|---|
+| item log-lik | **−1.9927** | −2.1074 |
+| embedding purity | **0.298** (69.6× chance) | 0.212 (49.5×) |
+| embedding AUC | **0.822** | 0.727 |
+
+**0.115 nats**, the second-largest component after store availability, and it is the
+only thing besides the store mask that materially moves the embedding. So the flat
+model's finding replicates here.
+
+**But it is inert in three of the four places the model is used**, which no document
+previously said:
+
+| where | context | why |
+|---|---|---|
+| item head | **active** | the basket is known; this is what the 0.115 measures |
+| incidence head | zeroed | incidence is decided *before* the basket exists — conditioning on it would be circular |
+| elasticity decomposition (§8.4) | zeroed | evaluated at the point of category choice, so pre-basket |
+| generator (§8.6) | zeroed | baskets are built category by category, so no basket exists yet to condition on |
+
+The first two are correct by construction. **The third is a real limitation**: the
+reported allocation channel excludes any interaction effect, so a price cut that
+changes *what else lands in the basket* is not counted in the −1.188. The fourth is a
+limitation of the sampler rather than the model — a sequential generator that built
+the basket incrementally could condition on what it had already placed. Both are now
+in §9.
 
 ### 8.2 Criterion 5 — stores, split honestly
 
@@ -450,7 +487,9 @@ fits is real, and now measured model-free rather than assumed.
 
 | issue | severity | state |
 |---|---|---|
-| Generated categories are 3.7% low, the largest remaining generation error | low — inside target | open |
+| Generated categories are 3.8% low, the largest remaining generation error | low — inside target | open |
+| **The elasticity decomposition excludes interaction.** Context is zeroed when the decomposition is computed, so a price cut that changes what *else* enters the basket is not counted in the −1.188 | medium — the number is a lower bound on the true own-price response | open |
+| **The generator builds baskets category by category**, so it cannot condition on what it has already placed. A sequential generator could use the interaction term; this one zeroes it | medium — generation matches marginals but may miss co-purchase structure | open |
 | Store-level prices and affinity contribute 0.0005 nats, although §7.3 of `DATA_EXPLORATION.md` shows households use 4 stores and switch on 30% of trips. Either the 2.3% grid coverage is too sparse or the chain price is already a good proxy | medium | open |
 | κ moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now (0.663/0.674), but weakly identified | medium | documented, not resolved |
 | `np.searchsorted` is 40% of the step and is avoidable | low — performance only | open |
@@ -477,6 +516,7 @@ fits is real, and now measured model-free rather than assumed.
 | fix 10 | **incidence sampling switched from case-control to uniform** | the `log(π₁/π₀)` offset corrects the intercept but not `κ·(IV − ref)`, whose mean differs between sample and population. Uniform removes both biases at source: generated categories 6.39 against a real 6.49 |
 | fix 11 | generator draws units from the quantity head | it accumulated the category pick-count directly, giving every item exactly 1 unit — 1.007 against a real 1.348, while the head itself predicted 1.389 |
 | fix 12 | `--no-state` flag added | criterion 3 was written but could not be tested; the flag did not exist |
+| fix 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here. It costs 0.115 nats and 0.086 of embedding purity |
 | fix 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ~1.0–1.1 items per purchased category against a real 1.284. Generation: items 6.94 → **8.27** against 8.36 |
 
 ---
