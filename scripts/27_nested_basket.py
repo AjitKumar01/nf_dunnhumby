@@ -191,12 +191,14 @@ class NestedData:
 class NestedModel(nn.Module):
     def __init__(self, d: NestedData, K=64, Kp=8, Kt=8, Ks=4, n_weeks=52, seed=0,
                  use_nest=True, use_quantity=True, use_store=True,
-                 use_store_price=True, avail_only=False, use_state=True):
+                 use_store_price=True, avail_only=False, use_state=True,
+                 use_breadth=True):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
         self.K, self.Kp, self.d = K, Kp, d
         self.use_nest, self.use_quantity, self.use_store = use_nest, use_quantity, use_store
+        self.use_breadth = use_breadth
 
         def emb(n, k, sd=0.05):
             return nn.Parameter(torch.randn(n, k, generator=g) * sd)
@@ -224,6 +226,18 @@ class NestedModel(nn.Module):
             self.q_state = emb(J, N_STATE_FEATURES, 0.01)
 
         # --- incidence head: per category, with the nesting coefficient on IV
+        # Breadth: given the category is bought, how many *distinct* items?  The
+        # incidence head only ever sees 0/1, so nothing in the model knows this.
+        # Recovering a Poisson rate from P(buy) via -log(1-p) reproduces the
+        # probability but implies E[picks | bought] of about 1.01-1.10 for realistic
+        # incidence rates -- against a real 1.284.  That gap is the whole generation
+        # shortfall, and no amount of sampler fixing closes it: the quantity is simply
+        # not in the likelihood.  breadth - 1 ~ Poisson, per category, with household
+        # and price terms because a big shopper and a promotion both widen a basket.
+        if use_breadth:
+            self.b0 = nn.Parameter(torch.zeros(C))
+            self.b_user = nn.Parameter(torch.zeros(N))
+            self.b_price = nn.Parameter(torch.zeros(C))
         if use_nest:
             self.register_buffer("iv_ref", torch.zeros(C))
             self.register_buffer("iv_ref_set", torch.zeros(1))
@@ -334,12 +348,16 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     # Uniform sampling removes both at the source and needs no correction at all.
     # The cost is more categories per trip to see enough positives, hence the higher
     # n_cat default for this sampler.
-    cats, ys, trip, off = [], [], [], []
+    cats, ys, trip, off, brd = [], [], [], [], []
     for ti, i in enumerate(bidx):
-        s = set(sp["cat"][sp["starts"][i]:sp["ends"][i]].tolist())
+        rows_i = sp["cat"][sp["starts"][i]:sp["ends"][i]]
+        cnt = {}
+        for c in rows_i.tolist():
+            cnt[c] = cnt.get(c, 0) + 1
         for c in rng.integers(0, d.C, size=n_cat).tolist():
-            cats.append(c); ys.append(1.0 if c in s else 0.0)
+            cats.append(c); ys.append(1.0 if c in cnt else 0.0)
             trip.append(ti); off.append(0.0)
+            brd.append(float(cnt.get(c, 0)))     # distinct items, 0 when not bought
     if not cats:
         return None
     cats = np.asarray(cats, dtype=np.int64); trip = np.asarray(trip)
@@ -393,9 +411,13 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     # per-category reference, so training and generation share one constant.
     iv = torch.where(any_stocked, iv, torch.zeros_like(iv))
     cst = d.state(user, blk_np[:, 0], day)
+    # mean price deviation across the category's stocked items, for the breadth head
+    pdev = (dlogp * (msk > 0).float()).sum(1) / (msk > 0).float().sum(1).clamp_min(1)
     return dict(cat=ct, user=torch.as_tensor(user, device=device), iv=iv,
                 state=torch.as_tensor(cst, device=device),
                 offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
+                breadth=torch.as_tensor(np.asarray(brd, dtype=np.float32), device=device),
+                pdev=pdev,
                 y=torch.as_tensor(np.asarray(ys, dtype=np.float32), device=device))
 
 
@@ -474,6 +496,16 @@ def losses(model, bt, ib, iv_center):
                + (model.c_state[ib["cat"]] * ib["state"]).sum(-1)
                + kap * (ib["iv"] - model.iv_ref[ib["cat"]]))
         out["incidence"] = nn.functional.binary_cross_entropy_with_logits(lin, ib["y"])
+
+        if model.use_breadth:
+            # breadth - 1 ~ Poisson, on the categories actually bought
+            pos = ib["y"] > 0
+            if bool(pos.any()):
+                zb = (model.b0[ib["cat"][pos]]
+                      + model.b_user[ib["user"][pos]]
+                      - model.b_price[ib["cat"][pos]] * ib["pdev"][pos]).clamp(-6.0, 3.0)
+                kb = (ib["breadth"][pos] - 1.0).clamp_min(0)
+                out["breadth"] = (torch.exp(zb) - kb * zb + torch.lgamma(kb + 1)).mean()
     return out
 
 
@@ -516,7 +548,8 @@ def main(a):
                         use_nest=not a.no_nest, use_quantity=not a.no_quantity,
                         use_store=not a.no_store,
                         use_store_price=not (a.no_store_price or a.avail_only),
-                        avail_only=a.avail_only, use_state=not a.no_state).to(dev)
+                        avail_only=a.avail_only, use_state=not a.no_state,
+                        use_breadth=not a.no_breadth).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"store={not a.no_store} store_price={model.use_store_price} "
@@ -566,6 +599,7 @@ def main(a):
         L = losses(model, bt, ib, a.iv_center)
         loss = (L["item"] + a.w_quantity * L.get("quantity", 0.0)
                 + a.w_incidence * L.get("incidence", 0.0)
+                + a.w_breadth * L.get("breadth", 0.0)
                 + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price())
                 / bt["cand"].shape[0])
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
@@ -574,6 +608,8 @@ def main(a):
             vi, vacc, vq, vc = evaluate(model, d, "validation", a.n_neg, ev, dev,
                                         a.iv_center, iv_cap=a.iv_cap)
             kap = float(model.kappa().detach().median()) if model.use_nest else float("nan")
+            brd = float(1.0 + torch.exp(model.b0.detach()).mean()) \
+                if model.use_breadth else float("nan")
             pc = float((model.gamma.detach() @ model.beta.detach().T).median())
             qc = float((model.q_gamma.detach() @ model.q_beta.detach().T).median()) \
                 if model.use_quantity else float("nan")
@@ -588,7 +624,8 @@ def main(a):
                 torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_nested.pt"))
                 star = " *"
             log(f"  it {it:5d}  item {vi:.4f}  top1 {vacc:.3f}  qNLL {vq:.4f}  "
-                f"cNLL {vc:.4f}  kappa {kap:.3f}  price {pc:+.3f}  qprice {qc:+.3f}{star}")
+                f"cNLL {vc:.4f}  kappa {kap:.3f}  breadth {brd:.3f}  "
+                f"price {pc:+.3f}{star}")
 
     model.load_state_dict(torch.load(os.path.join(OUT, f"{a.label}_nested.pt"),
                                      map_location=dev))
@@ -636,6 +673,10 @@ if __name__ == "__main__":
                    choices=["none", "permute", "swap"])
     p.add_argument("--no-nest", action="store_true")
     p.add_argument("--no-quantity", action="store_true")
+    p.add_argument("--w-breadth", type=float, default=1.0)
+    p.add_argument("--no-breadth", action="store_true",
+                   help="ablate the breadth head; generation then produces ~1.09 "
+                        "distinct items per purchased category against a real 1.284")
     p.add_argument("--no-state", action="store_true",
                    help="ablate the household recency state")
     p.add_argument("--no-store", action="store_true")

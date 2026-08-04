@@ -4,51 +4,24 @@
     "nest": true,
     "quantity": true,
     "store": true,
-    "price_coef": 0.7944555878639221,
+    "price_coef": 0.794455885887146,
     "quantity_price_coef": 0.1339375525712967,
     "median_kappa": 0.6625545620918274,
-    "test_item": -1.9926908215406511,
+    "test_item": -1.992690824073966,
     "test_top1": 0.37757854978624494,
     "test_quantity_nll": 0.6665549763102107,
-    "test_incidence_nll": 0.11036467677354812
-  },
-  "nested_s1": {
-    "placebo_price": "none",
-    "nest": true,
-    "quantity": true,
-    "store": true,
-    "price_coef": 0.794188380241394,
-    "quantity_price_coef": 0.10853561013936996,
-    "median_kappa": 0.6739783883094788,
-    "test_item": -1.9894685893675679,
-    "test_top1": 0.37925953596480305,
-    "test_quantity_nll": 0.6693418221176722,
-    "test_incidence_nll": 0.1103109039068222
-  },
-  "nested_pl": {
-    "placebo_price": "permute",
-    "nest": true,
-    "quantity": true,
-    "store": true,
-    "price_coef": -2.7944329637964778e-39,
-    "quantity_price_coef": -2.399265395558415e-39,
-    "median_kappa": 0.6751742959022522,
-    "test_item": -2.041602659932021,
-    "test_top1": 0.3624081683476528,
-    "test_quantity_nll": 0.6887091804225116,
-    "test_incidence_nll": 0.11028630220890046,
-    "retained": -3.51741872860377e-39
+    "test_incidence_nll": 0.11036467709143956
   },
   "decomposition": {
     "n": 12724,
     "allocation": -0.9912288784980774,
-    "incidence": -0.058041803538799286,
+    "incidence": -0.05804179608821869,
     "quantity": -0.13864898681640625,
-    "total": -1.1879197359085083,
-    "median_total": -0.9430432319641113,
-    "share_allocation": 0.8344241185116739,
-    "share_incidence": 0.0488600380853253,
-    "share_quantity": 0.11671578695539475,
+    "total": -1.1879196166992188,
+    "median_total": -0.94304358959198,
+    "share_allocation": 0.8344242022472271,
+    "share_incidence": 0.048860036716537256,
+    "share_quantity": 0.11671579866797685,
     "median_kappa": 0.6625545620918274,
     "share_categories_kappa_above_1": 0.010638297535479069
   },
@@ -59,9 +32,9 @@
       "p90": 21.0
     },
     "generated_items": {
-      "mean": 6.937140320405364,
-      "median": 7.833332399527231,
-      "p90": 15.666668114066123
+      "mean": 8.273958333333333,
+      "median": 7.833333333333333,
+      "p90": 23.5
     },
     "real_categories": {
       "mean": 6.49425,
@@ -69,7 +42,7 @@
       "p90": 16.0
     },
     "generated_categories": {
-      "mean": 6.388083333333333,
+      "mean": 6.249041666666666,
       "median": 7.833333333333333,
       "p90": 15.666666666666666
     },
@@ -79,9 +52,9 @@
       "p90": 28.0
     },
     "generated_units": {
-      "mean": 9.229352654283245,
-      "median": 8.696184178193409,
-      "p90": 23.27389360666275
+      "mean": 11.113086025784412,
+      "median": 8.691042174895603,
+      "p90": 30.29204988479614
     },
     "trips": 4000
   }

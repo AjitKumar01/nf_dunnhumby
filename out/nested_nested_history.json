@@ -22,6 +22,8 @@
     "placebo_price": "none",
     "no_nest": false,
     "no_quantity": false,
+    "w_breadth": 1.0,
+    "no_breadth": false,
     "no_state": false,
     "no_store": false,
     "no_store_price": false,
@@ -32,31 +34,31 @@
   "history": [
     {
       "iter": 6000,
-      "val_item": -1.954717759383177,
+      "val_item": -1.9547177700303915,
       "val_top1": 0.39167030091583077,
       "val_quantity_nll": 0.6630437142402908,
-      "val_incidence_nll": 0.11150445542732874,
-      "kappa_median": 0.6201308369636536,
+      "val_incidence_nll": 0.1115044566988945,
+      "kappa_median": 0.6201307773590088,
       "price_coef": 0.750065803527832,
       "quantity_price_coef": 0.10531643033027649,
-      "secs": 1163.4674310684204
+      "secs": 318.9368371963501
     },
     {
       "iter": 12000,
-      "val_item": -1.941261465943303,
-      "val_top1": 0.39740620657711906,
+      "val_item": -1.9412614351031885,
+      "val_top1": 0.3973640995410333,
       "val_quantity_nll": 0.6608652316613912,
-      "val_incidence_nll": 0.11313084995746613,
+      "val_incidence_nll": 0.11313085440794626,
       "kappa_median": 0.6625545620918274,
-      "price_coef": 0.7944555878639221,
+      "price_coef": 0.794455885887146,
       "quantity_price_coef": 0.1339375525712967,
-      "secs": 10404.56639289856
+      "secs": 646.1074602603912
     }
   ],
-  "n_parameters": 867950,
+  "n_parameters": 870392,
   "best_iter": 12000,
-  "test_item": -1.9926908215406511,
+  "test_item": -1.992690824073966,
   "test_top1": 0.37757854978624494,
   "test_quantity_nll": 0.6665549763102107,
-  "test_incidence_nll": 0.11036467677354812
+  "test_incidence_nll": 0.11036467709143956
 }

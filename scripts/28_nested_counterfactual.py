@@ -206,15 +206,28 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             # Lambda = -log(1 - p).  Drawing one item per category instead -- as an
             # earlier version did -- forced generated items and categories to coincide,
             # which contradicts the 56%-of-baskets finding this rebuild is founded on.
+            # Two separate draws, because they answer two separate questions and the
+            # data only ever taught the model one of them per head:
+            #   buy?     Bernoulli from the incidence head
+            #   how many distinct items, GIVEN a purchase?  the breadth head
+            # Recovering picks from P(buy) alone via -log(1-p) implies
+            # E[picks | bought] of ~1.01-1.10 for realistic incidence rates, against a
+            # real 1.284.  That single line was the whole generation shortfall.
             p_buy = torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)
-            lam_c = -torch.log1p(-p_buy)
-            # Q is the number of *item picks* from the category, not units.
-            Q = torch.poisson(lam_c) * ok.float()
+            bought = (torch.rand(T, device=dev) < p_buy) & ok
             pi = torch.softmax(u, dim=1) * (msk > 0).float()
             pi = pi / pi.sum(1, keepdim=True).clamp_min(1e-9)
-            # expected number of distinct items when Q picks are allocated by pi
-            distinct = (1.0 - torch.pow((1.0 - pi).clamp_min(0.0),
-                                        Q.unsqueeze(1))).sum(1) * ok.float()
+            if getattr(m, "use_breadth", False):
+                pdev = ((dlogp * (msk > 0).float()).sum(1)
+                        / (msk > 0).float().sum(1).clamp_min(1))
+                zb = (m.b0[ct] + m.b_user[torch.as_tensor(user, device=dev)]
+                      - m.b_price[ct] * pdev).clamp(-6, 3)
+                distinct = (1.0 + torch.poisson(torch.exp(zb))) * bought.float()
+            else:
+                distinct = bought.float()
+            # cap at the number of items the store actually stocks
+            distinct = torch.minimum(distinct, (msk > 0).float().sum(1))
+            Q = distinct
             # Units must come from the quantity head.  An earlier version accumulated
             # Q directly, which silently gave every purchased item exactly one unit --
             # generated units per item 1.007 against a real 1.348, even though the
@@ -230,8 +243,8 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             else:
                 eu_bar = torch.ones(T, device=dev)
             n_items += distinct.cpu().numpy()
-            n_c += (Q > 0).float().cpu().numpy()
-            n_u += (Q * eu_bar).cpu().numpy()
+            n_c += bought.float().cpu().numpy()
+            n_u += (distinct * eu_bar).cpu().numpy()
         scale = d.C / n_cat_eval
         gen_sizes.extend(n_items * scale); gen_cats.extend(n_c * scale)
         gen_units.extend(n_u * scale)

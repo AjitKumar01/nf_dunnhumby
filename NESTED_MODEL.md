@@ -1,8 +1,9 @@
 # The nested basket model
 
-**Status: 7 of 8 acceptance criteria met.** Generation reproduces category counts to
-1.5% but item and unit counts are ~17% low, so criterion 7 is not met and is recorded
-as failed rather than softened. Everything else in §7 is demonstrated in §8.
+**Status: all 8 acceptance criteria met.** Generated baskets now match held-out ones
+to within 4% on every dimension. §8 has the numbers; §10 records the twelve fixes it
+took, including the one that turned out to be a missing model component rather than a
+sampling bug.
 
 This document is kept current as the model changes; §10 is the changelog.
 
@@ -130,10 +131,29 @@ and **κ is a nesting coefficient with the paper's interpretation**:
 | **item** | softmax over `{chosen} ∪ {20 negatives}` | allocation within category |
 | **quantity** | `units − 1 ~ Poisson(exp(z))`, own price coefficient `γ^q · β^q` | the quantity margin |
 | **incidence** | Bernoulli per (trip, category), logit includes `κ_c · IV_ict` | category expansion |
+| **breadth** | `distinct items − 1 ~ Poisson(exp(b₀_c + b_i − b^p_c · Δlog p̄))`, on bought categories only | how *wide* a category purchase is |
 
 The quantity head has its **own** price coefficient rather than sharing the item one.
 That is the point: the two margins need not respond to price at the same rate, and
 forcing them to would assume away the thing being measured.
+
+**Why breadth needs its own head.** The incidence head only ever sees 0/1 — "was this
+category bought?" — so nothing else in the model knows how *many* distinct items a
+category purchase contains. Recovering a count from `P(buy)` via `λ = −log(1−p)`
+reproduces the probability correctly but implies
+
+| P(buy) | implied items given a purchase |
+|---|---|
+| 0.02 | 1.010 |
+| 0.05 | 1.026 |
+| 0.10 | 1.054 |
+| 0.20 | 1.116 |
+
+against a real **1.284**. It can only ever produce ~1.0–1.1, and it produced 1.086.
+The generator was correct; the quantity was simply absent from the likelihood. This is
+the one gap in this document that was a **missing component** rather than a sampling
+bug, and no amount of sampler fixing would have closed it. Real distribution: 81.1% of
+category purchases are one item, 13.4% two, 3.4% three, 2.1% more.
 
 ---
 
@@ -249,7 +269,7 @@ as they are met.
 | 4 | **nested theory retained** | κ estimated per category | κ identified, and its ablation reported | ✅ κ = 0.663, stable across seeds — but weakly identified (§8.4) |
 | 5 | **store information used** | prices, affinity, availability | gain reported *split* from the mechanical availability effect | ✅ split reported: 99.7% is the availability mask (§8.2) |
 | 6 | **embeddings meaningful** — similar products cluster by sub-commodity | `24_embedding_eval.py --suffix _nested`, against random / popularity / nf controls | ≥ the flat model's 70.6× chance and AUC 0.823 | ✅ 70.1× and AUC 0.828 on the full catalogue; 12.1× against nf's 1.0× head-to-head (§8.5) |
-| 7 | **data generation** | roll incidence → item → units forward, compare basket shape with held-out | items, categories and units within ~10% of real | ❌ categories −1.5%, items and units −17% (§8.6) |
+| 7 | **data generation** | roll incidence → breadth → items → units forward, compare basket shape with held-out | items, categories and units within ~10% of real | ✅ items −1.1%, units −1.4%, categories −3.7% (§8.6) |
 | 8 | **what-if on price** | structural placebo + elasticity decomposition | placebo retains ~0% of the coefficient; decomposition sums | ✅ placebo retains 0.0%; decomposition sums exactly (§8.3) |
 
 ---
@@ -372,17 +392,27 @@ function any dynamic policy needs — not because it is free.
 
 | | real | generated | error |
 |---|---|---|---|
-| categories per basket | 6.49 | **6.39** | **−1.5%** |
-| items per basket | 8.36 | 6.94 | −17% |
-| units per basket | 11.27 | 9.23 | −18% |
+| items per basket | 8.36 | **8.27** | **−1.1%** |
+| units per basket | 11.27 | **11.11** | **−1.4%** |
+| categories per basket | 6.49 | **6.25** | **−3.7%** |
 
-**Categories are within 1.5%.** Items and units are ~17% low, so the target of ~10%
-across all three is **not met**. The residual is in multiplicity: the generator picks
-too few *distinct* items within a purchased category.
+Rolling incidence → breadth → items → units forward reproduces held-out basket shape
+to within 4% on every dimension. The internal ratios hold too: **1.323** items per
+purchased category against a real 1.288, and **1.343** units per item against 1.348.
 
-For scale on how far this has come: the first generator produced 58 categories per
-basket against a real 6.5, and the second produced 4.0. Three sampling bugs (§10) sat
-between those and this.
+The path there is worth recording, because four of the five versions were wrong and
+each was wrong for a different reason:
+
+| generator | categories | items | what was wrong |
+|---|---|---|---|
+| 1. case-control, batch-centred IV | 58.0 | 58.0 | positives over-sampled 30×; `log(30)` logit error |
+| 2. case-control, frozen IV | 10.4 | 10.4 | reference taken from the case-control sample itself |
+| 3. uniform, frozen IV | 4.0 | 4.0 | `κ·(IV − ref)` still uncorrected for the sample |
+| 4. + units from the quantity head | 6.39 | 6.94 | generator never called the quantity head |
+| **5. + breadth head** | **6.25** | **8.27** | — |
+| **real** | **6.49** | **8.36** | |
+
+Only the last of those was a model gap; the rest were sampling.
 
 ### 8.7 Criterion 3 — household state
 
@@ -400,7 +430,7 @@ fits is real, and now measured model-free rather than assumed.
 
 | issue | severity | state |
 |---|---|---|
-| **Generated items and units are ~17% low** (6.94 vs 8.36, 9.23 vs 11.27) although categories are within 1.5%. The generator picks too few *distinct* items within a purchased category | **high** — the only unmet criterion | open |
+| Generated categories are 3.7% low, the largest remaining generation error | low — inside target | open |
 | Store-level prices and affinity contribute 0.0005 nats, although §7.3 of `DATA_EXPLORATION.md` shows households use 4 stores and switch on 30% of trips. Either the 2.3% grid coverage is too sparse or the chain price is already a good proxy | medium | open |
 | κ moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now (0.663/0.674), but weakly identified | medium | documented, not resolved |
 | `np.searchsorted` is 40% of the step and is avoidable | low — performance only | open |
@@ -427,3 +457,4 @@ fits is real, and now measured model-free rather than assumed.
 | fix 10 | **incidence sampling switched from case-control to uniform** | the `log(π₁/π₀)` offset corrects the intercept but not `κ·(IV − ref)`, whose mean differs between sample and population. Uniform removes both biases at source: generated categories 6.39 against a real 6.49 |
 | fix 11 | generator draws units from the quantity head | it accumulated the category pick-count directly, giving every item exactly 1 unit — 1.007 against a real 1.348, while the head itself predicted 1.389 |
 | fix 12 | `--no-state` flag added | criterion 3 was written but could not be tested; the flag did not exist |
+| fix 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ~1.0–1.1 items per purchased category against a real 1.284. Generation: items 6.94 → **8.27** against 8.36 |
