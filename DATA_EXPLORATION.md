@@ -535,8 +535,28 @@ is a *within-item* regression on all 556,410 item-weeks, including the ones wher
 price held steady. The two agree in sign and rough magnitude, but the slope of the
 plotted dots is not the reported elasticity.
 
-*Middle*: one observation per category, x = that category's own estimated elasticity,
-y = how many categories.
+*Middle*: a histogram of **160 numbers**, one per category.
+
+Each number is that category's own elasticity, computed by running the §6.1 regression
+using **only that category's rows**. Worked through for SOFT DRINKS:
+
+1. Take every (item, week) row belonging to the category — 225 items, **22,950**
+   item-weeks.
+2. For each row, subtract that **item's** own average from both variables:
+   `xd = logp − mean_item(logp)`, `yd = lbuy − mean_item(lbuy)`.
+3. The slope is the ratio of two sums over those 22,950 rows:
+
+```
+slope = Σ(xd · yd) / Σ(xd²) = −592.58 / 576.95 = −1.027
+```
+
+So SOFT DRINKS contributes the single value **−1.027** to the histogram. Repeat for
+each of the 160 categories with at least 3 items and 200 item-weeks, and plot the
+resulting 160 numbers.
+
+x = a category's slope. y = how many of the 160 categories have a slope in that range.
+The extremes come from small categories: FRZN ICE (4 items) sits at −10.1, MAGAZINE
+(17 items) at +1.08.
 
 *Right*: the event study. Every item-week where the price fell at least 0.15 in logs
 (**37,132** of them), lined up at week 0. x = weeks before or after the cut. y = that
