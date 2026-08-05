@@ -47,8 +47,10 @@ assumed, and it is compatible with buying three yogurts.
 Fitting.  A full Poisson likelihood needs every item on every trip (5,455 x 199,347),
 so the three heads are trained jointly on sampled data:
 
-  item head       softmax over {chosen} u {negatives}, negatives drawn only from
-                  items the trip's store actually stocks
+  item head       softmax over {chosen} u {negatives}.  Negatives are drawn from the
+                  WHOLE catalogue (unigram^0.75) and then masked: an item the trip's
+                  store does not carry gets -1e9, so the effective competitor count is
+                  below n_neg and varies by store
   quantity head   units - 1 ~ Poisson, on chosen items only, with its own price
                   coefficient, so the quantity margin gets its own elasticity
   incidence head  per (trip, category): bought or not, against IV computed over the

@@ -1,260 +1,415 @@
 # The nested basket model
 
-**Status: all 8 acceptance criteria met.** Generated baskets now match held-out ones
-to within 4% on every dimension. §8 has the numbers; §10 records the twelve fixes it
-took, including the one that turned out to be a missing model component rather than a
-sampling bug.
-
-This document is kept current as the model changes; §10 is the changelog.
+`scripts/27_nested_basket.py` fits it, `scripts/28_nested_counterfactual.py` uses it,
+`scripts/22_basket_data.py` builds its input. Every number below is read from an
+artefact in `out/` or `basket_input/meta.json`; §8 names the file behind each result.
 
 ---
 
 ## 1. Why this model exists
 
 `BASKET_MODEL.md` describes a flat basket model that fixed three things about the
-paper's port — multi-item baskets, product interactions, and household state — and
-scored well. It also, without saying so, threw away three things it should not have.
+paper's port — multi-item baskets, product interactions, household state — and scored
+well. It also dropped three things it should not have.
 
-| what was dropped | why it matters | evidence |
+| dropped | why it matters | evidence |
 |---|---|---|
-| **the nest** | with no incidence layer the model can rank items but cannot say whether a household buys from a category *at all*. It cannot answer "does cutting Tide's price grow total detergent volume, or just move share from Gain" — the question a retailer actually asks | structural: `23_basket_model.py` has no category stage |
-| **quantity** | purchase was binary. 22.3% of (basket, item) rows buy more than one unit, and those rows carry **42.6% of all units**. A price cut works through two channels — more buyers *and* more units each — and only the first was modelled | units-per-buyer elasticity **−0.219** |
-| **stores** | prices pooled to chain level, assortment ignored. Scoring an item a store never stocked as a *rejected* alternative is a specification error: it was not there to reject | **15.8%** of store-item-weeks differ >1c from the chain price (sd $0.121); median store carries **63%** of the catalogue, p10 carries 39% |
+| **the nest** | with no category stage the model ranks items but cannot say whether a household buys from a category *at all*. It cannot answer "does cutting Tide's price grow total detergent volume, or move share from Gain" | structural: `23_basket_model.py` has no category stage |
+| **quantity** | purchase was binary. **22.3%** of (basket, item) rows buy more than one unit, and those rows carry **42.6%** of all units | `DATA_EXPLORATION.md` §6.1: units-per-buyer elasticity −0.235 |
+| **stores** | prices pooled to chain level, assortment ignored. Scoring an item a store never stocked as a *rejected* alternative is a specification error | 15.8% of store-item-weeks differ >1¢ from the chain price; the `carried` mask covers **57.2%** of the item × store grid |
 
-Dropping the within-category softmax was justified — unit demand fails in 56% of
-baskets. Dropping the *nest* was not: unit demand failing says nothing about whether
-incidence is a separate decision from allocation. Those were conflated.
+Dropping the within-category softmax was justified. Unit demand — at most one item per
+category, at most one unit of it — is violated by **68.2%** of the 199,345 baskets in
+`basket_input`: 48.6% hold more than one item from some category, 57.6% have a line
+buying more than one unit. Dropping the *nest* was not justified: unit demand failing
+says nothing about whether incidence is a separate decision from allocation.
 
 ---
 
 ## 2. Data
 
-Built by `scripts/22_basket_data.py` into `basket_input/`.
+`scripts/22_basket_data.py` → `basket_input/`. Sizes from `meta.json`:
 
 | | value |
 |---|---|
-| households | 2,066 |
-| items | 5,455 |
-| categories (`COMMODITY_DESC`) | 188 |
-| sub-commodities | 758 |
-| **stores** | **115** |
+| households `N` | 2,066 |
+| items `J` | 5,455 |
+| categories `C` (`COMMODITY_DESC`) | 188 |
+| sub-commodities `S` | 758 |
+| stores | 115 |
+| days `D` | 712 |
 | (basket, item) rows | 1,566,063 |
-| baskets | 199,347 |
-| days | 712 (all) |
+| baskets | 199,345 |
+| train / validation / test rows | 1,228,695 / 134,665 / 202,703 |
 | units > 1 | 22.3% of rows, 42.6% of units |
-| assortment | 57.2% of the item × store grid |
+| `carried` mask density | 57.2% |
 | store-level price cells | 244,880 |
+| item-days with a directly observed price | 24.7% |
+| median repurchase gap | 28 days |
 
-The only item filter is **≥100 purchase lines** — statistical support for an embedding,
-not protection of a modelling assumption. Splits are by calendar week with the last 20
-held out (train <83, validation 83–90, test 91+).
+**Filters.** An item needs ≥100 purchase lines, which is statistical support for its own
+embedding. A household needs 20–300 trips (the paper's own rule). Nothing is dropped
+for violating unit demand, for co-moving prices, or for seasonality.
+
+**Splits are by calendar week**, not a random slice: train < 83, validation
+83–90, test ≥ 91. Held-out rows whose item or household never appears in
+training are dropped rather than scored as a cold start the model was never given a
+chance at.
 
 ### Files
 
 | file | contents |
 |---|---|
-| `baskets.parquet` | one row per (basket, item): `units` as a count, `store_id`, split label |
-| `items.parquet` | id maps plus the held-out labels the model never sees |
-| `log_price.npy`, `log_price_dev.npy` | item × day log price, raw and centred within item |
+| `baskets.parquet` | one row per (basket, item): `units` as a count, `store_id`, `split` |
+| `items.parquet` | id maps plus the held-out labels (sub-commodity, brand, manufacturer, department) the model never sees |
+| `log_price.npy`, `log_price_dev.npy` | `[J, D]` log price by item and day, raw and centred within item |
 | `store_price.npz` | sparse store-level log-price deviations, plus the `carried` availability mask |
-| `state.npz` | sorted purchase-day keys for the recency lookup |
+| `state.npz` | sorted purchase-day keys for the recency lookup, and `sub_gap` |
 | `meta.json` | sizes, split boundaries, filter settings |
 
 ### Two data decisions worth defending
 
-**Units are capped at 12.** dunnhumby's `QUANTITY` is unreliable for weighed goods and
-the far tail is bulk lines. The cap touches a small share of rows and prevents a
-handful of 40-unit lines dominating a Poisson likelihood.
+**Units capped at 12.** dunnhumby's `QUANTITY` is unreliable for weighed goods and the
+far tail is bulk lines. The cap prevents a handful of 40-unit lines dominating a
+Poisson likelihood.
 
-**Availability threshold is 1 sale, not 3.** An item a store ever sold was, by
-definition, available there. A threshold of 3 marked genuine purchases as unavailable,
-which made the inclusive value `−1e9` for categories a household demonstrably bought
-from and blew the incidence loss up to 5.1 million. Assortment coverage went from a
-spurious 24.7% to 57.2% when this was corrected.
+**Availability threshold is 1 sale, not 3** (`--min-store-lines`). An item a store ever
+sold was by definition available there. A threshold of 3 marked genuine purchases
+unavailable, which set `IV = −1e9` for categories a household demonstrably bought from
+and blew the incidence loss up to 5.1 million.
 
 ---
 
 ## 3. Specification
 
-For household `i`, on day `t`, at store `s`.
+Household `i`, day `t`, week-of-year `w`, store `s`, item `j`, category `c = cat(j)`.
 
-### Item utility (shared by all three heads)
+### 3.1 Item utility
 
-```
-u_ijt = λ_j                          item popularity
-      + θ_i · α_j                    household taste × item embedding
-      + α_j · ᾱ(context)             interaction with the rest of the basket (tied)
-      − (γ_i · β_j) · Δlog p_jst     price, chain deviation + store deviation
-      + η_j · state_ijt              recency of this sub-commodity for this household
-      + μ_j · δ_w                    seasonality, week-of-year
-      + ζ_j · ξ_s                    store × item affinity (low rank)
-```
-
-`α_j · ᾱ(context)` is the **tied** interaction carried over from `BASKET_MODEL.md` §2:
-using `α` itself rather than a free `ρ` is what forces co-purchase structure into the
-embedding the sub-commodity test reads. With a free `ρ` the embedding scored 0.058
-purity; tied, 0.302.
-
-**What ᾱ(context) actually is.** For item *j* in a basket *S* holding *n* items, it is
-the mean of α over the other *n* − 1 items (`27_nested_basket.py:307`):
+Every head is built on one quantity, `NestedModel.item_utility` (`27:260-272`):
 
 ```
-ctx_j = ( Σ_{k∈S} α_k − α_j ) / (n − 1)                    n = 1 → zero vector
+u_ijt = λ_j                       lam[j]                       item popularity
+      + θ_i · α_j                 theta[i]·alpha[j]            household taste × item embedding
+      + α_j · ᾱ_j(S)              alpha[j]·ctx                 basket interaction, tied   (§3.3)
+      − (γ_i · β_j) · Δlog p_jst  gamma[i]·beta[j]             price
+      + η_j · x_ijt               eta[j]·state                 recency basis              (§3.2)
+      + μ_j · δ_w                 mu[j]·delta[w]               seasonality, week-of-year
+      + ζ_j · ξ_s                 item_store[j]·store_vec[s]   store × item affinity
 ```
 
-so the interaction entering `u_j` at `:265` is
+Dimensions: `α, θ ∈ R^K` with `K = 64`; `γ, β ∈ R^Kp` with `Kp = 8`; `μ, δ ∈ R^Kt`
+with `Kt = 8`; `ζ, ξ ∈ R^Ks` with `Ks = 4`; `η ∈ R^4`. **870,392 parameters** in total.
+
+**The price term is a deviation, not a level.** `22_basket_data.py:187` centres the log
+price within item:
 
 ```
-α_j · ctx_j = ( 1/(n−1) ) · Σ_{k∈S, k≠j} α_j · α_k
+Δlog p_jt = log p_jt − mean over t of log p_jt
 ```
 
-the average dot product between *j* and each other item in the basket. It is the whole
-basket, not a prefix: `BASKET_ID` and `DAY` are all the data carries, so a basket is a
-set with no order to condition on.
+so the item's price level is absorbed by `λ_j`, and what identifies the response is
+that item moving against its own normal price. With stores on, the store-level
+deviation is added on top (`27:322`), falling back to 0 wherever that store-week was
+never observed.
 
-Write `b_j` for everything in `u_j` that does not involve other basket items
-(`λ_j + θ_i·α_j −(γ_i·β_j)Δlogp + η_j·state + μ_j·δ_w + ζ_j·ξ_s`). Then define
+**The price coefficient is bilinear, not scalar.** `γ_i · β_j` gives each household its
+own sensitivity and each item its own loading at `(N + J)·Kp` parameters instead of
+`N·J`. It enters with a minus sign, so a **positive** `γ_i · β_j` means demand falls
+when price rises.
+
+### 3.2 The household state basis
+
+`η_j · x_ijt` is the only term carrying history. `NestedData.state` (`27:174-188`)
+finds the last day this household bought this item's **sub-commodity** strictly before
+day `t`, and returns four features of `τ`, the days since:
 
 ```
-E(S) = Σ_{j∈S} b_j + ( 1/(n−1) ) · Σ_{ {j,k} ⊂ S } α_j · α_k
+x = [ 1{no previous purchase},
+      exp(−τ / 7),                 weekly decay
+      exp(−τ / g_sub(j)),          decay on that sub-commodity's own timescale
+      log(1+τ) / log(100) ]        slow, unbounded
 ```
 
-Swapping item *j* for item *m* leaves the size at *n*, so the 1/(n−1) is the same on
-both sides and
+with the last three set to 0 when there is no previous purchase. `g_sub` is that
+sub-commodity's median repurchase gap, clipped to [3, 180] days
+(`22_basket_data.py:257-259`), so "a long time" means the right number of days for milk
+and for shampoo.
+
+The lookup is a single `np.searchsorted` over a globally sorted key array,
+`key = (i·S + sub) · 1024 + day`. The stride exceeds any day index, so the ordering
+never crosses a (household, sub-commodity) boundary and a whole batch resolves in one
+call.
+
+### 3.3 The basket interaction, and the joint it implies
+
+For item `j` in a basket `S` of `n` items, `ᾱ_j(S)` is the mean of `α` over the other
+`n − 1` items (`27:302-308`):
 
 ```
-E(S′) − E(S) = (b_m − b_j) + (1/(n−1)) [ Σ_{k≠j} α_m·α_k − Σ_{k≠j} α_j·α_k ]
-             = (b_m − b_j) + α_m·ctx_j − α_j·ctx_j
+ᾱ_j(S) = ( sum over k in S of α_k  −  α_j ) / (n − 1)        n = 1 → zero vector
+```
+
+so the term entering `u_j` is
+
+```
+α_j · ᾱ_j(S) = ( 1/(n−1) ) · sum over k in S, k ≠ j, of  α_j · α_k
+```
+
+the average dot product between `j` and each other item in the basket. Using `α` itself
+rather than a free `ρ` is what forces co-purchase structure into the embedding that the
+sub-commodity test reads (`BASKET_MODEL.md` §2: a free `ρ` scored 0.058 purity, tied
+scored 0.302).
+
+**It is the whole basket, not a prefix.** The data carries `BASKET_ID` and `DAY` and no
+within-receipt order, so a basket is a *set*. There is no "what was in the cart at the
+time" to condition on; the model is not sequential and could not be.
+
+**What that implies.** Write `b_j` for everything in `u_j` that does not involve other
+basket items. For baskets of size `n`, define
+
+```
+E(S) = sum over j in S of b_j  +  ( 1/(n−1) ) · sum over unordered pairs {j,k} in S of α_j · α_k
+```
+
+Swapping item `j` for item `m` holds `|S| = n`, so `1/(n−1)` is identical on both sides:
+
+```
+E(S′) − E(S) = (b_m − b_j) + (1/(n−1))[ sum_{k≠j} α_m·α_k − sum_{k≠j} α_j·α_k ]
+             = (b_m − b_j) + α_m·ᾱ_j(S) − α_j·ᾱ_j(S)
              = u_m − u_j
 ```
 
-which is exactly the difference the softmax at `:489` scores. **The item head's
-conditionals are therefore the single-slot conditionals of `P(S) ∝ exp(E(S))` over
-baskets of fixed size *n*.** Training maximises Σ_j log P(j | S∖{j}) rather than
-log P(S), but the conditionals are consistent with that joint, so Gibbs sampling —
-resample one slot at a time from the current draft basket — converges to it.
+which is exactly the difference the candidate softmax scores at `27:492`. **The item
+head's conditionals are therefore the single-slot conditionals of `P(S) ∝ exp(E(S))` at
+fixed basket size `n`.** Training maximises `sum_j log P(j | S minus j)` rather than
+`log P(S)`, but those conditionals are consistent with that joint, so Gibbs sweeps over
+a draft basket converge to it.
 
 The `1/(n−1)` is what makes this work rather than what breaks it: it is constant inside
-a fixed-*n* conditional and cancels in `u_m − u_j`. Across different *n* the coupling
-strength differs, so `E` is a family indexed by basket size, not one energy over all
-baskets. That is not a problem for generation, because *n* is drawn from the incidence
-and breadth heads before any item is drawn.
+a fixed-`n` conditional and cancels in `u_m − u_j`. Across different `n` the coupling
+strength differs, so `E` is a family indexed by basket size rather than one energy over
+all baskets — which does not obstruct generation, because `n` is drawn from the
+incidence and breadth heads before any item is.
 
-### The nest, and how it survives multi-item baskets
+### 3.4 The nest
 
-The paper gets its nest from a within-category softmax plus an outside good — exactly
-what unit demand buys it. Drop unit demand and that construction is gone, but the nest
-is not. It survives as a **Poisson–multinomial factorisation**:
-
-```
-total units from category c     Q_ict ~ Poisson(exp(a_ic + κ_c · IV_ict))
-allocation across its items     multinomial(softmax_j u_ijt)
-IV_ict = log Σ_{j ∈ c, stocked at s} exp(u_ijt)
-```
-
-Poisson–multinomial factorises, so this is equivalent to independent counts
+The paper gets its nest from a within-category softmax plus an outside good, which is
+exactly what unit demand buys it. Drop unit demand — 68.2% of baskets violate it — and
+that construction is gone; the nest is not. It survives as a **Poisson–multinomial factorisation**:
 
 ```
-q_ijt ~ Poisson(exp(a_ic + (κ_c − 1)·IV_ict + u_ijt))
+units from category c    Q_ict ~ Poisson( exp( a_ic + κ_c · IV_ict ) )
+allocation across items  multinomial( softmax_j u_ijt ),  j in c and carried at s
+inclusive value          IV_ict = log sum over j in c carried at s of exp(u_ijt)
 ```
 
-and **κ is a nesting coefficient with the paper's interpretation**:
+Poisson–multinomial factorises, so this is equivalent to independent per-item counts
+
+```
+q_ijt ~ Poisson( exp( a_ic + (κ_c − 1)·IV_ict + u_ijt ) )
+```
+
+and `κ_c` is a nesting coefficient with the paper's interpretation:
 
 | κ | meaning |
 |---|---|
-| **= 1** | IV cancels. Category volume is whatever the items sum to — no expansion (IIA) |
-| **= 0** | category volume is fixed. A price cut only moves share |
+| **= 1** | `IV` cancels in the factorised form. Category volume is whatever the items sum to — no expansion (IIA) |
+| **= 0** | category volume is fixed; a price cut only moves share |
 | **> 1** | the category expands more than proportionally |
 
-κ is estimated per category, parameterised as `softplus(κ_raw)` initialised at exactly
-1.0 — the "IV cancels" point — so the data has to move it in either direction.
+`κ_c = softplus(κ_raw_c)` with `κ_raw` initialised at 0.5413 so `κ = 1.0` exactly — the
+"IV cancels" point — so the data has to move it in either direction (`27:254`).
 
-### Three heads
+### 3.5 The four heads
 
-| head | form | what it identifies |
-|---|---|---|
-| **item** | softmax over `{chosen} ∪ {20 negatives}` | allocation within category |
-| **quantity** | `units − 1 ~ Poisson(exp(z))`, own price coefficient `γ^q · β^q` | the quantity margin |
-| **incidence** | Bernoulli per (trip, category), logit includes `κ_c · IV_ict` | category expansion |
-| **breadth** | `distinct items − 1 ~ Poisson(exp(b₀_c + b_i − b^p_c · Δlog p̄))`, on bought categories only | how *wide* a category purchase is |
+Four likelihood terms sharing `u_ijt` (`27:487-521`).
 
-The quantity head has its **own** price coefficient rather than sharing the item one.
-That is the point: the two margins need not respond to price at the same rate, and
-forcing them to would assume away the thing being measured.
+**Item head** — allocation. Per purchased row, a softmax over the true item plus
+`n_neg = 20` sampled negatives, unavailable candidates masked to `−1e9`:
 
-**Why breadth needs its own head.** The incidence head only ever sees 0/1 — "was this
-category bought?" — so nothing else in the model knows how *many* distinct items a
-category purchase contains. Recovering a count from `P(buy)` via `λ = −log(1−p)`
-reproduces the probability correctly but implies
+```
+L_item = − mean over rows of  log [ exp(u_j) / sum over available m in cand of exp(u_m) ]
+```
 
-| P(buy) | implied items given a purchase |
+**Quantity head** — units on a purchased line, with its **own** price coefficient so
+the two margins are not forced to share one elasticity:
+
+```
+z_ijt = q0_j − (γq_i · βq_j)·Δlog p_jst + ηq_j · x_ijt          clamped to [−6, 4]
+units − 1 ~ Poisson( exp(z) )
+L_qty  = mean( exp(z) − k·z + log Γ(k+1) ),   k = max(units − 1, 0)
+```
+
+**Incidence head** — was this category bought on this trip. Bernoulli on
+
+```
+logit_ict = c0_c + (cu_i · cc_c) + (cs_c · x_ict) + κ_c · ( IV_ict − ivref_c )
+```
+
+`ivref_c` is a frozen per-category constant (§5.3). `x_ict` is the state basis
+evaluated at the category's first block item.
+
+**Breadth head** — given the category was bought, how many *distinct* items:
+
+```
+zb_ic = b0_c + bu_i − bp_c · Δlog p̄_ct                          clamped to [−6, 3]
+distinct items − 1 ~ Poisson( exp(zb) )
+```
+
+fitted on bought categories only. `Δlog p̄_ct` is the mean price deviation across that
+category's stocked items (`27:427`), so a promotion widens the basket as well as
+deepening it.
+
+**Why breadth needs its own head.** The incidence head only ever sees 0/1, so nothing
+else in the model knows how many distinct items a category purchase contains.
+Recovering a count from `P(buy)` via `λ = −log(1−p)` reproduces the probability but
+implies
+
+| P(buy) | implied E[items given bought] |
 |---|---|
 | 0.02 | 1.010 |
 | 0.05 | 1.026 |
 | 0.10 | 1.054 |
 | 0.20 | 1.116 |
 
-against a real **1.284**. It can only ever produce ~1.0–1.1, and it produced 1.086.
-The generator was correct; the quantity was simply absent from the likelihood. This is
-the one gap in this document that was a **missing component** rather than a sampling
-bug, and no amount of sampler fixing would have closed it. Real distribution: 81.1% of
-category purchases are one item, 13.4% two, 3.4% three, 2.1% more.
+against a real **1.284**. It can only ever produce about 1.0–1.1. This was the one gap
+among the fixes in §10 that was a *missing component* rather than a sampling bug.
+
+### 3.6 Objective
+
+One scalar per step (`27:612-618`):
+
+```
+loss = L_item + w_q·L_qty + w_c·L_incidence + w_b·L_breadth
+       + ( l2 · ||repr||²  +  l2price · ||price||² ) / B
+```
+
+with `w_q = w_c = w_b = 1`, `l2 = 0.01`, `l2price = 0.0001`, and `B` the number of item
+rows in the batch.
+
+**The two L2 groups are separate on purpose.** `l2_repr` covers `α, θ, η, μ, δ, ζ, ξ`
+and the incidence embeddings; `l2_price` covers only `γ, β, γq, βq`. Shrinking the
+price block at the representation block's rate biases the elasticity toward zero, and
+the elasticity is the quantity being measured.
+
+Adam, `lr = 0.005` cosine-annealed to `0.05·lr` over 12,000 iterations. A batch is
+192 baskets, expanded to all of their purchase rows.
 
 ---
 
 ## 4. Where stores enter
 
-Three distinct channels, which must be kept separate because they are not equally
-meaningful:
+Three channels, which must be kept apart because they are not equally meaningful:
 
-1. **Store-level price deviation**, added to the chain deviation where the
-   store-week was observed (2.3% of the grid; the rest falls back to chain price).
-   This is information.
+1. **Store-level price deviation**, added to the chain deviation where that store-week
+   was observed — 244,880 cells, **0.53%** of the (item × store × week) grid. Everything
+   else falls back to the chain price. This is information.
 2. **Store × item affinity** `ζ_j · ξ_s`, low rank — format and assortment differ.
    This is information.
-3. **The availability mask** — unstocked items leave the choice set entirely.
-   This makes the ranking task **mechanically easier**, because there are fewer real
-   competitors in the softmax denominator.
+3. **The availability mask.** Items a store never sold are masked out of the softmax
+   denominator. This makes the ranking task **mechanically easier**, because there are
+   fewer real competitors.
 
-Ablations `--no-store`, `--no-store-price` and `--avail-only` exist specifically to
-separate (3) from (1) and (2). **Any claim about how much stores are worth must
-report that split**, or it is claiming credit for a smaller choice set.
+`--no-store`, `--no-store-price` and `--avail-only` exist to separate (3) from (1) and
+(2). **Any claim about what stores are worth must report that split** (§8.2), or it is
+claiming credit for a smaller choice set.
 
 ---
 
 ## 5. Fitting
 
-`scripts/27_nested_basket.py`. Adam, cosine-decayed learning rate, best-validation
-checkpoint on a combined score across the three heads.
+### 5.1 Negative sampling
 
-### Negative sampling
+Negatives are drawn from a unigram^0.75 distribution over **training** purchase counts
+(`27:151-153`):
 
-Unigram^0.75 over training purchases, 20 negatives per positive, drawn only from items
-the trip's store actually stocks.
+```
+p_neg(j) ∝ max(count_train(j), 1) ^ 0.75
+```
 
-### The inclusive value is sampled, not summed
+`n_neg = 20` per positive, so each softmax has 21 candidates.
 
-Every category is padded to the largest one (**225 items**) although the median has
-**15**, so a dense IV block spends most of its work on padding and cost **5.4× the item
-head**. Instead `iv_cap` (default 32) items are sampled per category and the sum scaled
-by `n_c / m` — an unbiased estimator of `Σ_j exp(u_j)`, at fixed cost per category.
+**Negatives are drawn from the whole catalogue, then masked** (`27:310`, `27:325-328`).
+They are *not* drawn only from what the store stocks, which earlier versions of this
+document and the module docstring both claimed. The sequence is: sample 20 items from
+all `J`, look up `carried[j, s]`, force the true item's slot to available (it was
+bought there, so it was stocked), and mask the rest to `−1e9`. A consequence worth
+knowing: the **effective** number of competitors is below 20 and varies by store, since
+an unstocked draw contributes nothing to the denominator.
 
-Without this the run was on track for **9 hours**; with it, 8.4 minutes.
+### 5.2 Category sampling for the incidence head is UNIFORM
 
-### Incidence is case-control sampled, and corrected
+`incidence_batch` (`27:337-433`) draws `n_cat = 16` categories per trip **uniformly**
+from all 188, independent of what the trip bought:
 
-The true incidence base rate is **6.1 of 188 categories = 3.25%**. Sampling categories
-uniformly would give 0.13 positives per trip, so the sampler takes a few bought and a
-few not — which over-samples positives about **30×**.
+```
+for each trip:  c ~ Uniform{0, ..., C−1},  n_cat draws
+                y = 1 if that trip bought category c, else 0
+```
 
-An uncorrected head is therefore calibrated to the *sample*, not to reality. The
-symptom was unmissable once baskets were generated: 58 categories per basket against a
-real 6.5, a **logit error of 3.39** which is almost exactly `log(30)`.
+The base rate is low — 6.075 categories per training basket out of 188, so **3.23%** — and
+uniform sampling therefore sees about 0.52 positives per trip. That is the price paid,
+and it is paid deliberately.
 
-The fix is the standard case-control correction: an offset `log(π₁/π₀)` is added inside
-the logit **during training** and dropped at prediction, so probabilities come out on
-the population scale. It is computed per trip, since it depends on how many categories
-that trip bought.
+**Case-control sampling was tried and abandoned.** Taking a few bought and a few not
+over-samples positives about 30×, and it biases the fit in two separate ways:
+
+1. **the intercept** — which the standard offset `log(π₁/π₀)` does correct;
+2. **the term `κ_c · (IV − ivref)`** — whose *mean differs between the sample and the
+   population*, because bought categories have higher inclusive values. The offset does
+   not touch this. `c0` absorbs the training-sample average, and at generation time a
+   uniform draw sits about 0.9 lower in `(IV − ivref)`; with `κ ≈ 0.8` that is a 0.73
+   error in the logit, which emptied the generated baskets — 4.0 categories against a
+   real 6.5, median basket 0 items.
+
+Uniform sampling removes both at source and needs **no correction at all**. `off` is
+still built in `incidence_batch` and returned in the batch dict, but it is always 0.0
+and `losses` never reads it — dead code left from the case-control version.
+
+### 5.3 The inclusive value is sampled, and the reference is frozen
+
+**Sampled.** Categories are padded to the largest (225 items) although the median has
+15, so a dense `IV` block spends most of its work on padding. Instead `iv_cap = 32`
+items are drawn per category (with replacement, `27:386-390`) and the sum scaled:
+
+```
+IV_hat = log ( sum over the m sampled items of exp(u) )  +  log( n_c / m )
+```
+
+The **sum** inside is unbiased for `Σ_{j∈c} exp(u_j)`: each draw is uniform over the
+`n_c` valid items, so `E[(n_c/m)·Σ_sampled exp(u)] = Σ_j exp(u_j)`. The **log** of it is
+not — by Jensen, `E[log X] ≤ log E[X]`, so `IV_hat` is biased slightly low. The bias is
+absorbed into `c0_c` for training, which is why it does no harm there, and generation
+uses the same estimator so the two stay consistent.
+
+**Frozen reference.** `ivref_c` is fixed once, at iteration 500, to the mean `IV` over a
+**uniform** category sample (`uniform_iv`, `27:436-484`, 24 categories per trip × 8
+batches). Any fixed constant is absorbed by `c0`, so freezing does not change the fit —
+it guarantees training and generation subtract the *same* thing. Taking the reference
+from `incidence_batch` instead used the case-control sample, which over-weights bought
+categories; the reference then sat ≈0.9 too high and most generated baskets came out
+empty.
+
+Categories with nothing stocked at that store get `IV = 0` rather than `−1e9`, so the
+category intercept explains them instead of the inclusive value dominating the logit
+(`27:424`).
+
+### 5.4 Checkpointing
+
+Validation is run every 6,000 iterations on up to 3,000 baskets. The checkpoint is kept
+on
+
+```
+score = val_item_loglik − w_q·val_quantity_NLL − w_c·val_incidence_NLL
+```
+
+(`27:633`). **Breadth is not in the score** — it has no held-out scalar in `evaluate`,
+so it is trained but never used for model selection. The final test pass reloads the
+best checkpoint and scores 6,000 baskets with a fixed seed.
+
+Note `--iv-center` is accepted, threaded through `evaluate` and `losses`, and **never
+read** — `losses` centres on `model.iv_ref` alone. Dead argument.
 
 ---
 
@@ -262,30 +417,31 @@ that trip bought.
 
 ### Two vectorised lookups
 
-Both the household state and the store price are sparse, high-cardinality lookups that
-would be ruinous done naively — materialising (household × day × sub-commodity) is ~32
-million rows, and a per-sample Python dict would be ~35 million hits per epoch.
+Household state and store price are both sparse, high-cardinality lookups that are
+ruinous done naively: materialising (household × day × sub-commodity) is ≈32 million
+rows, and a per-sample Python dict is ≈35 million hits per epoch.
 
-Both use the same trick: values are stored once as a **globally sorted key array**
-(`key = group_id · stride + index`), so a whole batch resolves in a single
+Both use one trick — values stored once as a globally sorted key array,
+`key = group_id · stride + index`, so a whole batch resolves in a single
 `np.searchsorted`. The stride exceeds any index, so ordering never crosses a group
 boundary.
 
-### Measured performance
+### Measured cost
 
-| model | iterations | wall time | ms/iter |
+From `out/*_nested_history.json`, the `secs` field at the last evaluation (wall clock,
+including validation passes), CPU:
+
+| run | iterations | wall time | ms/iter |
 |---|---|---|---|
-| flat (`one`) | 12,000 | 3.5 min | 17.7 |
-| **nested** | 12,000 | **8.4 min** | **42.1** |
+| `nested` | 12,000 | 10.8 min | 53.8 |
+| `nested_nostore` | 12,000 | 7.9 min | 39.5 |
+| `nested_nonest` | 12,000 | 3.7 min | 18.3 |
 
-2.4× the flat model for three heads instead of one. Six variants ≈ 50 minutes.
-
-**Known bottleneck:** `np.searchsorted` is ~40% of every step (~60,000 queries per
+**Known bottleneck:** `np.searchsorted` is roughly 40% of a step (≈60,000 queries per
 iteration). State features are *data, not parameters* — they depend only on
 (household, sub-commodity, day) and never change during training — yet they are
 recomputed every iteration for every sampled candidate. Deduplicating repeated
-candidates within a batch would recover roughly half of that, ~20% of the step. Not
-yet done.
+candidates within a batch would recover about half of that. Not done.
 
 ### Scalability
 
@@ -294,8 +450,8 @@ yet done.
 | catalogue size | **independent** — negative sampling fixes candidates at 21 |
 | households | **independent** — only the embedding table grows |
 | baskets | **independent per step** |
-| categories | capped at `n_cat` sampled per trip |
-| items per category | capped at `iv_cap` by the sampled IV |
+| categories | capped at `n_cat = 16` sampled per trip |
+| items per category | capped at `iv_cap = 32` by the sampled IV |
 
 Nothing is quadratic in items or households.
 
@@ -303,292 +459,319 @@ Nothing is quadratic in items or households.
 
 ## 7. Acceptance criteria
 
-The model is not "done" until each of these is demonstrated. Results go in §8 only
-as they are met.
+| # | requirement | test | status |
+|---|---|---|---|
+| 1 | **multiple items** per category and across categories | likelihood admits multisets; no unit-demand filter | ✅ all 188 categories retained, none dropped for unit demand |
+| 2 | **multiple quantities**, with price interaction | quantity head with its own coefficient | ✅ `γq·βq` = +0.134 against the item head's +0.794; 12% of total elasticity (§8.4) |
+| 2b | **multiple items per category** | breadth head | ✅ generated 1.324 items per purchased category against a real 1.287 (§8.6) |
+| 2c | **product interaction** | tied `α_j · ᾱ(basket)` | ✅ 0.115 nats, and purity 0.2976 → 0.2119 without it (§8.1b) — but inert outside the item head |
+| 3 | **household state as a level** | recency basis per (household, sub-commodity) | ✅ 0.076 nats against a 0.0032 seed spread (§8.7) |
+| 4 | **nested theory retained** | `κ` estimated per category | ⚠️ `κ` = 0.663, stable across seeds, but weakly identified (§8.4) |
+| 5 | **store information used** | prices, affinity, availability | ⚠️ used, but 99.7% of the gain is the availability mask, not information (§8.2) |
+| 6 | **embeddings recover sub-commodity structure** | `24_embedding_eval.py`, against random / popularity / nf | ⚠️ 69.6× chance, AUC 0.8222 — beats every control decisively, but marginally **below** the flat model's 70.6× and 0.8233 (§8.5) |
+| 7 | **data generation** | roll incidence → breadth → items → units forward | ✅ items -1.0%, units -1.4%, categories -3.8% against held-out (§8.6) |
+| 8 | **what-if on price** | structural placebo + elasticity decomposition | ✅ placebo retains 0.0% of the coefficient; decomposition sums exactly (§8.3) |
+| 9 | **beats a simpler alternative** | one scorer, identical candidate sets, tuned baselines | ✅ +0.342 nats and 8.5 points of top-1 over household repeat-purchase (§8.1c) |
 
-| # | requirement | test | target | status |
-|---|---|---|---|---|
-| 1 | **multiple items** per category and across categories | likelihood admits multisets; no unit-demand filter | 188 categories retained, none dropped for unit demand | ✅ met by construction |
-| 2 | **multiple quantities**, with interaction | quantity head with its own price coefficient | quantity elasticity distinguishable from zero and from the item one | ✅ +0.134 against the item's +0.794; 12% of total elasticity (§8.4) |
-| 2b | **multiple items per category** | breadth head | generated breadth matches real | ✅ 1.280 implied against a real 1.284 (§8.1) |
-| 2c | **product interaction** | tied `α_j · ᾱ(basket)` | ablation cost > seed noise, and it moves the embedding | ✅ 0.115 nats; purity 0.298 → 0.212 without it (§8.1b) — but inert outside the item head |
-| 3 | **household state as a level** | recency basis per (household, sub-commodity) | ablation cost > seed noise | ✅ 0.076 nats against a 0.0032 seed spread (§8.7) |
-| 4 | **nested theory retained** | κ estimated per category | κ identified, and its ablation reported | ✅ κ = 0.663, stable across seeds — but weakly identified (§8.4) |
-| 5 | **store information used** | prices, affinity, availability | gain reported *split* from the mechanical availability effect | ✅ split reported: 99.7% is the availability mask (§8.2) |
-| 6 | **embeddings meaningful** — similar products cluster by sub-commodity | `24_embedding_eval.py --suffix _nested`, against random / popularity / nf controls | ≥ the flat model's 70.6× chance and AUC 0.823 | ✅ 70.1× and AUC 0.828 on the full catalogue; 12.1× against nf's 1.0× head-to-head (§8.5) |
-| 7 | **data generation** | roll incidence → breadth → items → units forward, compare basket shape with held-out | items, categories and units within ~10% of real | ✅ items −1.1%, units −1.4%, categories −3.7% (§8.6) |
-| 9 | **beats a simpler alternative** | one scorer, identical candidate sets, validation-tuned baselines | clear margin over household repeat-purchase | ✅ +0.394 nats, +8.6 pts top-1 (§8.1c) |
-| 8 | **what-if on price** | structural placebo + elasticity decomposition | placebo retains ~0% of the coefficient; decomposition sums | ✅ placebo retains 0.0%; decomposition sums exactly (§8.3) |
+Criteria 4, 5 and 6 are marked ⚠️ rather than ✅. Each is *met* in the sense that the
+component exists and is used, but each carries a qualification that the ✅ would hide,
+and those qualifications are the honest content of §8.
 
 ---
 
 ## 8. Results
 
-Seven of the eight criteria in §7 are met; generation (7) is close but not within
-target. All numbers below are from one consistent fit — the recipe in §5 with uniform
-incidence sampling — with a seed replicate to bound run-to-run noise.
+All fits use the recipe in §5. Sources: `out/*_nested_history.json` (fit and
+ablations), `out/nested_counterfactual.json` (placebo, decomposition, generation),
+`out/benchmark.json` (§8.1c), `out/embedding_eval.json` (§8.5).
 
-**Seed spread is 0.0032 nats** (`nested` −1.9927 against `nested_s1` −1.9895), so every
-gap below larger than ~0.01 is real.
+**Seed spread is 0.0032 nats** on item log-likelihood (`nested` -1.9927 against
+`nested_s1` -1.9895), so any gap below larger than ≈0.01 is real.
 
 ### 8.1 Fit and ablations
 
+Test-set item log-likelihood, top-1, and the two auxiliary NLLs:
+
 | model | item log-lik | top-1 | quantity NLL | incidence NLL | cost of removing |
 |---|---|---|---|---|---|
-| **`nested`** | **−1.9927** | 0.378 | 0.6666 | 0.1104 | — |
-| seed 1 | −1.9895 | 0.379 | 0.6693 | 0.1103 | — |
-| no store | −2.1820 | 0.355 | 0.6651 | 0.1102 | **0.189** |
-| no interaction | −2.1074 | 0.347 | 0.6666 | 0.1101 | **0.115** |
-| no state | −2.0684 | 0.360 | 0.6665 | 0.1106 | **0.076** |
-| prices scrambled | −2.0416 | 0.362 | 0.6887 | 0.1103 | 0.049 |
-| availability only | −1.9932 | 0.375 | 0.6651 | 0.1104 | 0.001 |
-| no breadth | −1.9927 | 0.378 | 0.6666 | 0.1104 | 0.000 |
-| no quantity | −1.9925 | 0.378 | — | 0.1104 | 0.000 |
-| no nest | −1.9877 | 0.380 | 0.6677 | — | **−0.005** |
+| **`nested`** | -1.9927 | 0.378 | 0.6666 | 0.1104 | — |
+| seed 1 | -1.9895 | 0.379 | 0.6693 | 0.1103 | — |
+| no store | -2.1820 | 0.355 | 0.6651 | 0.1102 | **0.189** |
+| no interaction | -2.1074 | 0.347 | 0.6666 | 0.1101 | **0.115** |
+| no state | -2.0684 | 0.360 | 0.6665 | 0.1106 | **0.076** |
+| prices scrambled | -2.0416 | 0.362 | 0.6887 | 0.1103 | **0.049** |
+| availability only | -1.9932 | 0.375 | 0.6651 | 0.1104 | **0.001** |
+| no breadth | -1.9927 | 0.378 | 0.6666 | 0.1104 | **0.000** |
+| no quantity | -1.9925 | 0.378 | — | 0.1104 | **-0.000** |
+| no nest | -1.9877 | 0.380 | 0.6677 | — | **-0.005** |
 
 **Three of the four heads cost nothing on item ranking, and the nest is marginally
-better without.** That is the design working, not failing. The item head ranks items;
-the nest, quantity and breadth heads answer questions the item head does not ask, and
-they share only the item utility `u_ijt`. A head that improved item ranking *because*
-it also modelled category incidence would mean the two were entangled — which is what
+better without it.** That is the design working, not failing. The item head ranks
+items; the nest, quantity and breadth heads answer questions the item head does not
+ask, and they share only `u_ijt`. A head that improved item ranking *because* it also
+modelled category incidence would mean the two were entangled — which is exactly what
 `BASKET_MODEL.md` §2 had to fix in the flat model, where a free `ρ` absorbed structure
 that belonged in `α`.
 
-So each head has to be scored on its own quantity:
+So each head must be scored on its own quantity:
 
 | head | scored on | result |
 |---|---|---|
-| item | item log-lik, top-1 | −1.9927, 0.378 |
-| interaction (tied `α·ᾱ`) | item log-lik, and embedding purity | 0.115 nats; purity 0.298 → 0.212 without it |
-| incidence | incidence NLL, and κ | 0.1104; κ = 0.663 |
+| item | item log-lik, top-1 | -1.9927, 0.378 |
+| interaction (tied `α·ᾱ`) | item log-lik, and embedding purity | 0.115 nats; purity 0.2976 → 0.2119 |
+| incidence | incidence NLL, and `κ` | 0.1104; `κ` = 0.663 |
 | quantity | units per item in generation | 1.343 against a real 1.348 (§8.6) |
-| breadth | distinct items per category | 1.280 implied against a real 1.284 |
+| breadth | distinct items per purchased category | 1.324 against a real 1.287 (§8.6) |
 
-The breadth head is a case in point. On item log-likelihood it is worth **0.000** — the
-two runs agree to four decimals — yet without it generated baskets hold 6.94 items
-against a real 8.36, and with it 8.27 (§8.6). Judging it by the ablation column alone
-would have deleted the fix for the only criterion that was failing.
-
-**Seed spread is 0.0032 nats**, so the store, interaction, state and placebo gaps are
-15–60× noise, and the three zero-cost heads are genuinely zero rather than small.
+The breadth head is the case in point. On item log-likelihood it is worth **0.000** —
+the two runs agree to four decimals — yet without it generated baskets hold 6.94 items
+against a real 8.36, and with it 8.27. Judging it by the ablation column alone would
+have deleted the fix for the only criterion that was failing.
 
 ### 8.1b The interaction term, and where it is inert
 
-The tied interaction `α_j · ᾱ(basket)` was carried over from the flat model and was
-**hard-wired here until this audit** — there was no `--no-context` flag, so the claim
-that it is load-bearing rested entirely on the flat model's evidence rather than on
-anything measured in this one. It now has a flag, and it is:
-
 | | with interaction | without |
 |---|---|---|
-| item log-lik | **−1.9927** | −2.1074 |
-| embedding purity | **0.298** (69.6× chance) | 0.212 (49.5×) |
-| embedding AUC | **0.822** | 0.727 |
+| item log-lik | **-1.9927** | -2.1074 |
+| embedding purity (5,455 items) | **0.2976** (69.6× chance) | 0.2119 (49.5×) |
+| embedding AUC | **0.8222** | 0.7267 |
 
-**0.115 nats**, the second-largest component after store availability, and it is the
-only thing besides the store mask that materially moves the embedding. So the flat
-model's finding replicates here.
+**0.115 nats**, the second-largest component after the store availability mask, and the
+only thing besides that mask which materially moves the embedding.
 
-**But it is inert in three of the four places the model is used**, which no document
-previously said:
+**But it is inert in three of the four places the model is used:**
 
 | where | context | why |
 |---|---|---|
-| item head | **active** | the basket is known; this is what the 0.115 measures |
-| incidence head | zeroed | incidence is decided *before* the basket exists — conditioning on it would be circular |
-| elasticity decomposition (§8.4) | zeroed | evaluated at the point of category choice, so pre-basket |
-| generator (§8.6) | zeroed | baskets are built category by category, so no basket exists yet to condition on |
+| item head | **active** | the basket is known; this is what 0.115 measures |
+| incidence head (`27:413`) | zeroed | incidence is decided *before* the basket exists — conditioning on it would be circular |
+| elasticity decomposition (`28:111`) | zeroed | evaluated at the point of category choice, so pre-basket |
+| generator (`28:198`) | zeroed | one forward pass, category by category; no draft basket to condition on |
 
 The first two are correct by construction. **The third is a real limitation**: the
 reported allocation channel excludes any interaction effect, so a price cut that
-changes *what else lands in the basket* is not counted in the −1.188.
+changes *what else lands in the basket* is not counted in the -1.188.
 
-**The fourth is a gap in my sampler, and it is fixable.** §3 shows the item head's
-conditionals are those of `P(S) ∝ exp(E(S))` at fixed basket size, so there *is* a
-joint to sample from — Gibbs sweeps over a draft basket converge to it, and *n* is
-already drawn from the incidence and breadth heads before any item is. My generator
-makes one forward pass category by category and never revisits a slot, so it has no
-draft to condition on and zeroes the context. The cost is that generated baskets carry
-no co-purchase structure at all: the term worth 0.115 nats contributes nothing to the
-data the generator emits. Both limitations are in §9.
+**The fourth is a gap in the sampler, and it is fixable.** §3.3 shows the item head's
+conditionals are those of `P(S) ∝ exp(E(S))` at fixed basket size, so there *is* a joint
+to sample from, and `n` is drawn from the incidence and breadth heads before any item
+is. Gibbs sweeps over a draft basket would converge to it. The current generator never
+revisits a slot, so generated baskets carry no co-purchase structure at all: the term
+worth 0.115 nats contributes nothing to the data the generator emits.
 
 ### 8.1c Benchmarks against simpler alternatives
 
 ![benchmark](figures/benchmark.png)
 
-**Reading it.** One bar per model, both panels on the same 51,167 held-out purchases
-and the same candidate sets. *Left*: mean log-probability assigned to the item that
-was actually bought, among 1 true + 20 sampled alternatives; the dashed line is
-uniform over that set. *Right*: how often the true item is ranked first, with ties
-broken at random — without that, a model with no information ranks the true item
-first every time, because it sits in column 0.
-
-
 Everything in §8.1 is an **ablation** — the model against itself with a piece removed.
-That shows each piece is used; it does not show the model beats something a
-practitioner would actually reach for. This section does, with every model scored
-through **one scorer on identical candidate sets**: same positives, same negatives,
-same availability mask.
+That shows each piece is used; it does not show the model beats what a practitioner
+would reach for. Every model here is scored through **one scorer on identical candidate
+sets**: same positives, same negatives, same availability mask, 51,167 held-out
+purchases with 20 negatives each.
 
 That protocol detail matters. The nested model masks unstocked items out of its choice
-set, which shrinks the softmax denominator and mechanically raises its log-likelihood
-(§8.2 measures this at 99.7% of the apparent store gain). Comparing its own reported
-number against a differently-evaluated baseline would credit it for an easier
-question.
+set, which shrinks the denominator and mechanically raises its log-likelihood (§8.2
+measures this at 99.7% of the apparent store gain). Comparing its own reported number
+against a differently-evaluated baseline would credit it for an easier question.
 
 | model | log-lik | top-1 | vs popularity |
 |---|---|---|---|
-| **nested** | **−2.0011** | **0.371** | **+0.736** |
-| nested, no interaction | −2.1195 | 0.342 | +0.618 |
-| household repeat-purchase | −2.3428 | 0.285 | +0.395 |
-| popularity | −2.7375 | 0.091 | — |
-| random | −2.7378 | 0.067 | −0.000 |
-| household + co-occurrence | −3.0526 | 0.182 | −0.315 |
-| item–item co-occurrence | −3.0655 | 0.078 | −0.328 |
+| **nested** | -2.0011 | 0.371 | +0.736 |
+| nested, no interaction | -2.1195 | 0.342 | +0.618 |
+| household repeat-purchase | -2.3428 | 0.285 | +0.395 |
+| popularity | -2.7375 | 0.091 | +0.000 |
+| random | -2.7378 | 0.067 | -0.000 |
+| household + co-occurrence | -3.0526 | 0.182 | -0.315 |
+| item–item co-occurrence | -3.0655 | 0.078 | -0.328 |
 
-51,167 held-out purchases, 20 negatives each. Baseline weights and temperatures are
-**tuned on validation**, because the fitted model had its hyperparameters selected and
-an untuned baseline is not a fair reference.
+Baseline weights and temperatures are **tuned on validation**, because the fitted model
+had its hyperparameters selected and an untuned baseline is not a fair reference.
 
-**The honest reading.** The strongest baseline is not popularity, it is
-**household repeat-purchase** — "this household bought it before" — which reaches
-top-1 of 0.285 against the model's 0.371. Grocery is repetitive, and most of what a
-model can predict is that people rebuy what they always rebuy. The model's real margin
-over a serious baseline is **0.394 nats and 8.6 points of top-1**, not the +0.736
-against popularity that a friendlier framing would quote.
+**The honest reading.** The strongest baseline is not popularity, it is **household
+repeat-purchase** — "this household bought it before" — at top-1 0.285 against the
+model's 0.371. Grocery is repetitive, and most of what any model can predict is that
+people rebuy what they always rebuy. The model's real margin over a serious baseline is
+**+0.342 nats and 8.5 points of top-1**, not the +0.736 against popularity that a
+friendlier framing would quote.
 
-Two results worth stating because they cut against the model:
+Two results that cut against the model:
 
-- **Popularity ≈ random here (−2.7375 vs −2.7378).** Negatives are drawn
-  unigram^0.75, i.e. popularity-weighted, so popularity is being asked to separate a
-  popular true item from popular decoys. That is a deliberately hard test, and it
-  means "we beat popularity by 0.74 nats" is a much weaker claim than it sounds.
-- **Item–item co-occurrence scores below random.** Counting which items co-occur is a
-  model-free stand-in for the interaction term, and on its own it is worse than
-  nothing at this task — the signal exists (§2 of `DATA_EXPLORATION.md`) but raw
-  counts cannot exploit it against popularity-matched decoys. The learned tied
-  embedding can: removing it costs 0.118 nats here.
+- **Popularity ≈ random** (-2.7375 vs -2.7378). Negatives are drawn unigram^0.75, i.e.
+  popularity-weighted, so popularity is being asked to separate a popular true item
+  from popular decoys. "We beat popularity by +0.736 nats" is therefore a much weaker
+  claim than it sounds.
+- **Item–item co-occurrence scores below random** (-3.0655). Counting co-occurrence is
+  a model-free stand-in for the interaction term, and on its own it is worse than
+  nothing here — the signal exists (`DATA_EXPLORATION.md` §2) but raw counts cannot
+  exploit it against popularity-matched decoys. The learned tied embedding can:
+  removing it costs 0.118 nats on this same scorer.
+
+**What this section does not measure.** The item log-likelihood is a *conditional*
+number: `P(item j | the other items in the same basket, household, week, store,
+prices)`. Test baskets are from held-out weeks, so nothing leaks across time, but every
+model here — the nested model and the co-occurrence baselines alike — is told the rest
+of the basket. It is a fill-in-the-blank score, not "predict the basket". The
+from-scratch test is §8.6, where the context is zeroed everywhere.
 
 ### 8.2 Criterion 5 — stores, split honestly
 
 | | item log-lik | gain |
 |---|---|---|
-| no store at all | −2.1820 | — |
-| **+ availability mask only** | −1.9932 | **+0.1888** |
-| + store prices and affinity | −1.9927 | **+0.0005** |
+| no store at all | -2.1820 | — |
+| **+ availability mask only** | -1.9932 | **+0.1888** |
+| + store prices and affinity | -1.9927 | **+0.0005** |
 
 **99.7% of the store gain is the mechanically smaller choice set**, not information.
-It replicates the 99.5% measured on the previous recipe, so this is stable.
 
 Modelling stores was still correct — treating an item a store never stocked as a
 *rejected* alternative is a specification error — but it is a correctness fix, not an
 information gain, and it makes item log-likelihood **incomparable to the flat model**
 in `BASKET_MODEL.md`.
 
-This sits awkwardly against §7.3 of `DATA_EXPLORATION.md`, which finds households use a
-median of 4 stores with 30% of consecutive trips switching. Store-level prices ought
-to matter. That they contribute 0.0005 nats suggests either the 2.3% grid coverage is
-too sparse to help or the chain price is already a good proxy. Open question, recorded
-in §9 rather than resolved.
+This sits awkwardly against `DATA_EXPLORATION.md` §7.3, which finds households use a
+median of 4 stores with 30% of consecutive trips switching. Store-level prices ought to
+matter. That they contribute +0.0005 nats suggests either that 0.53% grid coverage is
+too sparse to help, or that the chain price is already a good proxy. Open question,
+recorded in §9 rather than resolved.
 
 ### 8.3 Criterion 8 — is the price response causal?
 
+Coefficients are the median of `γ @ βᵀ` and `γq @ βqᵀ` over all (household, item) pairs,
+read directly from the checkpoints:
+
 | model | price coefficient | quantity price coefficient | κ |
 |---|---|---|---|
-| `nested` | **+0.794** | +0.134 | 0.663 |
-| seed 1 | **+0.794** | +0.109 | 0.674 |
-| **prices scrambled** | **−0.000** | **−0.000** | 0.675 |
+| `nested` | **+0.7945** | +0.1339 | 0.6626 |
+| `nested_s1` (seed 1) | +0.7942 | +0.1085 | 0.6740 |
+| **`nested_pl`** (prices scrambled) | **−0.0000** | **−0.0000** | 0.6752 |
 
-The structural placebo retains **0.0%** of the price coefficient and costs 0.049 nats
-of item ranking, while leaving κ and incidence NLL untouched. Prices scramble;
-category structure does not. The coefficient replicates exactly across seeds.
+The **structural placebo** refits the whole model on a price panel scrambled before
+fitting (`--placebo-price permute`, `27:96-103`), including the store-level deviations
+(`27:118-120`) — leaving those real would leak genuine prices back in. It retains
+0.0% of the price coefficient and costs 0.049 nats of item ranking, while leaving `κ`
+and the incidence NLL untouched. Prices scramble; category structure does not.
 
-For scale, `29_demand_eda.py` measures a model-free within-item elasticity of
-**−0.945 on units**; the model's allocation channel alone is −0.99.
+For scale, `29_demand_eda.py` measures a model-free within-item elasticity of **−0.945
+on units**; the model's allocation channel alone is -0.991.
 
-### 8.4 Criterion 2 and 4 — where a price cut actually goes
+### 8.4 Criteria 2 and 4 — where a price cut actually goes
+
+A 1% cut in item `j`'s price moves demand through three channels. From the softmax and
+the Poisson–multinomial (`28:125-135`):
 
 ```
-total own-price elasticity          −1.188
-  allocation  (share within category)  −0.991   (83%)
-  incidence   (the category expands)   −0.058   ( 5%)
-  quantity    (units per buyer)        −0.139   (12%)
+allocation   d log π_j / d log p_j  = −(γ_i·β_j) · (1 − π_j)
+incidence    d(κ·IV)  / d log p_j   = −κ_c · (γ_i·β_j) · π_j
+quantity     d log E[units]/d log p = −(γq_i·βq_j) · λ/(1+λ),   λ = exp(z)
 ```
 
-This is the decomposition the flat model could not produce, and it is the answer to
-"does cutting Tide's price grow detergent volume or just move share from Gain".
+The allocation and incidence terms are exact derivatives of the same softmax, which is
+why they carry `(1 − π_j)` and `π_j` respectively and why the two sum to
+`−(γ·β)·(1 − π_j(1 − κ))`. Evaluated on 12,724 held-out purchase rows:
+
+```
+total own-price elasticity (mean)   -1.188
+  allocation  (share within category)  -0.991   (83%)
+  incidence   (the category expands)   -0.058   (5%)
+  quantity    (units per buyer)        -0.139   (12%)
+```
+
+The median total is -0.943; **the shares are computed from means because medians do not
+decompose additively** — reporting median components against a median total does not
+sum to 100% (`28:139-141`).
 
 **Mostly it moves share.** 83% of the response is reallocation inside the category;
-only 5% is the category expanding. The quantity margin is **12%** — an eighth of the
-total that a binary-purchase model cannot reach at all, and independently corroborated
-by the model-free units-per-buyer elasticity of −0.235 in `DATA_EXPLORATION.md` §6.1.
+only 5% is the category expanding. The quantity margin is **12%** — a share that a
+binary-purchase model cannot reach at all, independently corroborated by the model-free
+units-per-buyer elasticity of −0.235 in `DATA_EXPLORATION.md` §6.1.
 
-**κ = 0.663, with only 1% of categories above 1.** Below 1 means a price cut grows the
-category *less* than proportionally to what the items gain.
+**κ = 0.663, with 1.1% of categories above 1.** Below 1 means a price cut grows the
+category *less* than proportionally to what its items gain.
 
 Read κ with care. Across three incidence samplers it moved 1.411 → 0.790 → 0.663, and
-only the last is unbiased (§5). It moved with the *sampler*, not the data. The estimate
-is stable across seeds (0.663 vs 0.674) but that history means **κ is weakly
-identified** and no argument here rests on its exact value.
+only the last is unbiased (§5.2). It moved with the *sampler*, not the data. It is
+stable across seeds (0.663 vs 0.674), but that history means **κ is weakly identified**
+and no argument here rests on its exact value.
 
 ### 8.5 Criterion 6 — do the embeddings recover sub-commodity structure?
 
-Head-to-head on the same 409 items, same ground truth, which the model never sees:
+Sub-commodity labels are held out of the model entirely. On the full 5,455-item catalogue
+(`out/embedding_eval.json`):
 
 | | kNN purity | × chance | AUC | silhouette |
 |---|---|---|---|---|
-| **`nested` α** | **0.165** | **12.1×** | **0.805** | **−0.054** |
-| nf β (the paper) | 0.014 | 1.0× | 0.379 | −0.313 |
+| **`nested` α** | 0.2976 | 69.6× | 0.8222 | -0.1610 |
+| no interaction | 0.2119 | 49.5× | 0.7267 | -0.2250 |
+| control: popularity | 0.0038 | 0.9× | 0.5100 | -0.4468 |
+| control: random | 0.0037 | 0.9× | 0.4986 | -0.3143 |
 
-On the full 5,455-item catalogue `nested` reaches 0.300 purity (**70.1× chance**), AUC
-0.828, against random and popularity controls at 0.004 (0.9×) and AUC ≈ 0.50.
-**45.3%** of the top-5 neighbours of popular items share the query's sub-commodity.
+Head-to-head on the 409 items the paper's model also covers and whose sub-commodity has
+2+ members (`out/log_embed_nested.txt`):
 
-nf's AUC of **0.379 — below 0.5** — is a mechanism, not noise: its within-category
+| | kNN purity | × chance | AUC | silhouette |
+|---|---|---|---|---|
+| **`nested` α** | **0.1648** | **12.1×** | **0.8045** | **−0.0535** |
+| nf β (the paper) | 0.0142 | 1.0× | 0.3789 | −0.3127 |
+
+nf's AUC of **0.3789 — below 0.5** — is a mechanism, not noise: its within-category
 softmax makes items compete, so the gradient pushes apart exactly the items that are
 close substitutes.
 
+**Where this criterion falls short.** The target was to match the flat model's 70.6×
+chance and AUC 0.8233. `nested` reaches 69.6× and 0.8222 — marginally *below* both. The
+gap is small and within the range the seed replicate spans (`nested_s1` is 68.9× and
+0.8240), but the criterion as written is not cleanly met and earlier versions of this
+document reported 70.1× and 0.828, which do not appear in any artefact.
+
 The same trade-off as the flat model reappears: **`nested_nostate` has the best
-embedding of any model here** (0.346, 80.8× chance, AUC 0.870) while costing 0.076
-nats. `η_j` absorbs repeat-purchase regularity that `α` would otherwise carry. The
-headline model keeps state because a state level was required and it is the transition
-function any dynamic policy needs — not because it is free.
+embedding of any variant** (0.3458, 80.8× chance, AUC 0.8696) while costing 0.076
+nats of item log-likelihood. `η_j` absorbs repeat-purchase regularity that `α` would
+otherwise carry. The headline model keeps state because a state level was required and
+it is the transition function any dynamic policy needs — not because it is free.
 
 ### 8.6 Criterion 7 — generation
 
+`28:158-267`. For each held-out trip, roll the layers forward with the household, day,
+week and store fixed to the real ones: draw incidence per category from the Bernoulli
+head, then distinct items from the breadth head, then expected units from the quantity
+head. Categories are subsampled (24 of 188) and the counts scaled by `C / n_cat_eval`.
+
 | | real | generated | error |
 |---|---|---|---|
-| items per basket | 8.36 | **8.27** | **−1.1%** |
-| units per basket | 11.27 | **11.11** | **−1.4%** |
-| categories per basket | 6.49 | **6.25** | **−3.7%** |
+| items per basket | 8.36 | **8.27** | **-1.0%** |
+| units per basket | 11.27 | **11.11** | **-1.4%** |
+| categories per basket | 6.49 | **6.25** | **-3.8%** |
 
-Rolling incidence → breadth → items → units forward reproduces held-out basket shape
-to within 4% on every dimension. The internal ratios hold too: **1.323** items per
-purchased category against a real 1.288, and **1.343** units per item against 1.348.
+The internal ratios hold too: **1.324** items per purchased category against a real
+1.287, and **1.343** units per item against 1.348.
 
-The path there is worth recording, because four of the five versions were wrong and
-each was wrong for a different reason:
+Four of the five generator versions were wrong, each for a different reason:
 
 | generator | categories | items | what was wrong |
 |---|---|---|---|
-| 1. case-control, batch-centred IV | 58.0 | 58.0 | positives over-sampled 30×; `log(30)` logit error |
+| 1. case-control, batch-centred IV | 58.0 | 58.0 | positives over-sampled 30×; a `log(30)` logit error |
 | 2. case-control, frozen IV | 10.4 | 10.4 | reference taken from the case-control sample itself |
 | 3. uniform, frozen IV | 4.0 | 4.0 | `κ·(IV − ref)` still uncorrected for the sample |
-| 4. + units from the quantity head | 6.39 | 6.94 | generator never called the quantity head |
+| 4. + units from the quantity head | 6.39 | 6.94 | the generator never called the quantity head |
 | **5. + breadth head** | **6.25** | **8.27** | — |
 | **real** | **6.49** | **8.36** | |
 
-Only the last of those was a model gap; the rest were sampling.
+Only the last was a model gap; the rest were sampling.
+
+**What generation does not carry.** The context is zeroed throughout (§8.1b), so
+generated baskets reproduce the *marginals* — how many items, categories and units —
+with no co-purchase structure inside them.
 
 ### 8.7 Criterion 3 — household state
 
-Removing state costs **0.076 nats**, the largest genuine gain of any component after
-the store availability mask — and 24× the seed spread.
+Removing the state basis costs **0.076 nats**, the largest genuine gain of any
+component after the store availability mask, and 23× the seed spread.
 
-Independently corroborated: `DATA_EXPLORATION.md` §7.2 measures a **split-half
-correlation of +0.236** in per-household price sensitivity, and §7.1 finds taste
-**1.67×** more self-similar within household than across. The heterogeneity the model
-fits is real, and now measured model-free rather than assumed.
+Independently corroborated model-free: `DATA_EXPLORATION.md` §7.1 finds taste 1.66×
+more self-similar within household than across (0.7838 against 0.4710 over all
+4,266,290 cross-household pairs), and §7.2 finds a split-half correlation of +0.236 in
+per-household price sensitivity — modest, and §7.6 shows why: most households never see
+the price move on what they repeatedly buy.
 
 ---
 
@@ -596,73 +779,105 @@ fits is real, and now measured model-free rather than assumed.
 
 | issue | severity | state |
 |---|---|---|
-| Generated categories are 3.8% low, the largest remaining generation error | low — inside target | open |
-| **The elasticity decomposition excludes interaction.** Context is zeroed when the decomposition is computed, so a price cut that changes what *else* enters the basket is not counted in the −1.188 | medium — the number is a lower bound on the true own-price response | open |
-| **The generator zeroes the interaction term.** Not for want of a joint — §3 shows the item head's conditionals match `P(S) ∝ exp(E(S))` at fixed *n*, and *n* is drawn before items, so Gibbs sweeps over a draft basket would converge to it. My sampler makes one pass category by category and never revisits a slot, so it has nothing to condition on | medium — generation matches marginals but carries no co-purchase structure; fix is Gibbs sweeps after the first pass | open |
-| Store-level prices and affinity contribute 0.0005 nats, although §7.3 of `DATA_EXPLORATION.md` shows households use 4 stores and switch on 30% of trips. Either the 2.3% grid coverage is too sparse or the chain price is already a good proxy | medium | open |
-| κ moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now (0.663/0.674), but weakly identified | medium | documented, not resolved |
-| `np.searchsorted` is 40% of the step and is avoidable | low — performance only | open |
-| Store-level prices cover only 2.3% of the item × store × week grid; the rest falls back to chain price | inherent to the data | documented, not fixable |
+| **Criterion 6 is marginally missed.** Embedding purity 69.6× and AUC 0.8222 against the flat model's 70.6× and 0.8233 | low — beats every control by 70×, and within seed range | open |
+| **The elasticity decomposition excludes the interaction.** Context is zeroed when it is computed, so a price cut that changes what *else* enters the basket is not counted in the -1.188 | medium — the number is a lower bound on the true own-price response | open |
+| **The generator zeroes the interaction term.** Not for want of a joint — §3.3 shows the conditionals match `P(S) ∝ exp(E(S))` at fixed `n`, and `n` is drawn before items, so Gibbs sweeps over a draft basket would converge to it. The sampler makes one pass and never revisits a slot | medium — marginals match, co-purchase structure is absent | open |
+| **There is no held-out joint likelihood.** `P(S)` needs the partition function over all size-`n` baskets, which is intractable to evaluate exactly. The reported item log-likelihood is conditional on the rest of the basket and is not a substitute | medium — the from-scratch evidence is §8.6 only | open |
+| Store-level prices and affinity contribute +0.0005 nats, although `DATA_EXPLORATION.md` §7.3 shows households use 4 stores and switch on 30% of trips | medium | open |
+| `κ` moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now, but weakly identified | medium | documented, not resolved |
+| Breadth is trained but is **not in the checkpoint-selection score** (`27:633`), which covers item, quantity and incidence only | low | open |
+| `--iv-center` is accepted and threaded through `evaluate`/`losses` but never read; `offset` is built in `incidence_batch` and never consumed | low — dead code, no effect on results | open |
+| `gstart_keys` / `gstart_vals` are written by `22_basket_data.py` and never loaded by `NestedData` | low — dead artefact | open |
+| `28:310` logs `dec['total']` as "median own-price elasticity"; it is the **mean** | low — mislabelled log line only, the JSON field is correct | open |
+| `np.searchsorted` is ≈40% of a step and is avoidable by deduplicating candidates | low — performance only | open |
+| Store-level prices cover 0.53% of the item × store × week grid; the rest falls back to chain price | inherent to the data | documented |
 | Availability is proxied by "this store sold this item"; dunnhumby has no stock-out feed | inherent to the data | documented |
-| Placebo battery (`25_basket_placebo.py`) was run on the chain-level panel, not the store-level one | low — stores contribute 0.0005 nats, so the panels are near-identical in practice | open |
+| `IV_hat` is unbiased for the *sum* but biased low for its *log* (Jensen). Absorbed by `c0` in training, and generation uses the same estimator | low — consistent between fit and use | documented |
+| Placebo battery (`25_basket_placebo.py`) was run on the chain-level panel, not the store-level one | low — stores contribute +0.0005 nats, so the panels are near-identical in practice | open |
 
 ---
 
 ## 10. Changelog
 
-| when | change | why |
+| # | change | why |
 |---|---|---|
-| initial | three-head nested model: incidence with κ, item choice, quantity counts; stores via price, affinity, availability | restores what `BASKET_MODEL.md` dropped |
-| fix 1 | availability threshold 3 → 1 sale | a threshold of 3 marked genuine purchases unavailable; incidence loss hit 5.1M |
-| fix 2 | inclusive value sampled (`iv_cap`) rather than summed over padded blocks | 5.4× the item head, mostly padding; 9-hour run → 8.4 min |
-| fix 3 | case-control offset on the incidence logit | positives over-sampled 30×; generation produced 58 categories per basket against a real 6.5 |
-| fix 4 | elasticity decomposition reported from means, not medians | medians do not decompose additively; the parts summed to 82% |
-| fix 5 | `28` indexes the chosen item by position, not by mask | padding slots hold item id 0, so `blk == j` also fired on every pad slot when the chosen item was item 0 |
-| fix 6 | placebo scrambles store deviations as well as the chain panel | leaving them real would leak genuine prices into the placebo |
-| fix 7 | `--avail-only` / `--no-store-price` flags | the store gain conflates real information with a mechanically smaller choice set |
-| fix 8 | frozen per-category IV reference | training centred the inclusive value on the batch, generation on a different set; κ absorbed the difference and generation ran 60% high |
-| fix 9 | IV reference taken from a *uniform* category sample | taking it from `incidence_batch` used the case-control sample, which over-weights bought categories; the reference sat 0.9 too high and generation ran 38% low |
-| fix 10 | **incidence sampling switched from case-control to uniform** | the `log(π₁/π₀)` offset corrects the intercept but not `κ·(IV − ref)`, whose mean differs between sample and population. Uniform removes both biases at source: generated categories 6.39 against a real 6.49 |
-| fix 11 | generator draws units from the quantity head | it accumulated the category pick-count directly, giving every item exactly 1 unit — 1.007 against a real 1.348, while the head itself predicted 1.389 |
-| fix 12 | `--no-state` flag added | criterion 3 was written but could not be tested; the flag did not exist |
-| fix 15 | benchmark scorer gives each model its own basket context | the shared batch builder computed context from a stub with zero `alpha`, so the nested model was scored with its interaction disabled and lost to its own no-interaction ablation |
-| fix 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here. It costs 0.115 nats and 0.086 of embedding purity |
-| fix 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ~1.0–1.1 items per purchased category against a real 1.284. Generation: items 6.94 → **8.27** against 8.36 |
+| initial | four-head nested model: incidence with `κ`, item choice, quantity counts, breadth; stores via price, affinity, availability | restores what `BASKET_MODEL.md` dropped |
+| 1 | availability threshold 3 → 1 sale | a threshold of 3 marked genuine purchases unavailable; incidence loss hit 5.1M |
+| 2 | inclusive value sampled (`iv_cap`) rather than summed over padded blocks | dense blocks are mostly padding and cost 5.4× the item head |
+| 3 | case-control offset on the incidence logit | positives over-sampled 30×; generation produced 58 categories per basket against a real 6.5 |
+| 4 | elasticity decomposition reported from means, not medians | medians do not decompose additively; the parts summed to 82% |
+| 5 | `28` indexes the chosen item by position, not by mask | padding slots hold item id 0, so `blk == j` also fired on every pad slot when the chosen item was item 0 |
+| 6 | placebo scrambles store deviations as well as the chain panel | leaving them real would leak genuine prices into the placebo |
+| 7 | `--avail-only` / `--no-store-price` flags | the store gain conflates real information with a mechanically smaller choice set |
+| 8 | frozen per-category IV reference | training centred the inclusive value on the batch, generation on a different set; `κ` absorbed the difference and generation ran 60% high |
+| 9 | IV reference taken from a *uniform* category sample | taking it from `incidence_batch` used the case-control sample, which over-weights bought categories; the reference sat ≈0.9 too high and generation ran 38% low |
+| 10 | **incidence sampling switched from case-control to uniform** | the `log(π₁/π₀)` offset corrects the intercept but not `κ·(IV − ref)`, whose mean differs between sample and population. Uniform removes both biases at source |
+| 11 | generator draws units from the quantity head | it accumulated the category pick-count directly, giving every item exactly 1 unit — 1.007 against a real 1.348, while the head itself predicted 1.389 |
+| 12 | `--no-state` flag added | criterion 3 was written but could not be tested; the flag did not exist |
+| 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ≈1.0–1.1 items per purchased category against a real 1.284 |
+| 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here |
+| 15 | benchmark scorer gives each model its own basket context | the shared batch builder computed context from a stub with zero `α`, so the nested model was scored with its interaction disabled and lost to its own no-interaction ablation |
+| 16 | **this document rewritten against the code** | §5 still described case-control sampling with the `log(π₁/π₀)` offset, three releases after fix 10 replaced it with uniform sampling. The audit that found it is §12 |
 
 ---
 
 ## 11. How the exploration was sequenced, and what that cost
 
 `DATA_EXPLORATION.md` describes the data on its own terms and makes no reference to
-this model. That separation is deliberate and was arrived at late — this section
-records why, because the sequencing error was expensive and is easy to repeat.
+this model. That separation was arrived at late; this section records why, because the
+sequencing error was expensive and is easy to repeat.
 
-The first version of the exploration examined only the three assumptions this model
-set out to overturn: unit demand, category independence, no state. It was silent on
-price response, quantity, stores, household heterogeneity and base rates. Everything
-it omitted was later discovered by a **bug**, not by looking at the data:
+The first version of the exploration examined only the three assumptions this model set
+out to overturn: unit demand, category independence, no state. It was silent on price
+response, quantity, stores, household heterogeneity and base rates. Everything it
+omitted was later discovered by a **bug**, not by looking at the data:
 
 | what was missing | how it surfaced | cost |
 |---|---|---|
-| does demand respond to price, and by how much? | the elasticity first appeared inside `25_basket_placebo.py`, long after the model was built | a fitted coefficient of +0.081 against a true ≈0.95 went unnoticed until an unrelated test caught it (`BASKET_MODEL.md` §7.2) |
+| does demand respond to price, and by how much? | the elasticity first appeared inside `25_basket_placebo.py`, long after the model was built | a fitted coefficient of +0.081 against a true ≈0.95 went unnoticed until an unrelated test caught it |
 | units per line, and the quantity margin | only measured when challenged | a quarter of the price response was assumed away |
 | store price dispersion and assortment | only measured when challenged | prices pooled across 115 stores; unstocked items scored as "rejected" |
-| **category incidence base rate** | only after the generator produced **58 categories per basket** against a real 6.5 | a `log(30)` calibration error and **five full retrains** |
+| **category incidence base rate** | only after the generator produced **58 categories per basket** against a real 6.5 | a `log(30)` calibration error and five full retrains |
 | **household taste and price sensitivity** | only when asked directly whether the exploration was exhaustive | the premise of the whole model went unmeasured through every version of it |
 | breadth — distinct items per category purchase | caught by the coverage audit, before a bug | none |
 
 ### The two lessons
 
 **Explore what the model will have to reproduce, not what you intend to change.** The
-base rate of 3.25% is one line of pandas; the entire demand exploration runs in 1.9
-seconds. Both were sitting in the same parquet file the whole time.
+base rate of 3.23% is one line of pandas; the whole demand exploration runs in about two
+seconds. Both were sitting in the same parquet file the entire time.
 
 **Audit every model term against the exploration, mechanically.** Household taste and
 price sensitivity never registered as things to check *because the model already had
 parameters for them* — having `θ_i` in the specification made it feel established. A
 model fits per-household parameters whether or not the heterogeneity is real. Only the
-split-half correlation of +0.24 distinguishes signal from noise, and computing it took
-a direct challenge.
+split-half correlation distinguishes signal from noise, and computing it took a direct
+challenge.
 
-The audit is mechanical and takes minutes. It has now caught three gaps: two
-retrospectively, and one — breadth — before it caused a bug.
+---
+
+## 12. What this rewrite corrected
+
+This document was audited line by line against `27_nested_basket.py`,
+`28_nested_counterfactual.py`, `22_basket_data.py` and `31_benchmark.py`, with every
+number re-read from `out/`. What was wrong:
+
+| claim as written | what the code and artefacts say |
+|---|---|
+| §5 "Incidence is case-control sampled, and corrected", with a `log(π₁/π₀)` offset applied during training | **Sampling is uniform** (`27:364`) and there is no correction. Fix 10 replaced case-control three releases earlier and §5 was never updated. `off` is still built and is always 0.0, and `losses` never reads it |
+| "negatives drawn only from items the trip's store actually stocks" (§5, and the module docstring at `27:51`) | Negatives are drawn from the **whole catalogue** (`27:310`) and unstocked ones are then masked to `−1e9`. The effective competitor count is therefore below 20 and varies by store |
+| "+0.394 nats" margin over household repeat-purchase (§8.1c) | +0.342 nats. `−2.0011 − (−2.3428)` |
+| "0.300 purity (70.1× chance), AUC 0.828" on the full catalogue (§8.5) | 0.2976 purity, 69.6× chance, AUC 0.8222. The old figures appear in no artefact; the flat model's are 0.3023 / 70.6× / 0.8233, so criterion 6 is marginally **missed**, not met |
+| "8.4 min, 42.1 ms/iter" (§6) | 646 s for 12,000 iterations = 53.8 ms/iter, from `nested_nested_history.json` |
+| "2.3% of the grid" for store-level prices (§4) | 0.53% — 244,880 cells over 399,579 × 115 (item-week × store) |
+| "199,347 baskets" (§2) | 199,345, from `meta.json` |
+| generation errors "−1.1% / −1.4% / −3.7%" (§8.6) | -1.0% / -1.4% / -3.8% |
+| "1.323 items per purchased category against a real 1.288" (§8.6) | 1.324 against 1.287 |
+| §7 marked criteria 4, 5 and 6 as ✅ | 4 is weakly identified, 5 is 99.7% mechanical, 6 is marginally below target. All three are now ⚠️ with the qualification stated |
+| §3 gave the item utility but never the state basis, the head likelihoods, the objective, or the L2 split | all now written out (§3.2, §3.5, §3.6) |
+| nothing recorded that the item log-likelihood is **conditional on the rest of the basket** | stated in §8.1c, with the joint-likelihood gap added to §9 |
+| "unit demand fails in 56% of baskets" (§1) | **68.2%** on `basket_input`: 48.6% hold >1 item from some category, 57.6% have a line buying >1 unit. The 56% figure is not reproducible from any current artefact |
+
+Four pieces of dead code were found in the process and are recorded in §9: `--iv-center`,
+the `offset` field, `gstart_keys`/`gstart_vals`, and a mislabelled log line at `28:310`.
+None affects a reported result.
