@@ -1,50 +1,68 @@
 # Data exploration: dunnhumby "The Complete Journey"
 
-**Source.** `transaction_data.csv`: 2,553,406 purchase lines, 2,500 households, 91,856
-products, 253,183 baskets, 711 days, 307 commodities, 2,373 sub-commodities. Prices
-are reconstructed from `SALES_VALUE` and the three discount columns; that
-reconstruction is audited separately and is not repeated here.
+What 2,500 households did over two years of grocery shopping, measured from the
+transaction file. This document describes the data. It does not argue for or against
+any model, and nothing in it depends on one having been fitted.
 
-Where a figure is quoted for a filtered catalogue rather than the raw file, the filter
-is stated. The working catalogue used from §4 onward is the 5,455 items with at least
-100 purchase lines — 65.7% of volume — which is the level at which per-item quantities
-are estimable.
+**Source.** `transaction_data.csv`: **2,553,406** purchase lines, **2,500** households,
+**91,856** products, **253,183** baskets, **711** days, **307** commodities, **2,373**
+sub-commodities. Prices are reconstructed from `SALES_VALUE` and three discount
+columns; that reconstruction is audited separately.
+
+**Working catalogue.** From §4 onward, analysis uses the **5,455** items with at least
+100 purchase lines — **65.7%** of all volume. §4 gives the reason and the cost.
 
 **Scripts.** §§1–5 `21_basket_eda.py`, §6 `29_demand_eda.py`, §7 `30_household_eda.py`,
-§8 `25_basket_placebo.py`. Every number and figure comes from one of them; none is
-typed by hand.
+§7.6 `32_reliability.py`, §8 `25_basket_placebo.py`. Every number and figure is
+produced by one of them; none is typed by hand.
 
-<!-- **Figures.** Every figure carries a **Reading it** note giving what each axis is and
-what one observation represents — per item, per category, per household, per pair —
-along with any transform applied: logs, clipping, binning, normalisation. Several
-panels are not raw data (binned scatters, survival curves over a threshold, cumulative
-distributions, split-half constructions), and in those cases the construction is the
-thing that has to be understood before the shape means anything.
+---
 
-**Derived numbers.** Anything that is not a raw count — lift, elasticity, hazard,
-cosine similarity, breadth — is given with the **arithmetic that produced it**, and
-where it helps, a worked example on real rows. A term like "lift" or "elasticity"
-means several different things depending on what was conditioned on and what the
-reference is, so the formula is stated rather than the name. -->
+## How to read this document
 
-### What is measured here
+Each finding is presented in three parts, kept separate on purpose:
+
+| part | what it contains |
+|---|---|
+| **Measurement** | the unit of observation, the filters applied, and the formula. Enough to recompute the number independently. |
+| **Finding** | the number itself, and nothing else. |
+| **Reading** | what it does and does not imply. This is interpretation and is labelled as such. |
+
+Two conventions follow from that:
+
+- **Every derived quantity is given with its arithmetic.** Terms like *lift*,
+  *elasticity* and *hazard* mean different things depending on what was conditioned on
+  and what the reference is, so the formula is stated rather than the name. Where it
+  helps, a worked example on real rows is included.
+- **Every figure carries a "Reading it" note** giving each axis, what one observation
+  represents, and any transform — logs, clipping, binning, normalisation. Several
+  panels are not raw data (binned scatters, survival curves, cumulative distributions,
+  split-half constructions), and the construction has to be understood before the
+  shape means anything.
+
+### What is measured
 
 | question | section |
 |---|---|
-| how many items does a basket hold, and how many from one category? | §1 |
-| which products get bought together, and which never are? | §2 |
-| how long between repeat purchases, and does that predict the next one? | §3 |
-| how many products have enough purchases to analyse? | §4 |
-| how much do prices move? | §5 |
-| **does demand respond to price, and through which margin?** | **§6** |
-| **do households differ — in taste, in price response, in where they shop?** | **§7** |
-| **is the price variation exogenous?** | **§8** |
+| How many items does a basket hold, and how many from one category? | §1 |
+| Which products are bought together, and which are avoided? | §2 |
+| How long between repeat purchases, and does that predict the next one? | §3 |
+| How many products have enough purchases to analyse? | §4 |
+| How much do prices move? | §5 |
+| Does demand respond to price, and through which margin? | §6 |
+| Do households differ — in taste, price response, where they shop? | §7 |
+| Is the price variation exogenous? | §8 |
+
+---
 
 ## 1. What a basket contains
 
 ![unit demand](figures/basket_eda_unit_demand.png)
 
-A basket is not one item, and it is often not one item per category either.
+**Measurement.** One observation per basket (`BASKET_ID`). Within each, count
+distinct `PRODUCT_ID`s and distinct `COMMODITY_DESC`s. A basket "buys multiple from a
+category" when its distinct-item count exceeds its distinct-category count. Whole file,
+no item filter.
 
 | measurement | value |
 |---|---|
@@ -240,7 +258,8 @@ is excluded from its own history; without that, every point would read 100%.
 *Right*: one observation per household, x = how many distinct days it shopped, y = how
 many households.
 
-Across **1,082,615 repeat-purchase events**:
+**Finding.** Across **1,082,615** repeat-purchase events — every occasion a household
+bought a sub-commodity it had bought before:
 
 - median gap between repeat purchases of a sub-commodity: **27 days** (p25 10, p75 71)
 
@@ -324,12 +343,15 @@ so on the chart horizontal distance is not proportional to elapsed days.
 | 56–84 | 0.059 |
 | 84+ | **0.035** ← floor |
 
-**A 4.30× swing**, and the shape matters as much as the size. The hazard *rises* from
-0–3 days to a peak at 7–14 days, then decays. That hump is a consumption cycle: you do
-not rebuy milk the day after, you rebuy it the week after.
+**Reading.** The ratio of the highest bin to the lowest is
+`0.149 / 0.035 = 4.30`. The shape matters as much as the size: the hazard *rises* from
+0–3 days to a peak at 7–14, then decays. That hump is a consumption cycle — milk is not
+rebought the next day but the next week.
 
-So recency is informative about the next purchase, and informative in a non-monotone
-way — the relationship cannot be summarised by a single "days since" number.
+Two consequences. Recency carries information about the next purchase; and the
+relationship is **non-monotone**, so it cannot be summarised by a single "days since"
+coefficient. Any functional form imposed on it needs at least enough freedom to turn
+around once.
 
 ---
 
@@ -372,9 +394,56 @@ that can actually be measured.
 
 --- -->
 
+## 4. How much of the catalogue is analysable
+
+**Measurement.** For each candidate threshold `m`, count the items with at least `m`
+purchase lines in the whole file, and what share of all lines they account for. The
+last column counts sub-commodities that still hold **two or more** surviving items —
+groups within which any comparison between similar products remains possible.
+
+![catalogue](figures/basket_eda_catalogue.png)
+
+**Reading it.** Neither panel is a distribution; there is **no unit of observation**,
+which makes these different from every other figure here — nothing is counted or
+averaged over rows. Both answer "if I demand at least *m* purchases per item, how much
+catalogue survives?". So x is a **threshold chosen**, not a value measured, and each
+point is a fresh re-count of the entire catalogue. Both curves fall by construction,
+and the left panel is log–log because both quantities span orders of magnitude. The
+dashed green line counts only items in a sub-commodity that still has ≥2 members.
+
+**Finding.**
+
+| min. purchase lines | items | share of volume | sub-commodities | with ≥2 items |
+|---|---|---|---|---|
+| 20 | 18,597 | 89.4% | 1,366 | 1,098 |
+| 50 | 10,333 | 79.2% | 1,033 | 802 |
+| 100 | 5,455 | 65.7% | 758 | 545 |
+| 200 | 2,259 | 48.5% | 512 | 309 |
+| 500 | 589 | 29.0% | 247 | 121 |
+
+**Reading.** The trade is volume against per-item precision. At **≥100 lines**, 5,455
+items carry **65.7%** of volume and 545 sub-commodities remain comparable. Dropping to
+≥20 recovers volume (89.4%) but an item seen 20 times across 2,066 households supports
+very little per-item estimation; raising to ≥500 leaves only 589 items and 29% of
+volume. **≥100 is the working catalogue** used from here on, and everything downstream
+inherits that choice.
+
+---
+
 ## 5. How much prices move
 
-Prices move often enough to study. For the 5,455-item catalogue:
+**Measurement.** For each item, take the median `unit_price` of its transactions in
+each week, then compare **consecutive** weeks — pairs where the item sold in both week
+`w` and week `w+1`, so a gap in trading is not counted as a price change:
+
+```
+moves = share of consecutive item-week pairs with |price(w+1) − price(w)| > $0.01
+```
+
+on **335,491** such pairs. The coefficient of variation is `sd / mean` of an item's
+transacted prices over the whole panel.
+
+**Finding.** For the 5,455-item catalogue:
 
 | | value |
 |---|---|
@@ -392,7 +461,7 @@ from its price changing.
 
 ---
 
-## 6. Does demand actually respond to price?
+## 6. Demand response to price
 
 The central question for a dataset built around prices. Measured on the item × week
 panel by `scripts/29_demand_eda.py`.
@@ -458,7 +527,7 @@ in more buyers *and* makes each buyer take more, and the second channel is **25%
 the total units response**. Whether demand is counted in buyers or in units therefore
 changes the answer by a quarter.
 
-### 6.2 Elasticity varies enormously across categories
+### 6.2 Elasticity by category
 
 *Middle panel.* Across the 160 categories large enough to estimate:
 
@@ -529,7 +598,7 @@ store ever sold, y = how many stores. A store at 0.4 stocks 40% of the catalogue
 | store-item-weeks >1c from the chain price | **15.8%** (sd $0.121) |
 | catalogue a store carries | median 63%, p10 39% |
 
-### 6.4b Breadth: how *wide* is a category purchase?
+### 6.5 Breadth: distinct items per category purchase
 
 Breadth and quantity are different quantities and move separately. Three different
 yogurts is breadth 3, units 3. One yogurt bought three times is breadth 1, units 3.
@@ -562,7 +631,7 @@ So a promotion changes *what* a shopper takes from a category, not only whether 
 visit it and how many units they take. Breadth, incidence and depth are three
 distinguishable responses to the same price change.
 
-### 6.5 Base rates every model head has to reproduce
+### 6.6 Base rates
 
 | event | rate |
 |---|---|
@@ -577,7 +646,7 @@ they are assumed rather than measured.
 
 ---
 
-## 7. Households: taste, price sensitivity, store visits, trips
+## 7. Households
 
 Do households differ from one another in ways that persist, or does aggregate
 behaviour describe everyone? Two questions: do they like different things, and do they
@@ -611,7 +680,7 @@ middle panel were pure estimation noise, this would be a formless blob centred o
 mean. The visible upward tilt is the +0.24 correlation: households that look
 price-sensitive early look price-sensitive later.
 
-### 7.1 Taste is real and stable
+### 7.1 Taste stability within household
 
 Split each household's trips in half by time and compare its category profile across
 the two halves, against the same comparison with a *different* household:
@@ -641,7 +710,7 @@ The two distributions barely overlap. Tastes are stable over a year and specific
 the household: knowing what a household bought last year tells you much more about
 what it buys this year than knowing what an average household buys.
 
-### 7.2 Price sensitivity differs — and it is signal, not noise
+### 7.2 Price sensitivity across households
 
 **How the per-household slope is computed.** Restrict to (household, item) pairs the
 household bought at least 3 times, so there is something to fit a slope to. Then for
@@ -674,78 +743,6 @@ The **split-half correlation** is the test that separates the two — a househol
 price response in the first half of its trips against its response in the second half.
 It is modest but clearly non-zero, on
 1,374 households.
-
-### 7.2b How reliable is that number, really?
-
-The +0.236 above was originally read as "about a quarter of the spread is real, the
-rest is noise". That reading was wrong in two directions, and `32_reliability.py`
-tests it four ways.
-
-![reliability](figures/reliability.png)
-
-**Reading it.** *Left*: one observation per shuffle. Household labels on the
-second-half estimates are randomly permuted and the correlation recomputed, 200 times —
-that grey distribution is what pure noise looks like. The red line is the real value.
-*Middle*: each point is the whole analysis re-run at a stricter minimum, x = purchase
-rows a household must have **in each half** to be included, y = the resulting
-correlation; `n=` labels how many households survive each cut. *Right*: households are
-sorted by their **first-half** slope into three equal groups, and each bar is that
-group's mean slope in the **second half** — data never used to form the groups.
-
-**1. It is real.** Shuffling household labels gives a null centred at **+0.003** with
-sd **0.025**. The actual +0.236 sits **9.2 standard deviations above** it (p < 0.005).
-Households genuinely resemble their past selves.
-
-**2. It understates the full history.** Split-half deliberately throws away half the
-data on each side. The Spearman–Brown correction for that is `2r/(1+r)`:
-
-```
-2 × 0.236 / (1 + 0.236) = 0.381
-```
-
-So an estimate built on a household's **whole** record has reliability around
-**0.38**, not 0.236. The lower number answers "how well do two halves agree", which is
-not the question a targeting system asks.
-
-**3. The limit is measurement noise, not households being alike.** This is the part
-that changes the conclusion. Re-running with stricter data requirements:
-
-| minimum rows per half | households kept | split-half r | implied full-history |
-|---|---|---|---|
-| ≥ 20 | 1,641 | **−0.136** | — |
-| ≥ 40 | 1,374 | +0.236 | 0.381 |
-| ≥ 80 | 1,052 | +0.313 | 0.477 |
-| ≥ 160 | 701 | +0.403 | 0.574 |
-| ≥ 320 | 314 | **+0.506** | **0.672** |
-
-Reliability more than **doubles** as households provide more data, and at ≥20 rows it
-is actually *negative* — pure noise. If households were genuinely similar to one
-another, more data per household would not help; the ceiling would stay put. It rises
-steeply, so the constraint is **how precisely each household is measured**, not how
-much they differ.
-
-For a household with a long record, price sensitivity is a reasonably stable trait
-(0.67). For a light shopper it is barely measurable at all.
-
-**4. It is strong enough to rank on, weakly.** The practical test: sort households into
-thirds by their first-half slope, then look at the second half.
-
-| group (ranked on first half) | mean slope in the held-out half |
-|---|---|
-| most sensitive | **−0.273** |
-| middle | −0.193 |
-| least sensitive | **−0.136** |
-
-The most-sensitive third really is about **twice** as price-responsive as the
-least-sensitive third, on data that played no part in forming the groups. The gap is
-**0.14, or 0.53 standard deviations** — a real, monotone separation, and a modest one.
-
-**What this means for targeting.** Sorting households by price sensitivity works, and
-it is not an artefact. But the ordering is noisy for light shoppers and much sharper
-for heavy ones, so a targeting policy should weight by how much is known about each
-household rather than treating every estimate as equally trustworthy. The earlier
-claim that "only a quarter is real" was too pessimistic; a claim that this cleanly
-separates customers would be too optimistic.
 
 ### 7.3 Store visits
 
@@ -820,34 +817,233 @@ recorded observables.
 
 ---
 
-## 8. Is the price variation exogenous, and how much of it is the calendar?
+### 7.6 Reliability of the per-household estimate
+
+The +0.236 above was originally read as "about a quarter of the spread is real, the
+rest is noise". That reading was wrong in two directions, and `32_reliability.py`
+tests it four ways.
+
+![reliability](figures/reliability.png)
+
+**Reading it.** *Left*: one observation per shuffle. Household labels on the
+second-half estimates are randomly permuted and the correlation recomputed, 200 times —
+that grey distribution is what pure noise looks like. The red line is the real value.
+*Middle*: each point is the whole analysis re-run at a stricter minimum, x = purchase
+rows a household must have **in each half** to be included, y = the resulting
+correlation; `n=` labels how many households survive each cut. *Right*: households are
+sorted by their **first-half** slope into three equal groups, and each bar is that
+group's mean slope in the **second half** — data never used to form the groups.
+
+**1. It is real.** Shuffling household labels gives a null centred at **+0.003** with
+sd **0.025**. The actual +0.236 sits **9.2 standard deviations above** it (p < 0.005).
+Households genuinely resemble their past selves.
+
+**2. It understates the full history.** Split-half deliberately throws away half the
+data on each side. The Spearman–Brown correction for that is `2r/(1+r)`:
+
+```
+2 × 0.236 / (1 + 0.236) = 0.381
+```
+
+So an estimate built on a household's **whole** record has reliability around
+**0.38**, not 0.236. The lower number answers "how well do two halves agree", which is
+not the question a targeting system asks.
+
+**3. The limit is measurement noise, not households being alike.** This is the part
+that changes the conclusion. Re-running with stricter data requirements:
+
+| minimum rows per half | households kept | split-half r | implied full-history |
+|---|---|---|---|
+| ≥ 20 | 1,641 | **−0.136** | — |
+| ≥ 40 | 1,374 | +0.236 | 0.381 |
+| ≥ 80 | 1,052 | +0.313 | 0.477 |
+| ≥ 160 | 701 | +0.403 | 0.574 |
+| ≥ 320 | 314 | **+0.506** | **0.672** |
+
+Reliability more than **doubles** as households provide more data, and at ≥20 rows it
+is actually *negative* — pure noise. If households were genuinely similar to one
+another, more data per household would not help; the ceiling would stay put. It rises
+steeply, so the constraint is **how precisely each household is measured**, not how
+much they differ.
+
+For a household with a long record, price sensitivity is a reasonably stable trait
+(0.67). For a light shopper it is barely measurable at all.
+
+**4. It is strong enough to rank on, weakly.** The practical test: sort households into
+thirds by their first-half slope, then look at the second half.
+
+| group (ranked on first half) | mean slope in the held-out half |
+|---|---|
+| most sensitive | **−0.273** |
+| middle | −0.193 |
+| least sensitive | **−0.136** |
+
+The most-sensitive third really is about **twice** as price-responsive as the
+least-sensitive third, on data that played no part in forming the groups. The gap is
+**0.14, or 0.53 standard deviations** — a real, monotone separation, and a modest one.
+
+**What this means for targeting.** Sorting households by price sensitivity works, and
+it is not an artefact. But the ordering is noisy for light shoppers and much sharper
+for heavy ones, so a targeting policy should weight by how much is known about each
+household rather than treating every estimate as equally trustworthy. The earlier
+claim that "only a quarter is real" was too pessimistic; a claim that this cleanly
+separates customers would be too optimistic.
+
+## 8. Exogeneity of the price variation
+
+§5 and §6 establish that prices move and that demand moves against them. Whether that
+association is **causal** is a separate question: prices might move *because* demand
+was expected to move. This section tests it without a model.
+
+**Measurement.** Build an item × week panel of log purchase rate on log price, absorb
+item fixed effects always and week fixed effects optionally, cluster standard errors
+by item. Then refit the identical regression on four **fake** price series, per
+category, on the 160 categories large enough to estimate:
+
+| placebo | how the fake series is built | what it destroys |
+|---|---|---|
+| forward shift | the item's own series moved +6 weeks | timing, partially |
+| backward shift | moved −6 weeks | timing, partially |
+| **weeks reordered** | the item's own weeks randomly permuted | all time alignment |
+| **another item's series** | item *j* given item *k*'s prices | time *and* item alignment |
+
+A fake price series cannot cause demand. Any coefficient it produces is what the design
+manufactures from nothing, so it is the null the real estimate must be judged against.
+
+**Finding.** With week fixed effects:
+
+| price series | median coefficient | categories significant at 1% |
+|---|---|---|
+| **real prices** | **-0.844** | 52.5% |
+| shifted +6 weeks | -0.082 | 10.6% |
+| shifted −6 weeks | -0.048 | 9.4% |
+| **weeks reordered** | **-0.006** | 3.1% |
+| **another item's series** | **+0.002** | 4.4% |
+
+Per-category verdicts:
+
+| | categories |
+|---|---|
+| scored | 160 |
+| real effect significantly negative | 82 |
+| fail at least one placebo | 26 |
+| **fail a strict placebo** (reorder or swap) | **5** |
+
+**Reading.** The two strict placebos retain
+`0.7%` and
+`0.2%` of the real
+coefficient, and only 5 of 160 categories
+fail one. The shift placebos behave worse (10.6% and
+9.4%), but a series shifted six weeks stays
+correlated with the real one, so they were never clean nulls — their failure is
+expected and not informative.
+
+### How much of the association is the calendar?
+
+**Measurement.** The same regression run twice, with and without week fixed effects.
+Week effects absorb anything that moves all items together at week frequency —
+seasons, holidays, chain-wide promotional calendars.
+
+**Finding.**
+
+| specification | median coefficient |
+|---|---|
+| no week effects | -0.951 |
+| week effects | -0.844 |
+
+```
+share removed = 1 − (-0.8438 / -0.9511) = 0.113
+```
+
+**Reading.** **11.3%** of the raw price–demand association is
+week-frequency seasonality — prices and demand moving together over the year rather
+than one moving the other. Small enough to be missed, large enough to matter for any
+quantitative claim about price response. It is a **lower bound** on confounding: week
+effects catch what moves all items together, not what moves one item at one store.
+
+---
 
 ## 9. Summary of findings
 
-| finding | section |
-|---|---|
-| 56.1% of baskets hold 2+ items from one category; the median category does it on 13.1% of its category-trips | §1 |
-| ~11% of sub-commodity pairs are complements at 2×+ chance, ~4.5% are avoided | §2 |
-| items in the same sub-commodity co-occur **7.88×** more than chance — variety-seeking, not substitution | §2 |
-| repurchase hazard swings **4.30×** with recency and is non-monotone, peaking at 7–14 days | §3 |
-| 5,455 items have ≥100 purchases, covering 65.7% of volume and 545 testable sub-commodity groups | §4 |
-| prices move on **30.5%** of item-weeks | §5 |
-| demand is monotone in price: **−0.79** on buyers, **−0.95** on units | §6.1 |
-| **25%** of the units response is units-per-buyer rather than more buyers | §6.1 |
-| elasticity by category: median **−0.95**, p10 −1.57, p90 −0.04, 91% negative | §6.2 |
-| a price cut **doubles demand** that week, decaying over ~3 weeks; flat beforehand | §6.3 |
-| a category purchase spans **1.284** distinct items; breadth elasticity **−0.069** | §6.4b |
-| base rates: category incidence **3.25%**, item purchase **0.144%** | §6.5 |
-| taste is **1.67×** more self-similar within household than across; 95.9% of households | §7.1 |
-| price sensitivity differs across households; split-half **+0.24**, 9.2 sd above a shuffled null | §7.2 |
-| reliability is **noise-limited**: it rises from −0.14 to **+0.51** as households provide more data | §7.2b |
-| ranking on one half separates the held-out half by **0.53 sd** — real, monotone, modest | §7.2b |
-| households use a median of **4 stores**; 30% of consecutive trips switch | §7.3 |
-| demographics span **0.076** of price slope against a **0.411** household spread | §7.5 |
-| strict price placebos retain **0.7%** of the real effect; 5 of 160 categories fail | §8 |
-| **11.3%** of the raw price–demand association is week-frequency seasonality | §8 |
+Every row links to the section carrying the measurement and formula.
 
-The working sample these are measured on, built by `scripts/22_basket_data.py`:
+### Basket composition
+
+| finding | value | section |
+|---|---|---|
+| baskets holding 2+ items from one category | **56.1%** | §1 |
+| baskets spanning 2+ categories | 81.5% | §1 |
+| distinct items per basket | mean 10.1, median 5 | §1 |
+| categories where >15% of category-trips buy 2+ items | 132 of 307 | §1 |
+| distinct items per **purchased category** | **1.284** | §6.5 |
+| units per purchase line | mean 1.35; 22.3% buy >1, carrying 42.6% of units | §6.4 |
+
+### Product relationships
+
+| finding | value | section |
+|---|---|---|
+| sub-commodity pairs measured | 29,117 on 83,928 baskets | §2 |
+| median lift | 1.13 | §2 |
+| pairs at 2× chance or more | 11.0% | §2 |
+| pairs at 0.67× or less (avoided) | 4.5% | §2 |
+| **same-sub-commodity items co-occurring vs chance** | **7.88×** | §2 |
+
+### Timing
+
+| finding | value | section |
+|---|---|---|
+| repeat-purchase events | 1,082,615 | §3 |
+| median gap between repeats | 27 days (p25 10, p75 71) | §3 |
+| **repurchase hazard swing, peak to floor** | **4.30×**, non-monotone | §3 |
+| median gap between a household's trips | 3 days | §7.4 |
+| correlation, trip gap vs trip size | +0.070 | §7.4 |
+
+### Prices and demand
+
+| finding | value | section |
+|---|---|---|
+| items with ≥100 purchase lines | 5,455, 65.7% of volume | §4 |
+| consecutive item-weeks where price moves >1¢ | **30.5%** | §5 |
+| median within-item coefficient of variation | 0.136 | §5 |
+| **elasticity of buyers** | **-0.792** | §6.1 |
+| **elasticity of units** | **-0.945** | §6.1 |
+| elasticity of units per buyer | -0.235 = 25% of the units response | §6.1 |
+| elasticity by category | median -0.951, p10 -1.565, p90 -0.043; 91% negative | §6.2 |
+| demand at a price cut | **2.02×** the prior week, 37,132 events | §6.3 |
+| elasticity of breadth | -0.0689 | §6.5 |
+
+### Households
+
+| finding | value | section |
+|---|---|---|
+| **taste self-similarity vs cross-household** | **1.67×**; own beats random for 95.9% | §7.1 |
+| price sensitivity across households | median -0.169, p10 -0.427, p90 -0.016 | §7.2 |
+| stores per household | median 4, p90 9 | §7.3 |
+| trips at the primary store | median 76% | §7.3 |
+| consecutive trips switching store | 30.1% | §7.3 |
+| demographic coverage | 39% of households | §7.5 |
+| **split-half reliability of price sensitivity** | **+0.236**, 9.2 sd above a shuffled null | §7.6 |
+| implied full-history reliability | +0.381 | §7.6 |
+| reliability at ≥320 rows per half | **+0.505** — noise-limited, not similarity-limited | §7.6 |
+| held-out separation, top vs bottom third | 0.53 sd | §7.6 |
+
+### Causality
+
+| finding | value | section |
+|---|---|---|
+| strict placebos retain | 0.7% and 0.2% of the real effect | §8 |
+| categories failing a strict placebo | **5 of 160** | §8 |
+| **share of the association that is seasonality** | **11.3%** | §8 |
+
+### Base rates
+
+| event | rate | section |
+|---|---|---|
+| category incidence | 6.12 of 188 = **3.25%** | §6.6 |
+| item purchase | 7.86 of 5,455 = 0.144% | §6.6 |
+| units per basket | 10.64 | §6.6 |
+
+### The sample these are measured on
 
 | | value |
 |---|---|
@@ -859,6 +1055,8 @@ The working sample these are measured on, built by `scripts/22_basket_data.py`:
 | baskets | 199,347 |
 | days | 712 |
 | stores | 115 |
+
+---
 
 ## 10. Scope: what this document does *not* establish
 
