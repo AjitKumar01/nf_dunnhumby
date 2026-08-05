@@ -558,11 +558,62 @@ x = a category's slope. y = how many of the 160 categories have a slope in that 
 The extremes come from small categories: FRZN ICE (4 items) sits at −10.1, MAGAZINE
 (17 items) at +1.08.
 
-*Right*: the event study. Every item-week where the price fell at least 0.15 in logs
-(**37,132** of them), lined up at week 0. x = weeks before or after the cut. y = that
-item's demand divided by **its own average demand across the whole panel**, so a
-high-volume and a low-volume item can be averaged into one curve; 1.0 means "normal
-for this item".
+*Right*: the event study — seven dots, built as follows.
+
+**Step 1 — find the events.** Scan the item × week panel for weeks where an item's log
+price fell by at least 0.15 against the previous week (≈14% cheaper). There are
+**37,132** such weeks, spread over **4,712 items**, so an item contributes about 8
+events on average. Each event is one (item, week) pair.
+
+**Step 2 — normalise demand.** Raw buyer counts cannot be averaged across items: a
+staple gets hundreds a week, a niche item gets two. So each item's weekly buyer count
+is divided by **that item's own mean over all 102 weeks**:
+
+```
+norm_buy(item, week) = buyers(item, week) / mean_all_weeks buyers(item)
+```
+
+1.0 means "a normal week for this item", 2.0 means "twice its usual".
+
+**Step 3 — line them up.** For each of the 37,132 events, read `norm_buy` at offsets
+−3 to +3 weeks around it. Take one real event: item 76, CHOICE BEEF, price cut in week
+26. That item averages **5.14** buyers a week across the panel:
+
+| week | offset | buyers | norm_buy = buyers / 5.14 |
+|---|---|---|---|
+| 23 | −3 | 8 | 1.557 |
+| 24 | −2 | 4 | 0.779 |
+| 25 | −1 | 1 | 0.195 |
+| **26** | **0** | **3** | **0.584** |
+| 27 | +1 | 6 | 1.168 |
+| 28 | +2 | 5 | 0.973 |
+| 29 | +3 | 0 | 0.000 |
+
+One event is pure noise — this one's demand *fell* at the cut. The signal only appears
+on averaging.
+
+**Step 4 — average across events at each offset.** Each dot is the mean of `norm_buy`
+over all events that have data at that offset:
+
+| offset | mean norm_buy | events contributing |
+|---|---|---|
+| −3 | 1.003 | 37,018 |
+| −2 | 0.948 | 37,104 |
+| −1 | 0.959 | 37,132 |
+| **0** | **1.940** | 37,132 |
+| +1 | 1.284 | 36,716 |
+| +2 | 1.169 | 36,338 |
+| +3 | 1.151 | 35,964 |
+
+The counts fall slightly away from 0 because an event near the start or end of the
+panel has no week to look back or forward to.
+
+x = the offset in weeks. y = that mean. The headline lift is the ratio of two of these
+dots:
+
+```
+lift = norm_buy(0) / norm_buy(−1) = 1.940 / 0.959 = 2.02
+```
 
 **Measurement.** Build an item × week panel: for every item and week,
 `buyers` = how many purchase lines it got, `units` = how many units, `trips` = how many
