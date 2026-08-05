@@ -108,16 +108,25 @@ def main(a):
     P1, P2 = P1[users], P2[users]
     keep = (P1.sum(1) > 0) & (P2.sum(1) > 0)
     P1, P2 = P1[keep], P2[keep]
-    own = (P1 * P2).sum(1)
-    rng = np.random.default_rng(a.seed)
-    perm = rng.permutation(len(P1))
-    other = (P1 * P2[perm]).sum(1)
+    # The comparison baseline used to be ONE random pairing of households, which made
+    # the reported number depend on the seed: over 200 seeds the mean ranged 0.4654 to
+    # 0.4765 and the headline ratio 1.645x to 1.684x.  Small, but there is no reason to
+    # sample -- every household-vs-household pair can simply be computed.  G holds all
+    # of them: G[i, j] is household i's first half against household j's second half.
+    G = P1 @ P2.T
+    n = len(P1)
+    own = np.diag(G).copy()                       # i against itself
+    off = ~np.eye(n, dtype=bool)
+    other = G[off]                                # all n*(n-1) different-household pairs
+    # "does my own past beat a stranger's?" -- averaged over every stranger, not one
+    row_mean_other = (G.sum(1) - np.diag(G)) / (n - 1)
     r["taste"] = {
-        "households": int(len(P1)),
+        "households": int(n),
+        "cross_household_pairs": int(n * (n - 1)),
         "self_similarity_across_time": float(own.mean()),
         "cross_household_similarity": float(other.mean()),
         "ratio": float(own.mean() / max(other.mean(), 1e-9)),
-        "share_self_beats_random": float((own > other).mean()),
+        "share_self_beats_random": float((own > row_mean_other).mean()),
     }
     rt = r["taste"]
     log("")
@@ -153,8 +162,34 @@ def main(a):
         return (agg.xy / agg.xx).rename(None)
 
     s_all = hh_slopes(bk, a.min_obs)
+    # the halves hold about half the purchases each, so they use half the threshold
     s1 = hh_slopes(first, a.min_obs // 2)
     s2 = hh_slopes(second, a.min_obs // 2)
+
+    # How much price movement does a household actually have to learn from?  The
+    # denominator of the slope is sum (logp - mean_hi logp)^2.  When an item's price
+    # never moved for that household, the pair contributes nothing to it, and dividing
+    # by a near-zero denominator turns accidents into large slopes.  Measuring this
+    # explains the modest split-half correlation below.
+    gq = bk[bk.groupby(["user_id", "item_id"]).item_id.transform("size") >= 3].copy()
+    kq = ["user_id", "item_id"]
+    gq["xd"] = gq.lp - gq.groupby(kq).lp.transform("mean")
+    gq["yd"] = gq.lu - gq.groupby(kq).lu.transform("mean")
+    xx = gq.assign(xx=gq.xd ** 2).groupby("user_id").xx.sum()
+    xx = xx[s_all.index]
+    thin, thick = s_all[xx <= xx.median()], s_all[xx > xx.median()]
+    r["price_variation_available"] = {
+        "qualifying_rows": int(len(gq)),
+        "household_item_pairs": int(gq.groupby(kq).ngroups),
+        "share_rows_price_never_moved": float((gq.xd.abs() < 0.01).mean()),
+        "share_pairs_zero_price_variation": float(
+            gq.groupby(kq).xd.apply(lambda s: (s.abs() < 1e-9).all()).mean()),
+        "median_sum_xd2": float(xx.median()),
+        "thin_half": {"sd_of_slopes": float(thin.std()),
+                      "share_positive": float((thin > 0).mean())},
+        "thick_half": {"sd_of_slopes": float(thick.std()),
+                       "share_positive": float((thick > 0).mean())},
+    }
     both = pd.concat([s1.rename("h1"), s2.rename("h2")], axis=1).dropna()
     split_corr = float(both.h1.corr(both.h2)) if len(both) > 20 else np.nan
     r["price_sensitivity"] = {
@@ -166,12 +201,20 @@ def main(a):
         "households_in_split_half": int(len(both)),
     }
     rp = r["price_sensitivity"]
+    rv = r["price_variation_available"]
     log("")
     log("2. price sensitivity across households (units on price, within item)")
     log(f"   {rp['households_estimated']:,} households: median {rp['median_slope']:+.3f}, "
         f"p10 {rp['p10']:+.3f}, p90 {rp['p90']:+.3f}, sd {rp['sd']:.3f}")
     log(f"   split-half correlation {split_corr:+.3f} on {len(both):,} households "
         f"-> {'REAL heterogeneity' if split_corr > 0.1 else 'mostly NOISE'}")
+    log(f"   price movement available: {rv['share_rows_price_never_moved']:.1%} of rows "
+        f"come from a (household,item) pair whose price never moved; "
+        f"{rv['share_pairs_zero_price_variation']:.1%} of pairs have none at all")
+    log(f"   households with LITTLE price movement: slope sd "
+        f"{rv['thin_half']['sd_of_slopes']:.3f}, {rv['thin_half']['share_positive']:.1%} positive")
+    log(f"   households with MUCH   price movement: slope sd "
+        f"{rv['thick_half']['sd_of_slopes']:.3f}, {rv['thick_half']['share_positive']:.1%} positive")
     s_all.rename("slope").to_frame().to_csv(
         os.path.join(OUT, "household_eda_price_slopes.csv"))
 
@@ -272,10 +315,15 @@ def main(a):
     # ================================================================= figures
     fig, axes = plt.subplots(1, 3, figsize=(17, 4.8))
     ax = axes[0]
-    ax.hist(own, bins=50, alpha=.75, color=PAL["blue"], label="same household, two halves")
-    ax.hist(other, bins=50, alpha=.6, color=PAL["grey"], label="different households")
+    # one set of bin edges for both, and density so 2,066 self-pairs and 4.27M
+    # cross-pairs are on the same footing
+    edges = np.linspace(0, 1, 51)
+    ax.hist(other, bins=edges, density=True, alpha=.6, color=PAL["grey"],
+            label=f"different households (all {len(other):,} pairs)")
+    ax.hist(own, bins=edges, density=True, alpha=.75, color=PAL["blue"],
+            label=f"same household, two halves ({len(own):,})")
     style(ax, f"Taste is real and stable\n{rt['ratio']:.1f}x more self-similar than random",
-          "cosine similarity of category profiles", "households")
+          "cosine similarity of category profiles", "share of pairs (density)")
     ax.legend(fontsize=8)
 
     ax = axes[1]

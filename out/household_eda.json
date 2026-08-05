@@ -1,10 +1,26 @@
 {
   "taste": {
     "households": 2066,
+    "cross_household_pairs": 4266290,
     "self_similarity_across_time": 0.7838139533996582,
-    "cross_household_similarity": 0.46864446997642517,
-    "ratio": 1.6725130081176758,
-    "share_self_beats_random": 0.9593417231364957
+    "cross_household_similarity": 0.4709748923778534,
+    "ratio": 1.6642372608184814,
+    "share_self_beats_random": 0.9757986447241046
+  },
+  "price_variation_available": {
+    "qualifying_rows": 872715,
+    "household_item_pairs": 135055,
+    "share_rows_price_never_moved": 0.1863827251737394,
+    "share_pairs_zero_price_variation": 0.16278553182036948,
+    "median_sum_xd2": 9.345254898071289,
+    "thin_half": {
+      "sd_of_slopes": 0.22597844891651142,
+      "share_positive": 0.11463414634146342
+    },
+    "thick_half": {
+      "sd_of_slopes": 0.12903163610685128,
+      "share_positive": 0.03536585365853658
+    }
   },
   "price_sensitivity": {
     "households_estimated": 1640,
