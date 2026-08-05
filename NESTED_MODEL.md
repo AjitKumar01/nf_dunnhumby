@@ -95,6 +95,36 @@ using `α` itself rather than a free `ρ` is what forces co-purchase structure i
 embedding the sub-commodity test reads. With a free `ρ` the embedding scored 0.058
 purity; tied, 0.302.
 
+**What ᾱ(context) actually is.** For item *j* in a basket holding *n* items, it is the
+mean of α over the **other n − 1 items in that basket** — the whole basket, not a
+prefix (`27_nested_basket.py:302-308`):
+
+```
+ᾱ(context)_j = ( Σ_{k ∈ basket} α_k  −  α_j ) / (n − 1)          n = 1 → zero vector
+```
+
+A basket of milk, bread, eggs, coffee gives milk the mean of {bread, eggs, coffee},
+bread the mean of {milk, eggs, coffee}, and so on — four leave-one-out means off one
+shared sum.
+
+**It is not sequential, and could not be.** The data carries `BASKET_ID` and `DAY` but
+no within-receipt order, so a basket is a *set*, not a list. There is no "what was in
+the cart at the time" to condition on.
+
+**The consequence: the item head is a conditional model, not a joint one.** It is
+trained on Σ_j log P(item j | the rest of the basket), which is a pseudo-likelihood in
+Besag's sense. Those per-item conditionals do not multiply into a probability
+distribution over baskets. With a plain sum Σ_{k≠j} α_j · α_k the conditionals would
+be those of a pairwise (Ising-like) joint; dividing by n − 1 makes the effective
+pairwise strength depend on basket size, so even that correspondence does not hold
+exactly.
+
+This is the root of the generator limitation in §8.1b and §9 — not merely that the
+sampler is built category by category. There is no joint distribution here to sample a
+basket from. A sequential sampler would be drawing from conditionals with no guarantee
+of mutual consistency; Gibbs sweeps over a completed basket would be the principled
+route, and even those converge to a joint only if the conditionals are compatible.
+
 ### The nest, and how it survives multi-item baskets
 
 The paper gets its nest from a within-category softmax plus an outside good — exactly
@@ -356,9 +386,17 @@ previously said:
 
 The first two are correct by construction. **The third is a real limitation**: the
 reported allocation channel excludes any interaction effect, so a price cut that
-changes *what else lands in the basket* is not counted in the −1.188. The fourth is a
-limitation of the sampler rather than the model — a sequential generator that built
-the basket incrementally could condition on what it had already placed. Both are now
+changes *what else lands in the basket* is not counted in the −1.188.
+
+**The fourth is deeper than a missing feature in the sampler.** ᾱ is a leave-one-out
+mean over the whole basket (§3), so the item head is trained as a pseudo-likelihood
+and its conditionals do not define a joint distribution over baskets. There is
+nothing to sample a basket from. Building the generator sequentially would mean
+drawing from conditionals with no guarantee of mutual consistency; Gibbs sweeps over
+a completed draft basket are the principled version, and they converge to a joint only
+if those conditionals are compatible — which the n − 1 normalisation makes unlikely to
+hold exactly. Zeroing the context is therefore the honest choice for this sampler, at
+the cost of generated baskets carrying no co-purchase structure. Both limitations are
 in §9.
 
 ### 8.1c Benchmarks against simpler alternatives
@@ -547,7 +585,7 @@ fits is real, and now measured model-free rather than assumed.
 |---|---|---|
 | Generated categories are 3.8% low, the largest remaining generation error | low — inside target | open |
 | **The elasticity decomposition excludes interaction.** Context is zeroed when the decomposition is computed, so a price cut that changes what *else* enters the basket is not counted in the −1.188 | medium — the number is a lower bound on the true own-price response | open |
-| **The generator builds baskets category by category**, so it cannot condition on what it has already placed. A sequential generator could use the interaction term; this one zeroes it | medium — generation matches marginals but may miss co-purchase structure | open |
+| **The generator cannot use the interaction term at all.** ᾱ is a leave-one-out mean over the whole basket, so the item head is a pseudo-likelihood whose conditionals define no joint distribution over baskets. This is not a sampler shortcut — a sequential generator would draw from conditionals with no guarantee of consistency; Gibbs sweeps are the principled route and rest on a compatibility the n−1 normalisation likely breaks | medium — generation matches marginals but carries no co-purchase structure | open |
 | Store-level prices and affinity contribute 0.0005 nats, although §7.3 of `DATA_EXPLORATION.md` shows households use 4 stores and switch on 30% of trips. Either the 2.3% grid coverage is too sparse or the chain price is already a good proxy | medium | open |
 | κ moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now (0.663/0.674), but weakly identified | medium | documented, not resolved |
 | `np.searchsorted` is 40% of the step and is avoidable | low — performance only | open |
