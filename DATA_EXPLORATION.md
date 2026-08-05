@@ -535,86 +535,6 @@ is a *within-item* regression on all 556,410 item-weeks, including the ones wher
 price held steady. The two agree in sign and rough magnitude, but the slope of the
 plotted dots is not the reported elasticity.
 
-*Middle*: a histogram of **160 numbers**, one per category.
-
-Each number is that category's own elasticity, computed by running the §6.1 regression
-using **only that category's rows**. Worked through for SOFT DRINKS:
-
-1. Take every (item, week) row belonging to the category — 225 items, **22,950**
-   item-weeks.
-2. For each row, subtract that **item's** own average from both variables:
-   `xd = logp − mean_item(logp)`, `yd = lbuy − mean_item(lbuy)`.
-3. The slope is the ratio of two sums over those 22,950 rows:
-
-```
-slope = Σ(xd · yd) / Σ(xd²) = −592.58 / 576.95 = −1.027
-```
-
-So SOFT DRINKS contributes the single value **−1.027** to the histogram. Repeat for
-each of the 160 categories with at least 3 items and 200 item-weeks, and plot the
-resulting 160 numbers.
-
-x = a category's slope. y = how many of the 160 categories have a slope in that range.
-The extremes come from small categories: FRZN ICE (4 items) sits at −10.1, MAGAZINE
-(17 items) at +1.08.
-
-*Right*: the event study — seven dots, built as follows.
-
-**Step 1 — find the events.** Scan the item × week panel for weeks where an item's log
-price fell by at least 0.15 against the previous week (≈14% cheaper). There are
-**37,132** such weeks, spread over **4,712 items**, so an item contributes about 8
-events on average. Each event is one (item, week) pair.
-
-**Step 2 — normalise demand.** Raw buyer counts cannot be averaged across items: a
-staple gets hundreds a week, a niche item gets two. So each item's weekly buyer count
-is divided by **that item's own mean over all 102 weeks**:
-
-```
-norm_buy(item, week) = buyers(item, week) / mean_all_weeks buyers(item)
-```
-
-1.0 means "a normal week for this item", 2.0 means "twice its usual".
-
-**Step 3 — line them up.** For each of the 37,132 events, read `norm_buy` at offsets
-−3 to +3 weeks around it. Take one real event: item 76, CHOICE BEEF, price cut in week
-26. That item averages **5.14** buyers a week across the panel:
-
-| week | offset | buyers | norm_buy = buyers / 5.14 |
-|---|---|---|---|
-| 23 | −3 | 8 | 1.557 |
-| 24 | −2 | 4 | 0.779 |
-| 25 | −1 | 1 | 0.195 |
-| **26** | **0** | **3** | **0.584** |
-| 27 | +1 | 6 | 1.168 |
-| 28 | +2 | 5 | 0.973 |
-| 29 | +3 | 0 | 0.000 |
-
-One event is pure noise — this one's demand *fell* at the cut. The signal only appears
-on averaging.
-
-**Step 4 — average across events at each offset.** Each dot is the mean of `norm_buy`
-over all events that have data at that offset:
-
-| offset | mean norm_buy | events contributing |
-|---|---|---|
-| −3 | 1.003 | 37,018 |
-| −2 | 0.948 | 37,104 |
-| −1 | 0.959 | 37,132 |
-| **0** | **1.940** | 37,132 |
-| +1 | 1.284 | 36,716 |
-| +2 | 1.169 | 36,338 |
-| +3 | 1.151 | 35,964 |
-
-The counts fall slightly away from 0 because an event near the start or end of the
-panel has no week to look back or forward to.
-
-x = the offset in weeks. y = that mean. The headline lift is the ratio of two of these
-dots:
-
-```
-lift = norm_buy(0) / norm_buy(−1) = 1.940 / 0.959 = 2.02
-```
-
 **Measurement.** Build an item × week panel: for every item and week,
 `buyers` = how many purchase lines it got, `units` = how many units, `trips` = how many
 baskets happened that week chain-wide. Then
@@ -649,7 +569,35 @@ in more buyers *and* makes each buyer take more, and the second channel is **25%
 the total units response**. Whether demand is counted in buyers or in units therefore
 changes the answer by a quarter.
 
+
+```
+share from the quantity margin = −0.235 / −0.945 = 24.9%
+```
+
 ### 6.2 Elasticity by category
+
+*Middle*: a histogram of **160 numbers**, one per category.
+
+Each number is that category's own elasticity, computed by running the §6.1 regression
+using **only that category's rows**. Worked through for SOFT DRINKS:
+
+1. Take every (item, week) row belonging to the category — 225 items, **22,950**
+   item-weeks.
+2. For each row, subtract that **item's** own average from both variables:
+   `xd = logp − mean_item(logp)`, `yd = lbuy − mean_item(lbuy)`.
+3. The slope is the ratio of two sums over those 22,950 rows:
+
+```
+slope = Σ(xd · yd) / Σ(xd²) = −592.58 / 576.95 = −1.027
+```
+
+So SOFT DRINKS contributes the single value **−1.027** to the histogram. Repeat for
+each of the 160 categories with at least 3 items and 200 item-weeks, and plot the
+resulting 160 numbers.
+
+x = a category's slope. y = how many of the 160 categories have a slope in that range.
+The extremes come from small categories: FRZN ICE (4 items) sits at −10.1, MAGAZINE
+(17 items) at +1.08.
 
 **Measurement.** The §6.1 regression run separately per category, on the 160 with at
 least 3 items and 200 item-weeks.
@@ -669,37 +617,167 @@ least 3 items and 200 item-weeks.
 ice and corn are seasonal commodities bought largely on price, while greeting cards
 and magazines are impulse purchases where price is close to irrelevant.
 
+
+The spread is also the point: p10 −1.565 to p90 −0.043 is a factor of 36, so the
+−0.792 of §6.1 is an average over categories that behave nothing alike. Price response
+has to be estimated per item, not assumed common.
+
 ### 6.3 Promotions, as a raw event study
 
 *Right panel.* Every item-week where price fell by at least 0.15 in logs — **37,132
 events** — lined up and averaged, with demand expressed relative to that item's own
 mean.
 
-**Measurement.** Find every item-week where the item's mean log
-price fell by at least 0.15 against the previous week — 37,132 such events. For each,
-look up that item's demand in weeks −3 to +3 around it, and divide by **that item's own
-average demand over the whole panel**:
+**Measurement**, in five steps.
+
+**Step 1 — find the events.** Scan the item × week panel for weeks where an item's log
+price fell by at least 0.15 against the previous week (≈14% cheaper). There are
+**37,132** such weeks, spread over **4,712 items**, so an item contributes about 8
+events on average. Each event is one (item, week) pair.
+
+**Step 2 — normalise demand.** Raw buyer counts cannot be averaged across items: a
+staple gets hundreds a week, a niche item gets two. So each item's weekly buyer count
+is divided by **that item's own mean over all 102 weeks**:
 
 ```
-normalised(item, week) = buyers(item, week) / mean_week buyers(item)
+norm_buy(item, week) = buyers(item, week) / mean_all_weeks buyers(item)
 ```
 
-That normalisation is what lets a 5,000-buyer item and a 50-buyer item be averaged into
-one curve — both are expressed as "relative to normal for me", so 1.0 is normal. Then
-average across all 37,132 events at each offset.
+1.0 means "a normal week for this item", 2.0 means "twice its usual". This is what
+lets a 5,000-buyer item and a 50-buyer item be averaged into one curve: both are
+expressed as "relative to normal for me".
+
+**Step 3 — line them up.** For each of the 37,132 events, read `norm_buy` at offsets
+−3 to +3 weeks around it. Take one real event: item 76, CHOICE BEEF, price cut in week
+26. That item averages **5.14** buyers a week across the panel:
+
+| week | offset | buyers | norm_buy = buyers / 5.14 |
+|---|---|---|---|
+| 23 | −3 | 8 | 1.557 |
+| 24 | −2 | 4 | 0.779 |
+| 25 | −1 | 1 | 0.195 |
+| **26** | **0** | **3** | **0.584** |
+| 27 | +1 | 6 | 1.168 |
+| 28 | +2 | 5 | 0.973 |
+| 29 | +3 | 0 | 0.000 |
+
+One event is pure noise — this one's demand *fell* at the cut. The signal only appears
+on averaging.
+
+**Step 4 — average across events at each offset.** Each dot is the mean of `norm_buy`
+over all events that have data at that offset:
+
+| offset | mean norm_buy | events contributing |
+|---|---|---|
+| −3 | 1.003 | 37,018 |
+| −2 | 0.948 | 37,104 |
+| −1 | 0.959 | 37,132 |
+| **0** | **1.940** | 37,132 |
+| +1 | 1.284 | 36,716 |
+| +2 | 1.169 | 36,338 |
+| +3 | 1.151 | 35,964 |
+
+The counts fall slightly away from 0 because an event near the start or end of the
+panel has no week to look back or forward to.
+
+**A complication: events are not independent.** An item is cut many times — 37,132
+events across only **4,712 items**, about 8 each. CHOICE BEEF alone is flagged in 19
+different weeks: 6, 14, 22, 24, 26, 33, 37, 38, … Weeks 22 and 24 are two apart, so
+week 24 is simultaneously its own event *and* the "+2" of the week-22 event.
+
+Across all items, **57.7%** of consecutive cuts for the same item fall less than 7
+weeks apart, so their ±3 windows overlap. The consequence runs both ways: a week
+labelled "−1" may already be lifted by a previous promotion, and the decay at +1..+3
+may be the *next* promotion arriving rather than this one persisting.
+
+Both profiles are therefore reported. **Isolated** events are those with no other cut
+of the same item within ±3 weeks — **20,725** of 37,132, or 55.8%.
+
+**Step 5 — a reference level to divide by.** Neither 1.0 nor the pre-period works.
+`norm_buy` averages exactly 1.0 across *all* of an item's weeks by construction, and
+those weeks include its own promotions, so an ordinary week must sit below 1.0. The
+pre-period is worse: an event is *defined* as a price drop, so the weeks before one are
+mechanically at an above-average price and therefore at below-average demand.
+
+The reference used here is a **quiet week** — an item-week more than 3 weeks from any
+cut of that same item. There are **368,173** such item-weeks, and in them
+
+| | value |
+|---|---|
+| demand ÷ the item's own mean | **0.896** |
+| log price − the item's mean log price | **+0.011** |
+
+A quiet week is at the item's usual price and runs at 89.6% of the item's average
+demand. That 0.896, not 1.0, is the "nothing happening" line.
 
 **Finding.**
 
-| weeks from the cut | −3 | −2 | −1 | **0** | +1 | +2 | +3 |
-|---|---|---|---|---|---|---|---|
-| demand ÷ item mean | 1.00 | 0.95 | 0.96 | **1.94** | 1.28 | 1.17 | 1.15 |
+| offset | — all 37,132 events — | | — isolated 20,725 events — | | |
+|---|---|---|---|---|---|
+| | demand | price | demand | price | demand ÷ quiet |
+| −3 | 1.003 | +0.047 | 0.925 | +0.050 | 1.03 |
+| −2 | 0.948 | +0.089 | 0.859 | +0.098 | 0.96 |
+| −1 | 0.959 | +0.128 | 0.870 | +0.123 | 0.97 |
+| **0** | **1.940** | **−0.200** | **2.136** | **−0.194** | **2.38** |
+| +1 | 1.284 | −0.130 | 1.337 | −0.139 | 1.49 |
+| +2 | 1.169 | −0.061 | 1.117 | −0.055 | 1.25 |
+| +3 | 1.151 | −0.029 | 1.065 | −0.003 | 1.19 |
+| quiet week | 0.896 | +0.011 | 0.896 | +0.011 | 1.00 |
 
-**Reading.** Demand roughly doubles in the week of the cut (2.02× the week before),
-then decays over about three weeks without returning to baseline.
+*demand* = mean `norm_buy`; *price* = mean of `logp` minus the item's own mean `logp`,
+so +0.123 is 13% above the item's usual price and −0.194 is 18% below it. Every offset
+rests on at least 19,938 item-weeks in the isolated column and 35,964 in the all column.
 
-The pre-period is flat, which matters: demand is not already rising in the weeks
-before a price cut. Had it been, the spike could have reflected promotions being timed
-to demand rather than causing it. §8 tests that formally.
+**Reading, one row at a time.**
+
+*The pre-period does not ramp up.* Demand at −3, −2, −1 is 0.925, 0.859, 0.870 — within
+3% of the quiet-week level of 0.896, with no rise heading into the cut. This is the
+result that matters for causality: if retailers timed promotions to demand that was
+already climbing, the spike at 0 would be partly the reason for the cut rather than its
+effect. Demand is flat-to-falling instead.
+
+*What the pre-period does do is get more expensive.* Price runs +0.050, +0.098, +0.123
+above the item's mean over the same three weeks. That is not a coincidence, it is the
+event definition: a cut of ≥0.15 in logs is easiest to record when the price started
+high. It also means the mild demand decline into the cut is exactly what elasticity
+predicts. From −3 to −1 price rises 0.123 − 0.050 = **+0.073** in logs and demand falls
+ln(0.870 / 0.925) = **−0.061**, an implied slope of −0.061 / +0.073 = **−0.84** — next to
+the −0.792 headline elasticity of §6.1.
+
+*The promotion week is far steeper than elasticity alone.* From −1 to 0 price moves
+−0.194 − 0.123 = **−0.317** in logs while demand moves ln(2.136 / 0.870) = **+0.898**,
+an implied slope of **−2.83**. That is 3.4× the −0.792 estimated on ordinary week-to-week
+price variation. A promoted price does not arrive alone — it comes with an endcap, a
+shelf tag, a circular — and none of that is in the price variable. A model given only
+price will therefore under-predict promotion weeks and over-predict quiet ones. The
+−0.792 is an average over two different regimes, not a single constant.
+
+*Most of the post-cut tail is the promotion still running.* This is the correction the
+contamination check was built for. Read the two columns at +1: price is still −0.139
+below the item's mean, so demand at 1.337 is not persistence, it is a discount that has
+not ended. By +3 the price has fully returned — −0.003 against a quiet-week +0.011 —
+and demand is 1.065, which is **1.19×** the quiet-week level. That 19% is the genuine
+residual. The all-events column puts it at 1.151 / 0.896 = 1.28×, and the extra 9 points
+are the next promotion arriving inside the window, not this one persisting.
+
+*No stockpiling is visible within three weeks.* Pull-forward predicts a **dip below**
+the quiet-week line after the promotion ends: households bought ahead and stay out of
+the market. No offset dips. The lowest post-cut reading, +3 at 1.19×, is 19% above
+quiet, and every earlier offset is higher.
+
+**Two limits on that last claim.** The window is ±3 weeks, so stockpiling that unwinds
+in month two is invisible. And isolation requires a 4-week clear gap, which drops the
+44.2% of events on the most frequently promoted items — precisely where a shopper has
+most reason to hold inventory. The finding is "no dip on items promoted less often than
+monthly, within three weeks", not "no stockpiling".
+
+**What changed against the earlier version of this section.** It reported a 2.02× lift
+against week −1 and a pre-period that was "flat" at 0.970, and read the slow post-cut
+decay as demand persisting. All three were artefacts of overlapping windows. The 0.970
+pre-period was propped up by neighbouring promotions (0.885 once they are removed,
+0.99× quiet), the lift against a quiet week is 2.38× rather than 2.02×, and the
+persistence was mostly an unfinished discount — 1.19×, not 1.28×, once the price is
+actually back.
 
 ### 6.4 Quantity and stores
 
@@ -747,25 +825,60 @@ Across 1,219,633 category visits:
 | 4 | 1.2% |
 | 5+ | 0.9% |
 
-**Finding.** Mean **1.284** distinct items; **18.9%** of category visits buy more than
-one.
+**Finding.** Mean **1.284** distinct items per category visit;
+**18.9%** of visits take two or more different products from the same
+category. Those wider visits are also much bigger: a breadth-1 visit averages 1.328
+units, a breadth>1 visit averages 3.499.
 
-Breadth also responds to price. For each (basket, category) visit take `log(breadth)`
-and the mean log price of the category's items on that day, then regress one on the
-other **within category** — so the slope is about a category's price moving, not about
-expensive categories versus cheap ones:
+**Breadth responds to price.** For each category visit take `log(breadth)` and the
+**faced** price — the mean log price of *every* item in that category that week, not
+of the items the shopper happened to pick — then regress within category:
 
 ```
 elasticity = Σ (lp − mean_c lp)(log breadth − mean_c log breadth) / Σ (lp − mean_c lp)²
-           = −0.0689     on 1,219,633 category visits
+           = -0.1146     on 1,219,633 category visits
 ```
 
-**Reading.** Negative means a promotion widens the basket as well as deepening it, so
-breadth, incidence and depth are three distinguishable responses to one price change.
+Using the price of the items actually bought instead gives −0.067. That version is
+contaminated: a shopper who adds a second item changes the average by choosing it, so
+the regressor moves with the outcome. The faced price is the one reported.
 
-So a promotion changes *what* a shopper takes from a category, not only whether they
-visit it and how many units they take. Breadth, incidence and depth are three
-distinguishable responses to the same price change.
+**Three margins, measured separately.** The regression above is fitted only on visits
+where the category *was* bought, so it cannot say anything about whether the category
+is entered; and units never appear in it, so it cannot say anything about how much is
+taken. All three are estimated here from one (category, week) panel — 15,309
+category-weeks with at least 5 visits — using the same estimator and the same faced
+price:
+
+| margin | quantity regressed | elasticity |
+|---|---|---|
+| **incidence** | log(visits ÷ baskets that week) — is the category entered at all | **-0.6747** |
+| **breadth** | log(item lines ÷ visits) — how many different products | **-0.0919** |
+| **depth** | log(units ÷ item lines) — how many of each | **-0.1581** |
+
+**Reading.** A 10% price cut in a category raises the chance a basket enters that
+category by about 6.7%, the number of different products taken by 0.9%, and the units
+per product by 1.6%. Incidence dominates — roughly 7× breadth and 4× depth. Breadth is
+real but it is the smallest of the three.
+
+The three are not three ways of saying the same thing, and the arithmetic shows it.
+The identity
+
+```
+units per basket = (visits ÷ baskets) × (lines ÷ visit) × (units ÷ line)
+```
+
+is exact, so in logs the three elasticities must add to the total-units elasticity:
+
+```
+(-0.6747) + (-0.0919) + (-0.1581) = -0.9248
+```
+
+against **-0.9453** measured independently in §6.1 on the item × week panel — a gap of
+0.021, which is the price of the two panels differing (category-week
+aggregates demeaned within category here, item-weeks demeaned within item there). The
+decomposition therefore accounts for essentially all of the units response, and says
+that about 73% of it is households deciding to enter the category at all.
 
 ### 6.6 Base rates
 
@@ -824,55 +937,125 @@ price-sensitive early look price-sensitive later.
 
 ### 7.1 Taste stability within household
 
-Split each household's trips in half by time and compare its category profile across
-the two halves, against the same comparison with a *different* household:
+Does a household keep buying the same kinds of things? Split its history in half by
+date and see whether the first half looks like the second half — then check that
+against how much it looks like *someone else's* second half.
 
-**Measurement.** For one household: split its trips at its median
-shopping day. Count purchases per category in each half, giving two vectors of length
-188. Scale each to unit length. Then
+**Measurement.** For one household:
+
+1. Find the middle day of its shopping and cut its purchases into an earlier half and
+   a later half.
+2. In each half, count how many purchases fell into each of the 188 categories. That
+   gives two lists of 188 numbers. Slot 5 is BEEF for every household, so the lists
+   line up.
+3. Divide each list by its own length `√(Σ counts²)`. Now only the *mix* is left, not
+   the size — a household buying 500 items and one buying 50 in the same proportions
+   end up with the same list.
+4. Multiply the two lists slot by slot and add up:
 
 ```
-similarity = cosine(v_first_half, v_second_half) = Σ v1ᵢ v2ᵢ   (both already unit norm)
+similarity = Σ v1ᵢ · v2ᵢ        (both lists already scaled to length 1)
 ```
 
-1.0 means an identical mix of categories, 0 means no overlap. Repeat for all 2,066
-households — that is the blue distribution. For grey, pair each household's first half
-with a **different, randomly chosen** household's second half and compute the same
-thing. Unit-norming is what makes a 500-item shopper and a 50-item shopper with the
-same *mix* score as similar rather than different.
+1.0 means the same mix of categories, 0 means nothing in common. Note that a category
+counts only if it appears in *both* halves — 8 purchases in the first half times 0 in
+the second contributes nothing.
+
+**The comparison.** Doing this for all 2,066 households gives the blue curve. Grey is the
+same arithmetic with one change: each household's earlier half is matched against a
+*different* household's later half. Grey uses **every** such pairing —
+4,266,290 of them — not a sample, so it does not depend on a
+random draw.
 
 **Finding.**
 
 | | cosine similarity |
 |---|---|
-| a household's own two halves | **0.784** |
-| two different households | 0.469 |
-| ratio | **1.67×** |
-| households where own beats random | **95.9%** |
+| a household's own two halves | **0.7838** |
+| two different households, averaged over all 4,266,290 pairs | 0.4710 |
+| ratio | **1.66×** |
+| households scoring above their own average against strangers | **97.6%** |
 
-**Reading.** The two distributions barely overlap. Tastes are stable over a year and
-specific to the household: knowing what a household bought last year tells you much more about
-what it buys this year than knowing what an average household buys.
+**Reading.** A household resembles its own later self far more than it resembles
+anyone else. That is the point of the comparison: 0.78 on its own would prove nothing,
+because everybody buys milk and bread, and two strangers already score 0.47 for that
+reason alone. The gap between the two numbers is what is personal.
+
+**Why both curves must be read together.** Self-similarity also rises simply because a
+household with more purchases has a fuller, less noisy list — the correlation between
+own similarity and log purchase count is +0.643. But the stranger baseline rises with
+volume too, and the gap does not move:
+
+| purchases in the first half | households | own | stranger | ratio |
+|---|---|---|---|---|
+| under 50 | 61 | 0.569 | 0.338 | 1.68× |
+| 50–150 | 404 | 0.650 | 0.407 | 1.60× |
+| 150–400 | 842 | 0.781 | 0.472 | 1.65× |
+| 400+ | 759 | 0.875 | 0.508 | 1.72× |
+
+So the absolute height of the blue curve is partly a data-volume effect. The distance
+between blue and grey is not.
 
 ### 7.2 Price sensitivity across households
 
-**Measurement.** Restrict to (household, item) pairs the
-household bought at least 3 times, so there is something to fit a slope to. Then for
-each household, regress `log(units)` on `log(price)` after subtracting each
-**(household, item)** mean from both — so the slope comes from that household's own
-repeat purchases of the *same* item at different prices, never from comparing one item
-against another:
+The question is whether *this particular* household buys less when prices rise — one
+number per household, not an average over shoppers. That is what a coupon would be
+targeted on.
+
+**Measurement.** Comparing a household's beef purchase against its yogurt purchase
+says nothing about price; beef and yogurt simply cost different amounts. The only
+useful comparison is the **same household buying the same product twice at different
+prices**.
+
+1. Keep only (household, product) pairs bought **3 or more times** — 872,715
+   purchase rows across 135,055 pairs.
+2. For each purchase, work out two things: how far the price was from **what that
+   household usually pays for that product**, and how far the units were from **what
+   it usually buys of it**. Writing them `xd` and `yd`:
 
 ```
-slope_i = Σ (logp − mean_hi logp)(logu − mean_hi logu) / Σ (logp − mean_hi logp)²
+xd = logp − (that household's mean logp for that product)
+yd = logu − (that household's mean logu for that product)
 ```
 
-summed over that household's rows. A household needs 80 such rows to be included,
-which leaves **1,640** of the 2,066.
+3. Multiply them row by row, add up over all of that household's rows, and divide by
+   the summed square of the price deviations:
 
-For the split-half row, the identical calculation runs twice — once on the household's
-first-half trips, once on its second-half — and the two resulting series are correlated
-across the 1,374 households that clear the threshold in both halves.
+```
+slope_i = Σ xd · yd  /  Σ xd²
+```
+
+Subtracting the per-product mean is what keeps beef-versus-yogurt out of it — every
+number is relative to that product's own normal for that household. A negative slope
+means the household buys less when the price is above its usual level.
+
+**A worked example.** Household 3, product 1054 (CHEESE CRACKERS), bought 10 times:
+
+| day | price | units | xd (price vs its usual) | yd (units vs its usual) | xd·yd | xd² |
+|---|---|---|---|---|---|---|
+| 104 | 3.59 | 1 | +0.0115 | −0.3466 | −0.0040 | 0.0001 |
+| 140 | 3.59 | 1 | +0.0115 | −0.3466 | −0.0040 | 0.0001 |
+| 154 | 3.39 | 1 | −0.0459 | −0.3466 | +0.0159 | 0.0021 |
+| 199 | 3.59 | 1 | +0.0115 | −0.3466 | −0.0040 | 0.0001 |
+| 244 | 3.59 | 2 | +0.0115 | +0.3466 | +0.0040 | 0.0001 |
+| 248 | 3.59 | 2 | +0.0115 | +0.3466 | +0.0040 | 0.0001 |
+| 251 | 3.59 | 2 | +0.0115 | +0.3466 | +0.0040 | 0.0001 |
+| 264 | 3.59 | 2 | +0.0115 | +0.3466 | +0.0040 | 0.0001 |
+| 288 | 3.59 | 2 | +0.0115 | +0.3466 | +0.0040 | 0.0001 |
+| 617 | 3.39 | 1 | −0.0459 | −0.3466 | +0.0159 | 0.0021 |
+| **its own average** | **3.55** | | | | **+0.0397** | **0.0053** |
+
+Summing that household's other 17 repeat-bought products the same way:
+
+```
+slope = Σ xd·yd / Σ xd²  =  0.1591 / 1.1430  =  +0.139
+```
+
+**Thresholds.** A household needs **80** qualifying rows for its overall slope, leaving
+**1,640** of 2,066. The split-half runs the same arithmetic twice — once on the
+household's earlier trips, once on its later ones — but with the threshold halved to
+**40**, because each half holds roughly half the purchases. 1,374 households clear 40
+in both halves, and their two slopes are correlated.
 
 **Finding.**
 
@@ -883,13 +1066,40 @@ across the 1,374 households that clear the threshold in both halves.
 | sd across households | 0.185 |
 | **split-half correlation** | **+0.236** |
 
-**Reading.** The spread alone proves nothing: per-household estimates are noisy, and
-noisy estimates are spread out even when the underlying quantity is identical for
-everyone.
-The **split-half correlation** is the test that separates the two — a household's
-price response in the first half of its trips against its response in the second half.
-It is modest but clearly non-zero, on
-1,374 households.
+**Reading.** The spread on its own proves nothing. Noisy estimates are spread out even
+when the true value is the same for everybody. The split-half correlation is the test
+that tells them apart, and at +0.236 it is modest but clearly not zero.
+
+**Why it is only +0.236: most households never see the price move.** The slope divides
+by `Σ xd²`, which is how much the price actually varied on the things that household
+repeatedly buys. When that is near zero, small accidents become large slopes.
+
+Look again at the worked example. The price was 3.59 on eight of the ten visits and
+3.39 on two. The units went from 1 to 2 partway through — almost entirely **at the
+same price of 3.59**. Something other than price changed, and the arithmetic charges it
+to price anyway, because price is the only thing it looks at. That is how this
+household ended up with a *positive* slope.
+
+This is common, not exceptional:
+
+| | share |
+|---|---|
+| rows from a (household, product) pair whose price never moved | **18.6%** |
+| pairs with no price variation at all | **16.3%** |
+
+Splitting the 1,640 households by how much price movement they had — `Σ xd²` above or
+below its median of 9.35 — shows the effect directly:
+
+| | spread of slopes (sd) | share with a positive slope |
+|---|---|---|
+| little price movement | **0.226** | 11.5% |
+| much price movement | **0.129** | 3.5% |
+
+Where prices genuinely moved, the estimates are tighter and almost all negative, which
+is what demand should look like. Where prices barely moved, they fly apart and
+11.5% come out positive. So a good part of the apparent
+"households differ" is really "some households were measured badly" — which is what
+§7.6 pursues.
 
 ### 7.3 Store visits
 
@@ -988,9 +1198,19 @@ used to rank households on one half and measure them on the other.
 
 ![reliability](figures/reliability.png)
 
-**Reading it.** *Left*: one observation per shuffle. Household labels on the
-second-half estimates are randomly permuted and the correlation recomputed, 200 times —
-that grey distribution is what pure noise looks like. The red line is the real value.
+**Reading it.** *Left*: x = a correlation value, y = how many of 200 shuffles produced
+it. Each shuffle moves the second-half slopes onto the wrong households, keeping both
+sets of numbers intact and destroying only which household each pair belongs to. The
+grey pile is therefore **how far from zero a correlation lands by chance when there is
+no relationship at all**, given 1,374 households — not a picture of measurement error.
+It is centred at +0.003 with sd 0.025, matching the theoretical 1/√(n−1) = 0.027. The
+red line is the real, unshuffled value.
+
+Two different things get called noise in this section, and they do different work.
+*Measurement noise* is each household's slope being imprecise, and it is what holds the
+correlation down to 0.236. *Chance in the correlation itself* is what this panel
+measures, and it is ±0.025. This panel establishes only that 0.236 is really there; the
+other three ask whether it is large enough to use.
 *Middle*: each point is the whole analysis re-run at a stricter minimum, x = purchase
 rows a household must have **in each half** to be included, y = the resulting
 correlation; `n=` labels how many households survive each cut. *Right*: households are
@@ -1011,6 +1231,31 @@ data on each side. The Spearman–Brown correction for that is `2r/(1+r)`:
 So an estimate built on a household's **whole** record has reliability around
 **0.38**, not 0.236. The lower number answers "how well do two halves agree", which is
 not the question a targeting system asks.
+
+The word *implied* matters: 0.381 is **predicted**, not measured. The formula rests on
+two assumptions — that the two halves measure the same thing (the household's taste did
+not drift across the year) and that error variance falls in proportion to data.
+
+**Both are testable one level down.** Cut each household into four consecutive
+quarters instead of two halves. Measure how well the quarters agree, extrapolate that
+to halves with the same `2r/(1+r)`, then compare against the half-vs-half correlation
+actually observed on those same households:
+
+| | value |
+|---|---|
+| households with a usable slope in all four quarters and both halves | 1,045 |
+| quarter-vs-quarter reliability (mean of the 6 pairs) | +0.1064 |
+| what `2r/(1+r)` predicts for halves | +0.1924 |
+| **what the halves actually give** | **+0.3199** |
+
+The formula **understates** the gain by 40%. Doubling the data helped more than
+proportionally, and the reason is visible in §7.2: the slope divides by `Σ xd²`, the
+price movement a household actually saw. A quarter-length record does not just have
+fewer rows — whole (household, item) pairs drop below the 3-purchase minimum and
+contribute nothing at all. Lengthening the window adds usable pairs as well as rows.
+
+So 0.381 is a conservative floor for the full-history reliability, not an optimistic
+ceiling.
 
 **Finding 3 — the limit is measurement noise.** Re-running with stricter data
 requirements:
@@ -1172,14 +1417,16 @@ Every row links to the section carrying the measurement and formula.
 | **elasticity of units** | **-0.945** | §6.1 |
 | elasticity of units per buyer | -0.235 = 25% of the units response | §6.1 |
 | elasticity by category | median -0.951, p10 -1.565, p90 -0.043; 91% negative | §6.2 |
-| demand at a price cut | **2.02×** the prior week, 37,132 events | §6.3 |
-| elasticity of breadth | -0.0689 | §6.5 |
+| demand at a price cut | **2.38×** a quiet week, on the 20,725 non-overlapping events of 37,132 | §6.3 |
+| residual once the price is back (+3 wks) | **1.19×** a quiet week; no post-promotion dip | §6.3 |
+| implied slope in the promotion week | **-2.83**, 3.4× the -0.792 average — price alone does not explain a promotion | §6.3 |
+| elasticity of incidence, breadth, depth | **-0.675**, -0.092, -0.158; they sum to -0.925 against the -0.945 of §6.1 | §6.5 |
 
 ### Households
 
 | finding | value | section |
 |---|---|---|
-| **taste self-similarity vs cross-household** | **1.67×**; own beats random for 95.9% | §7.1 |
+| **taste self-similarity vs cross-household** | **1.66×** (0.784 vs 0.471 over all 4,266,290 pairs); 97.6% of households above their own stranger average | §7.1 |
 | price sensitivity across households | median -0.169, p10 -0.427, p90 -0.016 | §7.2 |
 | stores per household | median 4, p90 9 | §7.3 |
 | trips at the primary store | median 76% | §7.3 |
