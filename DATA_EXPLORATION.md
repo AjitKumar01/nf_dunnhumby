@@ -480,30 +480,69 @@ panel by `scripts/29_demand_eda.py`.
 
 ![demand response](figures/demand_eda_price.png)
 
-**Reading it.** *Left* is a **binned scatter**, and the binning is what makes it
-readable. Start from ~500,000 item-weeks. For each, compute the change from the
-previous week *for that same item*: Δ log price and Δ log buyers-per-trip. Plotting
-those 500,000 points directly gives a featureless cloud. Instead, sort them by Δ log
-price, cut into **twelve equal-count bins**, and plot each bin's mean on both axes —
-so each of the twelve dots summarises ~42,000 item-weeks.
+**Reading it — the left panel.** Twelve dots. Here is exactly what each one is.
 
-Two design choices matter. **Differencing within item** means the curve is about a
-price *changing*, not about expensive items versus cheap ones — an item's own level
-cancels. And **equal-count bins** rather than equal-width means every dot rests on the
-same amount of data, so the ends are as trustworthy as the middle.
+Start from the item × week panel: one row per (item, week), holding that item's mean
+log price that week and its log buyers-per-trip. For each row compute the change from
+the **same item's previous week**:
+
+```
+Δ log price  = logp(item, w) − logp(item, w−1)
+Δ log buyers = lbuy(item, w) − lbuy(item, w−1)
+```
+
+Keep rows where the price actually moved, `|Δ log price| > 0.01`. That leaves
+**178,444 rows** — every row is one item in one week, paired with what it did the week
+before.
+
+Now sort those 178,444 rows by `Δ log price` and cut into **twelve equal-count bins**
+of about 14,870 rows each. Each dot is one bin:
+
+```
+x = mean Δ log price   of the rows in that bin
+y = mean Δ log buyers  of the rows in that bin
+```
+
+The twelve plotted points are:
+
+| bin | x = mean Δ log price | y = mean Δ log buyers/trip | rows |
+|---|---|---|---|
+| 1 | −0.486 | **+0.701** | 14,871 |
+| 2 | −0.236 | +0.355 | 14,934 |
+| 3 | −0.142 | +0.189 | 14,806 |
+| 4 | −0.083 | +0.006 | 14,870 |
+| 5 | −0.043 | −0.069 | 14,871 |
+| 6 | −0.012 | −0.079 | 14,894 |
+| 7 | +0.026 | −0.153 | 14,848 |
+| 8 | +0.054 | −0.190 | 14,872 |
+| 9 | +0.092 | −0.180 | 15,029 |
+| 10 | +0.147 | −0.202 | 14,708 |
+| 11 | +0.235 | −0.245 | 14,885 |
+| 12 | +0.470 | **−0.358** | 14,856 |
+
+Read bin 1: in those 14,871 item-weeks the price fell by 0.486 in logs (about 39%
+cheaper), and buyers rose by 0.701 in logs (about twice as many). Bin 12: price rose
+0.470 in logs (about 60% dearer), buyers fell 0.358 (about 30% fewer).
+
+Two choices worth naming. **Differencing within item** means an item's own price level
+and popularity cancel, so the curve is about a price *changing* rather than expensive
+items versus cheap ones. **Equal-count rather than equal-width bins** means every dot
+rests on ~14,870 rows, so the extremes are as well-supported as the middle.
+
+**Note the panel and the regression are not the same calculation.** The panel uses
+week-on-week *differences* on 178,444 rows where the price moved. The elasticity below
+is a *within-item* regression on all 556,410 item-weeks, including the ones where the
+price held steady. The two agree in sign and rough magnitude, but the slope of the
+plotted dots is not the reported elasticity.
 
 *Middle*: one observation per category, x = that category's own estimated elasticity,
 y = how many categories.
 
-*Right*: the event study. Find every item-week where the price fell at least 0.15 in
-logs (37,132 of them), and line all of them up at week 0. x = weeks before or after
-that cut. y = demand **divided by that item's own average demand**, which is what
-allows a high-volume item and a low-volume one to be averaged into the same curve; 1.0
-means "normal for this item".
-
-The left panel is monotone across the whole range and passes through the origin.
-
-Within-item log-log slopes on 556,410 item-weeks:
+*Right*: the event study. Every item-week where the price fell at least 0.15 in logs
+(**37,132** of them), lined up at week 0. x = weeks before or after the cut. y = that
+item's demand divided by **its own average demand across the whole panel**, so a
+high-volume and a low-volume item can be averaged into one curve; 1.0 means "normal
+for this item".
 
 **Measurement.** Build an item × week panel: for every item and week,
 `buyers` = how many purchase lines it got, `units` = how many units, `trips` = how many
