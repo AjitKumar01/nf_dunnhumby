@@ -171,29 +171,106 @@ def main(a):
     panel = panel.sort_values(["item_id", "WEEK_NO"])
     panel["dlogp"] = panel.groupby("item_id").logp.diff()
     panel["norm_buy"] = panel.buyers / panel.groupby("item_id").buyers.transform("mean").replace(0, np.nan)
-    ev = panel[panel.dlogp <= -a.cut]
+    ev_all = panel[panel.dlogp <= -a.cut]
     idx = {(i, w): k for k, (i, w) in enumerate(zip(panel.item_id, panel.WEEK_NO))}
-    prof = {k: [] for k in range(-3, 4)}
-    arr_i = panel.item_id.to_numpy(); arr_w = panel.WEEK_NO.to_numpy()
     arr_n = panel.norm_buy.to_numpy()
-    for i, w in zip(ev.item_id.to_numpy(), ev.WEEK_NO.to_numpy()):
-        for k in prof:
+
+    # An item is typically cut many times -- 37,132 events across 4,712 items, so
+    # about 8 each -- and 57.7% of consecutive cuts for the same item fall less than
+    # 7 weeks apart.  Their +/-3 windows therefore overlap: a week labelled "-1" for
+    # one event can be the "+2" of the previous one, so the pre-period is measured on
+    # weeks already lifted by an earlier promotion and the post-period decay can be
+    # the next promotion arriving rather than this one persisting.
+    #
+    # Both profiles are reported.  "all" keeps every event; "clean" keeps only events
+    # with no other cut of the same item within +/- window weeks, which costs most of
+    # the sample but leaves an uncontaminated shape.
+    # The demand tail at +1..+3 has two readings: the promotion ended and buying
+    # persisted, or the price is simply still down.  Only the price path separates
+    # them, so it is measured on the same windows.  arr_p is logp centred on the
+    # item's own mean, so 0 = the item at its usual price and -0.20 = 20 log-points
+    # (about 18%) below it.
+    arr_p = (panel.logp - panel.groupby("item_id").logp.transform("mean")).to_numpy()
+
+    def build(ev, label, arr=None):
+        arr = arr_n if arr is None else arr
+        prof = {k: [] for k in range(-3, 4)}
+        for i, w in zip(ev.item_id.to_numpy(), ev.WEEK_NO.to_numpy()):
+            for k in prof:
+                j = idx.get((i, w + k))
+                if j is not None and np.isfinite(arr[j]):
+                    prof[k].append(arr[j])
+        pr = {k: float(np.mean(v)) for k, v in prof.items() if len(v) > 30}
+        n = {k: int(len(v)) for k, v in prof.items()}
+        pre = float(np.mean([pr[k] for k in (-3, -2, -1) if k in pr]))
+        return {"events": int(len(ev)), "profile": pr, "n_per_offset": n,
+                "pre_period_mean": pre,
+                "lift_vs_pre_period": pr.get(0, np.nan) / pre if pre else np.nan,
+                "lift_vs_week_minus_1": pr.get(0, np.nan) / pr.get(-1, np.nan)
+                if pr.get(-1) else np.nan}
+
+    # isolated events: no other cut of the same item within +/- a.window weeks
+    ev_s = ev_all.sort_values(["item_id", "WEEK_NO"])
+    gap_prev = ev_s.groupby("item_id").WEEK_NO.diff()
+    gap_next = ev_s.groupby("item_id").WEEK_NO.diff(-1).abs()
+    isolated = ((gap_prev.isna()) | (gap_prev > a.window)) & \
+               ((gap_next.isna()) | (gap_next > a.window))
+    ev_clean = ev_s[isolated]
+
+    prof_all = build(ev_all, "all")
+    prof_clean = build(ev_clean, "clean")
+    # Neither 1.0 nor the pre-period is a clean baseline.  norm_buy averages exactly
+    # 1.0 over ALL of an item's weeks, promotion weeks included, so a quiet week sits
+    # below 1.0.  And the pre-period is selected: an event requires a price DROP, so
+    # the weeks before one are mechanically at an above-average price.  The honest
+    # reference is a quiet week -- one more than `window` weeks from any cut of that
+    # item -- so it is measured directly.
+    near = np.zeros(len(panel), bool)
+    for i, w in zip(ev_all.item_id.to_numpy(), ev_all.WEEK_NO.to_numpy()):
+        for k in range(-a.window, a.window + 1):
             j = idx.get((i, w + k))
-            if j is not None and np.isfinite(arr_n[j]):
-                prof[k].append(arr_n[j])
-    profile = {k: float(np.mean(v)) for k, v in prof.items() if len(v) > 30}
-    r["promotion_event_study"] = {
-        "events": int(len(ev)), "min_log_price_cut": a.cut,
-        "profile_relative_to_item_mean": profile,
-        "lift_at_cut": profile.get(0, np.nan) / profile.get(-1, np.nan)
-        if profile.get(-1) else np.nan,
-    }
+            if j is not None:
+                near[j] = True
+    qn, qp = arr_n[~near], arr_p[~near]
+    quiet = {"weeks": int((~near).sum()),
+             "norm_buy": float(np.nanmean(qn)),
+             "price_vs_item_mean": float(np.nanmean(qp))}
+    r["promotion_event_study"] = r.get("promotion_event_study", {})
     log("")
-    log(f"3. promotion event study: {len(ev):,} price cuts of >= {a.cut} in logs")
-    log("   demand relative to the item's own mean, by week around the cut:")
-    log("     " + "  ".join(f"{k:+d}:{v:.2f}" for k, v in sorted(profile.items())))
-    if profile.get(-1):
-        log(f"   -> lift at the cut week: {profile[0] / profile[-1]:.2f}x the week before")
+    log(f"3q. quiet weeks (>{a.window} wks from any cut of that item): "
+        f"{quiet['weeks']:,} item-weeks, demand {quiet['norm_buy']:.3f} of the item "
+        f"mean, price {quiet['price_vs_item_mean']:+.3f} in logs")
+
+    prof_all["price_path_vs_item_mean"] = build(ev_all, "all", arr_p)["profile"]
+    prof_clean["price_path_vs_item_mean"] = build(ev_clean, "clean", arr_p)["profile"]
+    prof_all["quiet_week_baseline"] = prof_clean["quiet_week_baseline"] = quiet
+    for pr in (prof_all, prof_clean):
+        pr["lift_vs_quiet_week"] = pr["profile"][0] / quiet["norm_buy"]
+        pr["residual_at_plus3_vs_quiet_week"] = pr["profile"][3] / quiet["norm_buy"]
+    r["promotion_event_study"] = {
+        "min_log_price_cut": a.cut, "isolation_window_weeks": a.window,
+        "all_events": prof_all, "isolated_events": prof_clean,
+        "share_events_isolated": float(len(ev_clean) / max(len(ev_all), 1)),
+        # kept for backward compatibility with earlier references
+        "events": int(len(ev_all)),
+        "profile_relative_to_item_mean": prof_all["profile"],
+        "lift_at_cut": prof_all["lift_vs_week_minus_1"],
+    }
+    profile = prof_all["profile"]
+    ev = ev_all
+    log("")
+    log(f"3. promotion event study: {len(ev_all):,} price cuts of >= {a.cut} in logs, "
+        f"of which {len(ev_clean):,} ({len(ev_clean)/len(ev_all):.1%}) are isolated "
+        f"(no other cut of the same item within +/-{a.window} weeks)")
+    for lab, pr in [("all events    ", prof_all), ("isolated only ", prof_clean)]:
+        log(f"   {lab}: " + "  ".join(f"{k:+d}:{v:.2f}" for k, v in sorted(pr["profile"].items())))
+        log(f"   {' ' * len(lab)}  pre-period {pr['pre_period_mean']:.3f}, "
+            f"lift vs pre {pr['lift_vs_pre_period']:.2f}x")
+        log(f"   {' ' * len(lab)}  vs quiet week: peak {pr['lift_vs_quiet_week']:.2f}x, "
+            f"+3 residual {pr['residual_at_plus3_vs_quiet_week']:.2f}x")
+        log(f"   {' ' * len(lab)}  price vs item mean (logs): "
+            + "  ".join(f"{k:+d}:{v:+.3f}" for k, v in
+                        sorted(pr["price_path_vs_item_mean"].items())))
 
     # ============================================================ 4. quantity
     u = bk.units.to_numpy()
@@ -229,28 +306,56 @@ def main(a):
                          .sort_index().items()},
         "corr_breadth_units": float(cv.corr().iloc[0, 1]),
     }
-    # does a promotion widen the basket, or only deepen it?
-    cb = bkc.groupby(["BASKET_ID", "cat_id"]).agg(
-        breadth=("item_id", "size"), units=("units", "sum"),
-        lp=("item_id", "size"))
-    pr = (panel.set_index(["item_id", "WEEK_NO"]).logp
-          if "logp" in panel else None)
-    tmp = bkc.merge(panel[["item_id", "WEEK_NO", "logp"]], on=["item_id", "WEEK_NO"],
-                    how="left")
-    cw = tmp.groupby(["BASKET_ID", "cat_id"]).agg(
-        breadth=("item_id", "size"), lp=("logp", "mean"), cat=("cat_id", "first"))
-    cw = cw.dropna()
-    cw["lb"] = np.log(cw.breadth)
-    b_br, n_br = within_slope(cw, "lb", "lp", "cat")
+    # Does a promotion widen the basket, or only deepen it?
+    #
+    # Two corrections over the first version of this.  (1) The price variable was the
+    # mean price of the items the shopper actually BOUGHT, which is chosen rather than
+    # faced -- a shopper who adds a second item changes the average by choosing it.
+    # The faced price is the mean over EVERY item in the category that week.  (2) The
+    # breadth regression is conditioned on the category having been bought, so it says
+    # nothing about incidence, and units never enter it, so it says nothing about
+    # depth.  Claiming three margins from it was wrong.  All three are estimated here
+    # instead, from one (category, week) panel with one estimator and one price.
+    faced = (panel.groupby(["cat_id", "WEEK_NO"]).logp.mean()
+             .rename("lp_faced").reset_index())
+
+    cw = bkc.groupby(["BASKET_ID", "cat_id", "WEEK_NO"]).agg(
+        breadth=("item_id", "size"), units=("units", "sum")).reset_index()
+    cwf = cw.merge(faced, on=["cat_id", "WEEK_NO"])
+    cwf["lb"] = np.log(cwf.breadth)
+    b_br, n_br = within_slope(cwf, "lb", "lp_faced", "cat_id")
     r["breadth"]["elasticity_of_breadth_wrt_price"] = b_br
+    r["breadth"]["breadth_regression_visits"] = int(n_br)
+
+    # the three margins, on one panel: a category-week is kept if at least 5 baskets
+    # bought the category, so the ratios below are not one-basket artefacts
+    nbask = bkc.groupby("WEEK_NO").BASKET_ID.nunique().rename("baskets")
+    cwk = (cw.groupby(["cat_id", "WEEK_NO"])
+           .agg(visits=("BASKET_ID", "size"), units=("units", "sum"),
+                lines=("breadth", "sum")).reset_index()
+           .merge(faced, on=["cat_id", "WEEK_NO"]).merge(nbask, on="WEEK_NO"))
+    cwk = cwk[cwk.visits >= 5]
+    cwk["l_incidence"] = np.log(cwk.visits / cwk.baskets)   # P(category in a basket)
+    cwk["l_breadth"] = np.log(cwk.lines / cwk.visits)       # item lines per visit
+    cwk["l_depth"] = np.log(cwk.units / cwk.lines)          # units per line
+    margins = {}
+    for k in ("incidence", "breadth", "depth"):
+        s, n = within_slope(cwk, f"l_{k}", "lp_faced", "cat_id")
+        margins[k] = s
+    margins["category_weeks"] = int(len(cwk))
+    r["breadth"]["margins"] = margins
+
     rb2 = r["breadth"]
     log("")
     log(f"4b. breadth: {rb2['mean_distinct_items']:.3f} distinct items per purchased "
         f"category; {rb2['share_over_1']:.1%} of category visits buy more than one")
     log("    distribution: " + ", ".join(f"{k}:{v:.1%}" for k, v in
                                          rb2["distribution"].items()))
-    log(f"    breadth elasticity wrt price {b_br:+.4f} on {n_br:,} category visits "
+    log(f"    breadth elasticity wrt the FACED price {b_br:+.4f} on {n_br:,} visits "
         f"-> a promotion {'widens' if b_br < 0 else 'does not widen'} the basket")
+    log(f"    three margins on {margins['category_weeks']:,} category-weeks: "
+        f"incidence {margins['incidence']:+.4f}, breadth {margins['breadth']:+.4f}, "
+        f"depth {margins['depth']:+.4f}")
 
     # ============================================================== 5. stores
     tx = pd.read_parquet(os.path.join(DATA, "tx.parquet"),
@@ -329,12 +434,29 @@ def main(a):
     ax = axes[2]
     if profile:
         ks = sorted(profile)
-        ax.plot(ks, [profile[k] for k in ks], "o-", color=PAL["green"], lw=2)
-        ax.axvline(0, color=PAL["red"], ls="--", lw=1.5, label="week of the price cut")
-        ax.axhline(1, color="k", lw=.8)
-        style(ax, f"Promotion event study\n{len(ev):,} cuts of ≥{a.cut} in logs",
+        ax.plot(ks, [profile[k] for k in ks], "o-", color=PAL["grey"], lw=2,
+                label=f"all {len(ev_all):,} cuts")
+        kc = sorted(prof_clean["profile"])
+        ax.plot(kc, [prof_clean["profile"][k] for k in kc], "s-", color=PAL["green"],
+                lw=2, label=f"isolated only ({len(ev_clean):,})")
+        ax.axvline(0, color=PAL["red"], ls="--", lw=1.5)
+        ax.axhline(quiet["norm_buy"], color="k", lw=1, ls=":",
+                   label=f"quiet week ({quiet['norm_buy']:.2f})")
+        style(ax, "Promotion event study\nisolated = no other cut of that item within ±3 wks",
               "weeks relative to the cut", "demand ÷ the item's own mean")
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=7, loc="upper left")
+        # the price path on a twin axis: it shows how much of the post-cut tail is
+        # simply the promotion still running rather than demand persisting
+        ax2 = ax.twinx()
+        pp = prof_clean["price_path_vs_item_mean"]
+        kp = sorted(pp)
+        ax2.plot(kp, [pp[k] for k in kp], "^--", color=PAL["red"], lw=1.4, ms=5,
+                 alpha=.75, label="price (isolated)")
+        ax2.axhline(0, color=PAL["red"], lw=.6, alpha=.4)
+        ax2.set_ylabel("log price − the item's mean log price", fontsize=8,
+                       color=PAL["red"])
+        ax2.tick_params(axis="y", labelcolor=PAL["red"], labelsize=8)
+        ax2.legend(fontsize=7, loc="upper right")
     fig.suptitle("Demand response to price — the exploration that should have come first",
                  fontsize=12)
     fig.tight_layout()
@@ -378,4 +500,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--cut", type=float, default=0.15,
                    help="minimum log price fall that counts as a promotion")
+    p.add_argument("--window", type=int, default=3,
+                   help="an event is 'isolated' if no other cut of the same item "
+                        "falls within this many weeks either side")
     main(p.parse_args())
