@@ -100,6 +100,41 @@ def main(a):
     log("2. split-half halves the data on each side, so it understates the reliability")
     log(f"   of an estimate built on everything.  Spearman-Brown 2r/(1+r) = {sb:+.4f}")
 
+    # ------------------------- 2b. is the Spearman-Brown extrapolation trustworthy?
+    # 2 above PREDICTS the full-history reliability, it does not measure it.  The
+    # prediction assumes the two halves measure the same thing and that error variance
+    # falls in proportion to data.  Both can be checked one level down: cut each
+    # household into quarters, measure quarter-vs-quarter reliability, extrapolate it
+    # to halves with the same formula, and compare against the half-vs-half value
+    # actually observed on those households.
+    bq = bk.copy()
+    bq["q"] = np.ceil(bq.groupby("user_id").DAY.rank(method="first", pct=True) * 4)
+    bq["q"] = bq.q.clip(1, 4).astype(int)
+    M = a.min_obs // 2
+    qs = {i: slopes(bq[bq.q == i], M)[0] for i in (1, 2, 3, 4)}
+    h1q, h2q = slopes(bq[bq.q <= 2], 2 * M)[0], slopes(bq[bq.q > 2], 2 * M)[0]
+    common = sorted(set.intersection(*[set(s.index) for s in qs.values()],
+                                     set(h1q.index), set(h2q.index)))
+    if len(common) > 50:
+        Q = pd.DataFrame({i: qs[i][common] for i in (1, 2, 3, 4)})
+        pairs = [(x, y) for x in (1, 2, 3, 4) for y in (1, 2, 3, 4) if x < y]
+        rq = float(np.mean([Q[x].corr(Q[y]) for x, y in pairs]))
+        pred = 2 * rq / (1 + rq)
+        act = float(h1q[common].corr(h2q[common]))
+        r["spearman_brown_check"] = {
+            "households": len(common), "quarter_vs_quarter": rq,
+            "predicted_half_vs_half": pred, "actual_half_vs_half": act,
+            "relative_error": (pred - act) / act,
+        }
+        log("")
+        log("2b. is that extrapolation trustworthy?  test it one level down:")
+        log(f"    quarter-vs-quarter reliability on {len(common):,} households: {rq:+.4f}")
+        log(f"    2r/(1+r) predicts half-vs-half   {pred:+.4f}")
+        log(f"    actually observed                {act:+.4f}")
+        log(f"    -> the formula {'UNDER' if pred < act else 'OVER'}states the gain by "
+            f"{abs(pred - act) / act:.0%}; doubling the data helps "
+            f"{'more' if pred < act else 'less'} than it assumes")
+
     # ------------------------------------------ 3. noise-limited or truly alike?
     rows = []
     for m in a.thresholds:

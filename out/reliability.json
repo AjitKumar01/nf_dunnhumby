@@ -12,6 +12,13 @@
     "split_half": 0.23558773444061296,
     "spearman_brown": 0.38133712058459446
   },
+  "spearman_brown_check": {
+    "households": 1045,
+    "quarter_vs_quarter": 0.10640958768862518,
+    "predicted_half_vs_half": 0.19235116700483954,
+    "actual_half_vs_half": 0.31988232522260135,
+    "relative_error": -0.3986814780373213
+  },
   "by_data_volume": [
     {
       "min_rows_per_half": 20,
