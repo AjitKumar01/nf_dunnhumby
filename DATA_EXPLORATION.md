@@ -333,7 +333,7 @@ way — the relationship cannot be summarised by a single "days since" number.
 
 ---
 
-## 4. How much of the catalogue is analysable
+<!-- ## 4. How much of the catalogue is analysable
 
 ![catalogue](figures/basket_eda_catalogue.png)
 
@@ -370,7 +370,7 @@ sub-commodities of which 545 are testable. The 20-line threshold covers more vol
 per-item estimation. The 100-line cut trades a quarter of the volume for quantities
 that can actually be measured.
 
----
+--- -->
 
 ## 5. How much prices move
 
@@ -675,10 +675,77 @@ price response in the first half of its trips against its response in the second
 It is modest but clearly non-zero, on
 1,374 households.
 
-So price sensitivity genuinely differs across households — but only about a quarter of
-the observed spread is stable, and the rest is estimation noise. That ratio is the
-ceiling on how well any method, model or otherwise, could sort households by price
-sensitivity from this data.
+### 7.2b How reliable is that number, really?
+
+The +0.236 above was originally read as "about a quarter of the spread is real, the
+rest is noise". That reading was wrong in two directions, and `32_reliability.py`
+tests it four ways.
+
+![reliability](figures/reliability.png)
+
+**Reading it.** *Left*: one observation per shuffle. Household labels on the
+second-half estimates are randomly permuted and the correlation recomputed, 200 times —
+that grey distribution is what pure noise looks like. The red line is the real value.
+*Middle*: each point is the whole analysis re-run at a stricter minimum, x = purchase
+rows a household must have **in each half** to be included, y = the resulting
+correlation; `n=` labels how many households survive each cut. *Right*: households are
+sorted by their **first-half** slope into three equal groups, and each bar is that
+group's mean slope in the **second half** — data never used to form the groups.
+
+**1. It is real.** Shuffling household labels gives a null centred at **+0.003** with
+sd **0.025**. The actual +0.236 sits **9.2 standard deviations above** it (p < 0.005).
+Households genuinely resemble their past selves.
+
+**2. It understates the full history.** Split-half deliberately throws away half the
+data on each side. The Spearman–Brown correction for that is `2r/(1+r)`:
+
+```
+2 × 0.236 / (1 + 0.236) = 0.381
+```
+
+So an estimate built on a household's **whole** record has reliability around
+**0.38**, not 0.236. The lower number answers "how well do two halves agree", which is
+not the question a targeting system asks.
+
+**3. The limit is measurement noise, not households being alike.** This is the part
+that changes the conclusion. Re-running with stricter data requirements:
+
+| minimum rows per half | households kept | split-half r | implied full-history |
+|---|---|---|---|
+| ≥ 20 | 1,641 | **−0.136** | — |
+| ≥ 40 | 1,374 | +0.236 | 0.381 |
+| ≥ 80 | 1,052 | +0.313 | 0.477 |
+| ≥ 160 | 701 | +0.403 | 0.574 |
+| ≥ 320 | 314 | **+0.506** | **0.672** |
+
+Reliability more than **doubles** as households provide more data, and at ≥20 rows it
+is actually *negative* — pure noise. If households were genuinely similar to one
+another, more data per household would not help; the ceiling would stay put. It rises
+steeply, so the constraint is **how precisely each household is measured**, not how
+much they differ.
+
+For a household with a long record, price sensitivity is a reasonably stable trait
+(0.67). For a light shopper it is barely measurable at all.
+
+**4. It is strong enough to rank on, weakly.** The practical test: sort households into
+thirds by their first-half slope, then look at the second half.
+
+| group (ranked on first half) | mean slope in the held-out half |
+|---|---|
+| most sensitive | **−0.273** |
+| middle | −0.193 |
+| least sensitive | **−0.136** |
+
+The most-sensitive third really is about **twice** as price-responsive as the
+least-sensitive third, on data that played no part in forming the groups. The gap is
+**0.14, or 0.53 standard deviations** — a real, monotone separation, and a modest one.
+
+**What this means for targeting.** Sorting households by price sensitivity works, and
+it is not an artefact. But the ordering is noisy for light shoppers and much sharper
+for heavy ones, so a targeting policy should weight by how much is known about each
+household rather than treating every estimate as equally trustworthy. The earlier
+claim that "only a quarter is real" was too pessimistic; a claim that this cleanly
+separates customers would be too optimistic.
 
 ### 7.3 Store visits
 
@@ -772,7 +839,9 @@ recorded observables.
 | a category purchase spans **1.284** distinct items; breadth elasticity **−0.069** | §6.4b |
 | base rates: category incidence **3.25%**, item purchase **0.144%** | §6.5 |
 | taste is **1.67×** more self-similar within household than across; 95.9% of households | §7.1 |
-| price sensitivity differs across households, split-half correlation **+0.24** | §7.2 |
+| price sensitivity differs across households; split-half **+0.24**, 9.2 sd above a shuffled null | §7.2 |
+| reliability is **noise-limited**: it rises from −0.14 to **+0.51** as households provide more data | §7.2b |
+| ranking on one half separates the held-out half by **0.53 sd** — real, monotone, modest | §7.2b |
 | households use a median of **4 stores**; 30% of consecutive trips switch | §7.3 |
 | demographics span **0.076** of price slope against a **0.411** household spread | §7.5 |
 | strict price placebos retain **0.7%** of the real effect; 5 of 160 categories fail | §8 |
