@@ -265,7 +265,8 @@ def main(a):
         log(f"   generated, {sw} Gibbs sweeps   elasticity {e_g:+.4f}  on {n_g:,} item-weeks"
             f"   ({e_g / e_real:.0%} of real)" if e_real else "")
 
-    with open(os.path.join(OUT, "generator_eval.json"), "w") as f:
+    tag = "" if a.label == "nested" else f"_{a.label}"
+    with open(os.path.join(OUT, f"generator_eval{tag}.json"), "w") as f:
         json.dump(res, f, indent=2, default=float)
 
     # ------------------------------------------------------------------------ figure
@@ -304,9 +305,9 @@ def main(a):
     ax.grid(axis="y", alpha=.3)
     fig.suptitle("Does the generated distribution match the real one?", fontsize=13)
     fig.tight_layout()
-    fig.savefig(os.path.join(FIG, "generator_eval.png"), dpi=150, bbox_inches="tight")
+    fig.savefig(os.path.join(FIG, f"generator_eval{tag}.png"), dpi=150, bbox_inches="tight")
     log("")
-    log("wrote out/generator_eval.json and figures/generator_eval.png")
+    log(f"wrote out/generator_eval{tag}.json and figures/generator_eval{tag}.png")
 
 
 if __name__ == "__main__":

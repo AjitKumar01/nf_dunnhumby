@@ -61,7 +61,9 @@ def load(label, d, dev):
     m = nb.NestedModel(d, K=cfg["K"], Kp=cfg["Kp"], Kt=cfg["Kt"], Ks=cfg["Ks"],
                        seed=cfg["seed"], use_nest=not cfg["no_nest"],
                        use_quantity=not cfg["no_quantity"],
-                       use_store=not cfg["no_store"]).to(dev)
+                       use_store=not cfg["no_store"],
+                       ctx_agg=cfg.get("ctx_agg", "mean"),
+                       learn_ctx_scale=cfg.get("learn_ctx_scale", False)).to(dev)
     m.load_state_dict(torch.load(os.path.join(OUT, f"{label}_nested.pt"),
                                  map_location=dev))
     m.eval()
@@ -379,7 +381,9 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                     jj, stc, dpc, nnj = cache[c]
                     if not nnj:
                         continue
-                    ctx = (tot - A[cur]) / (n_slots - 1)
+                    ctx = tot - A[cur]
+                    if getattr(m, "ctx_agg", "mean") == "mean":
+                        ctx = ctx / (n_slots - 1)
                     uc = m.item_utility(
                         torch.full((1,), user, device=dev, dtype=torch.long),
                         jj.unsqueeze(0), ctx.unsqueeze(0), dpc.unsqueeze(0),

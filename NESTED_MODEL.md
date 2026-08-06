@@ -1064,6 +1064,67 @@ pricing or couponing policy would be learned from, and it is the one that comes 
 best. It is also unaffected by the sweeps (-0.5311 against -0.5339), which fits: price
 enters `u` directly, not through the basket context.
 
+### 8.6d Why co-occurrence fails, and what fixes half of it
+
+The failure in §8.6c is **not** a capacity failure. On the 44,281 item pairs with at
+least 10 joint training baskets, the learned embedding already tracks real
+co-occurrence: Spearman$(\alpha_j^{\top}\alpha_k,\ \text{lift}) = +0.583$, and the top 200
+pairs ranked by $\alpha^{\top}\alpha$ have a mean real lift of **33.07** against **2.75**
+across all pairs — a 12× concentration.
+
+**The mean pooling is what loses it.** With $\bar\alpha_j(S)$ dividing by $n-1$, a partner
+worth $\alpha_j^{\top}\alpha_k = 6$ contributes $6/7 \approx 0.86$ to the utility of an
+8-item basket, competing against $\lambda_j$ and $\theta_i^{\top}\alpha_j$. That costs
+nothing on the fill-in-the-blank score of §8.1, where the other seven items are *given*
+and their mean is genuinely informative. It cripples the **joint**: $E(S)$ carries
+$1/(n-1)$ on every pair, so the implied distribution over baskets has weak pairwise
+coupling however good $\alpha$ is. Gibbs sweeps sample that joint faithfully, which is
+why more sweeps plateau — they converge correctly to a distribution whose co-purchase
+structure is too weak.
+
+Two fixes were fitted and evaluated on all five checks.
+
+| model | item log-lik | top-1 | same-sub pairs | co-occ lift | Spearman of lift | price | item marginals | TVD items |
+|---|---|---|---|---|---|---|---|---|
+| `nested` | -1.9927 | 0.378 | 0.0370 (57%) | 1.51 (43%) | -0.003 | 82% | +0.441 | 0.36 |
+| `nested_ctxscale` | -1.9966 | 0.380 | 0.0514 (80%) | 1.55 (44%) | -0.029 | 80% | +0.446 | 0.38 |
+| `nested_ctxsum` | -2.1026 | 0.366 | 0.0381 (59%) | 1.33 (38%) | -0.077 | 77% | +0.396 | 0.38 |
+
+**`--learn-ctx-scale` (a single scalar on the interaction) is the one that works.** It
+fits to **5.56** — the model, given the choice, multiplies the interaction by
+about the average $n-1$, which is the dilution measured directly. It costs
++0.0039 nats, inside the 0.0032 seed spread, and raises same-sub-commodity
+co-purchase from 57% to **80%** of real. Price response, item marginals and the shape
+distances are unmoved.
+
+**`--ctx-agg sum` (drop the divisor) is the cleaner theory and the worse model.** It
+makes $E(S)$ one pairwise energy over all basket sizes instead of a family indexed by
+$n$, but costs **0.110** nats — nearly as much as deleting the interaction
+entirely (0.115) — and every co-purchase measure gets *worse*. In a 20-item basket the
+undiluted sum over 19 pairs swamps the rest of the utility; the run peaked at iteration
+9,000 of 12,000, the signature of an unstable scale.
+
+**What no rescaling can reach.** Per-pair lift barely moved (43% → 44%) and its rank
+correlation stayed at zero. Splitting the same 44,281 pairs by how similar the two items
+are shows why:
+
+| pair type | pairs | Spearman($\alpha^{\top}\alpha$, lift) | mean real lift | mean $\alpha^{\top}\alpha$ |
+|---|---|---|---|---|
+| same sub-commodity | 463 | **+0.776** | **18.43** | **+4.34** |
+| same category, different sub | 651 | +0.578 | 4.54 | +1.83 |
+| different category | 43,168 | +0.573 | 2.56 | **+0.47** |
+
+$\alpha^{\top}\alpha$ is a **similarity** measure: 9× larger within a sub-commodity than
+across categories. The +0.583 correlation with lift is real but monotone in similarity,
+so amplifying the term amplifies "more of the same kind of thing" — exactly the measure
+that moved. **Complementarity** requires $\alpha_j^{\top}\alpha_k$ to be large while the
+items are *dissimilar*, and a symmetric dot product on one embedding that is
+simultaneously carrying taste ($\theta_i^{\top}\alpha_j$) and being graded on
+sub-commodity clustering (§8.5) cannot represent both. The remaining ~55% of the
+co-occurrence gap needs an interaction geometry untied from $\alpha$ — which is what
+`BASKET_MODEL.md` §2 removed because a free $\rho$ collapsed embedding purity to 0.058.
+Not attempted here.
+
 **Summary.** Generated baskets are usable for anything driven by price response and
 basket volume, and not usable as a source of realistic co-purchase structure. Criterion
 7 in §7 tested the second-weakest of these five properties.
@@ -1088,7 +1149,8 @@ the price move on what they repeatedly buy.
 | **Criterion 6 is marginally missed.** Embedding purity 69.6× and AUC 0.8222 against the flat model's 70.6× and 0.8233 | low — beats every control by 70×, and within seed range | open |
 | **The elasticity decomposition excludes the interaction.** Context is zeroed when it is computed, so a price cut that changes what *else* enters the basket is not counted in the -1.188 | medium — the number is a lower bound on the true own-price response | open |
 | **`generate` emits counts, not baskets.** It accumulates expected `n_items`/`n_c`/`n_u` (`28:253-255`) and never samples an item, so its output cannot feed anything needing item ids | medium — §8.6 measures shape only | **fixed**: `generate_baskets` emits items |
-| **Generated baskets carry 43% of the real co-occurrence lift, and the per-pair rank correlation is -0.003** (§8.6c). The model knows some items go together, not which | **high** — generated data is not a source of realistic co-purchase structure | open |
+| **Generated baskets carry 43% of the real co-occurrence lift, with a per-pair rank correlation of −0.003** (§8.6c). §8.6d shows why: $\alpha^\top\alpha$ is a similarity measure (9× larger within a sub-commodity than across categories), so it cannot encode complementarity. Reaching the rest needs an interaction untied from $\alpha$, which is what collapsed embedding purity to 0.058 in the flat model | **high** — generated data is not a source of realistic co-purchase structure | open, mechanism identified |
+| **`--learn-ctx-scale` is a strict improvement that is not the default.** The scalar fits to 5.56, costs 0.0039 nats (inside seed noise) and raises same-sub co-purchase from 57% to 80% of real. Adopting it means regenerating every number in §8 | medium | open decision |
 | **Basket-size, category and unit distributions sit ~0.36 in total variation from real** despite matching means to 0.01 (§8.6c). Real baskets are far more skewed | medium — means are right, shape is not | open |
 | §8.6b's mean $\alpha^\top\alpha$ is a **sampler diagnostic, not a fit statistic** — $\alpha$ is the model's own embedding. By it Gibbs doubles co-purchase structure; by the model-free lift it moves it 8% | low — now labelled as such | documented |
 | **There is no held-out joint likelihood.** (§5.5) `P(S)` needs the partition function over all size-`n` baskets, which is intractable to evaluate exactly. The reported item log-likelihood is conditional on the rest of the basket and is not a substitute | medium — the from-scratch evidence is §8.6 only | open |
@@ -1126,6 +1188,7 @@ the price move on what they repeatedly buy.
 | 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ≈1.0–1.1 items per purchased category against a real 1.284 |
 | 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here |
 | 15 | benchmark scorer gives each model its own basket context | the shared batch builder computed context from a stub with zero `α`, so the nested model was scored with its interaction disabled and lost to its own no-interaction ablation |
+| 19 | **`--learn-ctx-scale` and `--ctx-agg sum`** | §8.6c found co-occurrence at 43% of real. The cause is the $1/(n-1)$ pooling diluting pairwise signal, not missing capacity — the embedding tracks real lift at Spearman +0.583. A learnable scalar fits to 5.56 and takes same-sub co-purchase to 80% of real for 0.0039 nats; dropping the divisor instead costs 0.110 nats and is worse everywhere (§8.6d) |
 | 18 | **`34_generator_eval.py`: model-free distributional evaluation** | §8.6 compared three means and §8.6b a mean $\alpha^\top\alpha$, which is close to circular. Five checks on 24,768 matched trips instead. Price response comes out at 82% of real; co-occurrence lift at 43% with a rank correlation of -0.003 |
 | 17 | **`generate_baskets`: real item ids, plus Gibbs sweeps for the context** | `generate` only ever accumulated counts, so nothing downstream could consume it and the interaction term never reached the output. Gibbs lifts within-basket $\alpha^\top\alpha$ 0.1334 → 0.2820 (2.1×), reaching 51% of the real level, with basket size unchanged |
 | 16 | **this document rewritten against the code** | §5 still described case-control sampling with the `log(π₁/π₀)` offset, three releases after fix 10 replaced it with uniform sampling. The audit that found it is §12 |

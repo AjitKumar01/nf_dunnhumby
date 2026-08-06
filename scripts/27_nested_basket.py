@@ -194,7 +194,8 @@ class NestedModel(nn.Module):
     def __init__(self, d: NestedData, K=64, Kp=8, Kt=8, Ks=4, n_weeks=52, seed=0,
                  use_nest=True, use_quantity=True, use_store=True,
                  use_store_price=True, avail_only=False, use_state=True,
-                 use_breadth=True, use_context=True):
+                 use_breadth=True, use_context=True, ctx_agg="mean",
+                 learn_ctx_scale=False):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -207,6 +208,17 @@ class NestedModel(nn.Module):
         # hard-wired here and therefore never ablated in the nested model -- so the
         # claim that it is load-bearing rested entirely on the flat model's evidence.
         self.use_context = use_context
+        # How the basket context is pooled.  "mean" divides by (n-1), which makes
+        # E(S) a family indexed by basket size and -- measured in NESTED_MODEL.md
+        # 8.6c -- dilutes a strong pairwise affinity by 1/(n-1), so the implied joint
+        # has weak co-occurrence even though alpha encodes it well (spearman +0.58
+        # against the real lift).  "sum" drops the divisor: E(S) becomes a single
+        # pairwise energy over all basket sizes, and the coupling per pair is
+        # undiluted.  The swap identity holds either way.
+        self.ctx_agg = ctx_agg
+        # A learnable scalar on the interaction lets the model choose its strength
+        # rather than inheriting whatever the pooling implies.
+        self.ctx_scale = nn.Parameter(torch.ones(1)) if learn_ctx_scale else None
 
         def emb(n, k, sd=0.05):
             return nn.Parameter(torch.randn(n, k, generator=g) * sd)
@@ -264,7 +276,8 @@ class NestedModel(nn.Module):
         a = self.alpha[items]
         s = s + torch.einsum("bk,bmk->bm", self.theta[users], a)
         if self.use_context:
-            s = s + (a * ctx.unsqueeze(1)).sum(-1)
+            inter = (a * ctx.unsqueeze(1)).sum(-1)
+            s = s + (inter * self.ctx_scale if self.ctx_scale is not None else inter)
         s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
         if self.eta is not None:
             s = s + (self.eta[items] * state).sum(-1)
@@ -306,7 +319,9 @@ def make_batch(d, model, split, bidx, n_neg, rng, device):
     sums = torch.zeros(len(bidx), model.K, device=device, dtype=a_all.dtype)
     sums.index_add_(0, ow, a_all)
     n_in = torch.as_tensor(lens, device=device, dtype=a_all.dtype)[ow]
-    ctx = (sums[ow] - a_all) / (n_in - 1).clamp_min(1).unsqueeze(1)
+    ctx = sums[ow] - a_all
+    if getattr(model, "ctx_agg", "mean") == "mean":
+        ctx = ctx / (n_in - 1).clamp_min(1).unsqueeze(1)
     ctx = torch.where((n_in > 1).unsqueeze(1), ctx, torch.zeros_like(ctx))
 
     neg = rng.choice(d.J, size=(B, n_neg), p=d.neg_p).astype(np.int64)
@@ -564,7 +579,8 @@ def main(a):
                         use_store_price=not (a.no_store_price or a.avail_only),
                         avail_only=a.avail_only, use_state=not a.no_state,
                         use_breadth=not a.no_breadth,
-                        use_context=not a.no_context).to(dev)
+                        use_context=not a.no_context, ctx_agg=a.ctx_agg,
+                        learn_ctx_scale=a.learn_ctx_scale).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"context={not a.no_context} store={not a.no_store} "
@@ -692,6 +708,12 @@ if __name__ == "__main__":
     p.add_argument("--no-breadth", action="store_true",
                    help="ablate the breadth head; generation then produces ~1.09 "
                         "distinct items per purchased category against a real 1.284")
+    p.add_argument("--ctx-agg", default="mean", choices=["mean", "sum"],
+                   help="pool the basket context by mean (divides by n-1) or by sum. "
+                        "sum makes E(S) one pairwise energy over all basket sizes and "
+                        "stops a strong pair being diluted by 1/(n-1)")
+    p.add_argument("--learn-ctx-scale", action="store_true",
+                   help="a learnable scalar on the interaction term")
     p.add_argument("--no-context", action="store_true",
                    help="ablate the tied within-basket interaction alpha_j . alpha_bar")
     p.add_argument("--no-state", action="store_true",
