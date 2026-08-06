@@ -268,7 +268,8 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
 
 
 @torch.no_grad()
-def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True):
+def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
+                     with_units=False, trips=None):
     """Emit ACTUAL baskets -- item ids, not counts -- and measure co-purchase structure.
 
     `generate` above accumulates expected counts and never samples an item, which is why
@@ -295,7 +296,8 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True):
     sp = d.splits["test"]
     rng = np.random.default_rng(seed)
     g = torch.Generator(device="cpu").manual_seed(seed)
-    bsel = rng.choice(sp["n_baskets"], size=min(n_trips, sp["n_baskets"]), replace=False)
+    bsel = (rng.choice(sp["n_baskets"], size=min(n_trips, sp["n_baskets"]), replace=False)
+            if trips is None else np.asarray(trips))
     A = m.alpha.detach()
 
     def cat_utilities(user, day, week, store, ctx):
@@ -388,7 +390,28 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True):
                     new_j = int(jj[q])
                     tot = tot - A[cur] + A[new_j]      # keep the running sum exact
                     slots[si] = (c, new_j)
-        out.append([j for _, j in slots])
+        ids = [j for _, j in slots]
+        if not with_units:
+            out.append(ids)
+            continue
+        # units for the chosen items, from the quantity head -- the same draw the
+        # likelihood was fitted on, units - 1 ~ Poisson(exp(z))
+        if not ids or not m.use_quantity:
+            out.append((ids, [1] * len(ids)))
+            continue
+        jt = torch.as_tensor(ids, device=dev)
+        stq = torch.as_tensor(d.state(np.full(len(ids), user), np.asarray(ids),
+                                      np.full(len(ids), day)), device=dev)
+        dpq = d.log_price_dev[jt, torch.full((len(ids),), day, device=dev,
+                                             dtype=torch.long)]
+        if m.use_store and m.use_store_price:
+            dpq = dpq + d.store_dev(np.asarray(ids), np.full(len(ids), store),
+                                    np.full(len(ids), sp["raw_week"][first]))
+        zq = (m.q0[jt]
+              - (m.q_gamma[user].unsqueeze(0) * m.q_beta[jt]).sum(-1) * dpq
+              + (m.q_state[jt] * stq).sum(-1)).clamp(-6, 4)
+        u_units = (1 + torch.poisson(torch.exp(zq), generator=g)).long().tolist()
+        out.append((ids, u_units))
     return out
 
 

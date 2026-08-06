@@ -626,7 +626,7 @@ Nothing is quadratic in items or households.
 | 4 | **nested theory retained** | `κ` estimated per category | ⚠️ `κ` = 0.663, stable across seeds, but weakly identified (§8.4) |
 | 5 | **store information used** | prices, affinity, availability | ⚠️ used, but 99.7% of the gain is the availability mask, not information (§8.2) |
 | 6 | **embeddings recover sub-commodity structure** | `24_embedding_eval.py`, against random / popularity / nf | ⚠️ 69.6× chance, AUC 0.8222 — beats every control decisively, but marginally **below** the flat model's 70.6× and 0.8233 (§8.5) |
-| 7 | **data generation** | roll incidence → breadth → items → units forward; item ids via `generate_baskets` | ✅ items -1.0%, units -1.4%, categories -3.8% against held-out (§8.6) |
+| 7 | **data generation** | five model-free distributional checks (§8.6c), not three means | ✅ items -1.0%, units -1.4%, categories -3.8% against held-out (§8.6) |
 | 8 | **what-if on price** | structural placebo + elasticity decomposition | ✅ placebo retains 0.0% of the coefficient; decomposition sums exactly (§8.3) |
 | 9 | **beats a simpler alternative** | one scorer, identical candidate sets, tuned baselines | ✅ +0.342 nats and 8.5 points of top-1 over household repeat-purchase (§8.1c) |
 
@@ -980,6 +980,94 @@ marginals only. With Gibbs sweeps it also carries roughly half the real co-purch
 structure. Neither is the full joint: §9 records that there is no held-out joint
 likelihood, because the partition function over size-$n$ baskets is intractable.
 
+### 8.6c Does the generated *distribution* match the real one?
+
+§8.6 compares three means and §8.6b a mean $\alpha^{\top}\alpha$. Neither is sufficient,
+and the second is close to circular: $\alpha$ is the model's own embedding and the model
+is trained to make co-purchased items have large $\alpha^{\top}\alpha$, so scoring
+generated baskets with it grades the exam with the answer key. It is a **sampler
+diagnostic** — it shows the interaction term reached the output — not evidence about
+the data distribution.
+
+`scripts/34_generator_eval.py` runs a model-free, distributional battery instead. Every
+check uses item ids and counts only, never $\alpha$; every check compares a whole
+distribution or a per-item vector. Generated trips are matched to real held-out ones —
+**same household, day, week and store** — so the conditioning is identical and any gap
+is the model's. All 24,768 test baskets.
+
+**1. Shape — the means agree and the distributions do not.**
+
+| | real | 0 sweeps | 4 sweeps | TVD at 4 sweeps |
+|---|---|---|---|---|
+| items per basket | 8.18 | 8.17 | 8.18 | **0.36** |
+| categories per basket | 6.38 | 6.23 | 6.24 | **0.38** |
+| units per basket | 11.06 | 10.79 | 10.89 | **0.34** |
+| distinct items per category | 1.28 | 1.31 | 1.31 | 0.05 |
+| units per line | 1.35 | 1.32 | 1.33 | 0.01 |
+
+Total variation distance is $\tfrac12\sum_x |P_{\text{real}}(x) - P_{\text{gen}}(x)|$: 0 identical, 1
+disjoint. Basket size matches to 0.01 on the mean and sits **0.36** away in
+distribution — real baskets are far more skewed (median 5 against a mean of
+8.18) than generated ones. The two quantities the *heads* directly model —
+breadth and units per line — match closely (0.05 and 0.01); the three that emerge from
+composing them do not.
+
+**2. Item marginals — no mode collapse.** Purchase rate of each of the 5,455 items,
+real against generated: Spearman **+0.441**, Pearson +0.578, with
+**0.1%** of items bought in the real data never generated. The catalogue is
+covered; the ranking is moderately right.
+
+**3. Co-occurrence lift — the model-free interaction test, and it fails.**
+For the 500 commonest items, $\text{lift}(j,k) = P(j,k \text{ together})/(P(j)P(k))$:
+
+| | pairs | mean lift | Spearman of lift vs real |
+|---|---|---|---|
+| real | — | **3.49** | — |
+| generated, 0 sweeps | 19,211 | 1.39 | -0.061 |
+| generated, 4 sweeps | 19,393 | 1.51 | -0.003 |
+
+Generated baskets carry **43%** of the real co-occurrence lift, and the per-pair rank
+correlation is **-0.003** — indistinguishable from zero. The model does not know which
+items go together, only that some do.
+
+**This is where the circularity of $\alpha^{\top}\alpha$ shows.** By that measure Gibbs
+sweeps *doubled* co-purchase structure (0.133 → 0.282, §8.6b). By the model-free lift
+they move it 1.39 → 1.51, about **8%**. The sweeps do what they were built to do —
+push the sample toward what the model believes — and what the model believes about item
+pairs is mostly wrong.
+
+**4. Held-out labels.** Share of within-basket item pairs sharing a label the model
+never sees:
+
+| | same sub-commodity | same department |
+|---|---|---|
+| real | **0.0646** | 0.5581 |
+| generated, 0 sweeps | 0.0251 | 0.5580 |
+| generated, 4 sweeps | 0.0370 | 0.5573 |
+
+Sweeps lift the sub-commodity share by 48%, reaching 57% of real. Department
+share matches at every setting, which is unsurprising — 19 departments is a coarse
+target that basket size alone nearly fixes.
+
+**5. Price response recovered from generated data — the test that matters here.**
+Rebuild the item × week panel *from generated baskets* and run the §6.1 within-item
+estimator on it:
+
+| | elasticity | item-weeks |
+|---|---|---|
+| real held-out | **-0.6480** | 49,784 |
+| generated, 0 sweeps | -0.5311 | 56,580 |
+| generated, 4 sweeps | **-0.5339** | 56,208 |
+
+Generated data carries **82%** of the real price response. This is the property a
+pricing or couponing policy would be learned from, and it is the one that comes out
+best. It is also unaffected by the sweeps (-0.5311 against -0.5339), which fits: price
+enters `u` directly, not through the basket context.
+
+**Summary.** Generated baskets are usable for anything driven by price response and
+basket volume, and not usable as a source of realistic co-purchase structure. Criterion
+7 in §7 tested the second-weakest of these five properties.
+
 ### 8.7 Criterion 3 — household state
 
 Removing the state basis costs **0.076 nats**, the largest genuine gain of any
@@ -1000,7 +1088,9 @@ the price move on what they repeatedly buy.
 | **Criterion 6 is marginally missed.** Embedding purity 69.6× and AUC 0.8222 against the flat model's 70.6× and 0.8233 | low — beats every control by 70×, and within seed range | open |
 | **The elasticity decomposition excludes the interaction.** Context is zeroed when it is computed, so a price cut that changes what *else* enters the basket is not counted in the -1.188 | medium — the number is a lower bound on the true own-price response | open |
 | **`generate` emits counts, not baskets.** It accumulates expected `n_items`/`n_c`/`n_u` (`28:253-255`) and never samples an item, so its output cannot feed anything needing item ids | medium — §8.6 measures shape only | **fixed**: `generate_baskets` emits items |
-| **Generated baskets recover about half the real co-purchase structure.** Gibbs sweeps lift within-basket $\alpha^\top\alpha$ from 0.1334 to 0.2820 against a real 0.5580 (51%) | medium — marginals are right, internal coherence is half | open |
+| **Generated baskets carry 43% of the real co-occurrence lift, and the per-pair rank correlation is -0.003** (§8.6c). The model knows some items go together, not which | **high** — generated data is not a source of realistic co-purchase structure | open |
+| **Basket-size, category and unit distributions sit ~0.36 in total variation from real** despite matching means to 0.01 (§8.6c). Real baskets are far more skewed | medium — means are right, shape is not | open |
+| §8.6b's mean $\alpha^\top\alpha$ is a **sampler diagnostic, not a fit statistic** — $\alpha$ is the model's own embedding. By it Gibbs doubles co-purchase structure; by the model-free lift it moves it 8% | low — now labelled as such | documented |
 | **There is no held-out joint likelihood.** (§5.5) `P(S)` needs the partition function over all size-`n` baskets, which is intractable to evaluate exactly. The reported item log-likelihood is conditional on the rest of the basket and is not a substitute | medium — the from-scratch evidence is §8.6 only | open |
 | Store-level prices and affinity contribute +0.0005 nats, although `DATA_EXPLORATION.md` §7.3 shows households use 4 stores and switch on 30% of trips | medium | open |
 | `κ` moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now, but weakly identified | medium | documented, not resolved |
@@ -1036,6 +1126,7 @@ the price move on what they repeatedly buy.
 | 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ≈1.0–1.1 items per purchased category against a real 1.284 |
 | 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here |
 | 15 | benchmark scorer gives each model its own basket context | the shared batch builder computed context from a stub with zero `α`, so the nested model was scored with its interaction disabled and lost to its own no-interaction ablation |
+| 18 | **`34_generator_eval.py`: model-free distributional evaluation** | §8.6 compared three means and §8.6b a mean $\alpha^\top\alpha$, which is close to circular. Five checks on 24,768 matched trips instead. Price response comes out at 82% of real; co-occurrence lift at 43% with a rank correlation of -0.003 |
 | 17 | **`generate_baskets`: real item ids, plus Gibbs sweeps for the context** | `generate` only ever accumulated counts, so nothing downstream could consume it and the interaction term never reached the output. Gibbs lifts within-basket $\alpha^\top\alpha$ 0.1334 → 0.2820 (2.1×), reaching 51% of the real level, with basket size unchanged |
 | 16 | **this document rewritten against the code** | §5 still described case-control sampling with the `log(π₁/π₀)` offset, three releases after fix 10 replaced it with uniform sampling. The audit that found it is §12 |
 
