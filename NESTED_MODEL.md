@@ -88,25 +88,41 @@ Household `i`, day `t`, week-of-year `w`, store `s`, item `j`, category `c = cat
 
 Every head is built on one quantity, `NestedModel.item_utility` (`27:260-272`):
 
-```
-u_ijt = λ_j                       lam[j]                       item popularity
-      + θ_i · α_j                 theta[i]·alpha[j]            household taste × item embedding
-      + α_j · ᾱ_j(S)              alpha[j]·ctx                 basket interaction, tied   (§3.3)
-      − (γ_i · β_j) · Δlog p_jst  gamma[i]·beta[j]             price
-      + η_j · x_ijt               eta[j]·state                 recency basis              (§3.2)
-      + μ_j · δ_w                 mu[j]·delta[w]               seasonality, week-of-year
-      + ζ_j · ξ_s                 item_store[j]·store_vec[s]   store × item affinity
-```
+$$
+u_{ijt} \;=\; \lambda_j
+\;+\; \theta_i^{\top}\alpha_j
+\;+\; \alpha_j^{\top}\bar\alpha_j(S)
+\;-\; \bigl(\gamma_i^{\top}\beta_j\bigr)\,\Delta\log p_{jst}
+\;+\; \eta_j^{\top}x_{ijt}
+\;+\; \mu_j^{\top}\delta_w
+\;+\; \zeta_j^{\top}\xi_s
+$$
 
-Dimensions: `α, θ ∈ R^K` with `K = 64`; `γ, β ∈ R^Kp` with `Kp = 8`; `μ, δ ∈ R^Kt`
-with `Kt = 8`; `ζ, ξ ∈ R^Ks` with `Ks = 4`; `η ∈ R^4`. **870,392 parameters** in total.
+| term | code | what it is |
+|---|---|---|
+| $\lambda_j$ | `lam[j]` | item popularity |
+| $\theta_i^{\top}\alpha_j$ | `theta[i]·alpha[j]` | household taste × item embedding |
+| $\alpha_j^{\top}\bar\alpha_j(S)$ | `alpha[j]·ctx` | basket interaction, tied (§3.3) |
+| $-(\gamma_i^{\top}\beta_j)\,\Delta\log p_{jst}$ | `gamma[i]·beta[j]` | price |
+| $\eta_j^{\top}x_{ijt}$ | `eta[j]·state` | recency basis (§3.2) |
+| $\mu_j^{\top}\delta_w$ | `mu[j]·delta[w]` | seasonality, week-of-year |
+| $\zeta_j^{\top}\xi_s$ | `item_store[j]·store_vec[s]` | store × item affinity |
+
+Dimensions: $\alpha_j,\theta_i\in\mathbb{R}^{64}$; $\gamma_i,\beta_j\in\mathbb{R}^{8}$;
+$\mu_j,\delta_w\in\mathbb{R}^{8}$; $\zeta_j,\xi_s\in\mathbb{R}^{4}$;
+$\eta_j\in\mathbb{R}^{4}$. **870,392 parameters** in total.
 
 **The price term is a deviation, not a level.** `22_basket_data.py:187` centres the log
 price within item:
 
-```
-Δlog p_jt = log p_jt − mean over t of log p_jt
-```
+$$
+\Delta\log p_{jt} \;=\; \log p_{jt} \;-\; \frac{1}{D}\sum_{t'=1}^{D}\log p_{jt'}
+\qquad\qquad
+\Delta\log p_{jst} \;=\; \Delta\log p_{jt} \;+\; d_{jsw}
+$$
+
+where $d_{jsw}$ is the sparse store-level deviation, **0** wherever that store-week was
+never observed.
 
 so the item's price level is absorbed by `λ_j`, and what identifies the response is
 that item moving against its own normal price. With stores on, the store-level
@@ -124,12 +140,25 @@ when price rises.
 finds the last day this household bought this item's **sub-commodity** strictly before
 day `t`, and returns four features of `τ`, the days since:
 
-```
-x = [ 1{no previous purchase},
-      exp(−τ / 7),                 weekly decay
-      exp(−τ / g_sub(j)),          decay on that sub-commodity's own timescale
-      log(1+τ) / log(100) ]        slow, unbounded
-```
+$$
+\tau_{ijt} \;=\; t \;-\; \max\bigl\{\,t' < t \;:\; i \text{ bought sub}(j) \text{ on day } t'\,\bigr\}
+$$
+
+$$
+x_{ijt} \;=\;
+\begin{bmatrix}
+\mathbb{1}\{\text{no such } t'\} \\[2pt]
+e^{-\tau_{ijt}/7} \\[2pt]
+e^{-\tau_{ijt}/g_{\mathrm{sub}(j)}} \\[2pt]
+\log(1+\tau_{ijt}) \,/\, \log 100
+\end{bmatrix}
+\qquad
+\begin{aligned}
+&\text{weekly decay} \\
+&\text{that sub-commodity's own timescale} \\
+&\text{slow, unbounded}
+\end{aligned}
+$$
 
 with the last three set to 0 when there is no previous purchase. `g_sub` is that
 sub-commodity's median repurchase gap, clipped to [3, 180] days
@@ -146,15 +175,18 @@ call.
 For item `j` in a basket `S` of `n` items, `ᾱ_j(S)` is the mean of `α` over the other
 `n − 1` items (`27:302-308`):
 
-```
-ᾱ_j(S) = ( sum over k in S of α_k  −  α_j ) / (n − 1)        n = 1 → zero vector
-```
+$$
+\bar\alpha_j(S) \;=\; \frac{1}{n-1}\Bigl(\sum_{k\in S}\alpha_k \;-\; \alpha_j\Bigr),
+\qquad n = |S|,
+\qquad \bar\alpha_j(S) := \mathbf{0} \ \text{ when } n = 1
+$$
 
 so the term entering `u_j` is
 
-```
-α_j · ᾱ_j(S) = ( 1/(n−1) ) · sum over k in S, k ≠ j, of  α_j · α_k
-```
+$$
+\alpha_j^{\top}\bar\alpha_j(S)
+\;=\; \frac{1}{n-1}\sum_{k\in S,\; k\neq j} \alpha_j^{\top}\alpha_k
+$$
 
 the average dot product between `j` and each other item in the basket. Using `α` itself
 rather than a free `ρ` is what forces co-purchase structure into the embedding that the
@@ -168,17 +200,20 @@ time" to condition on; the model is not sequential and could not be.
 **What that implies.** Write `b_j` for everything in `u_j` that does not involve other
 basket items. For baskets of size `n`, define
 
-```
-E(S) = sum over j in S of b_j  +  ( 1/(n−1) ) · sum over unordered pairs {j,k} in S of α_j · α_k
-```
+$$
+E(S) \;=\; \sum_{j\in S} b_j \;+\; \frac{1}{n-1}\!\!\sum_{\{j,k\}\subset S}\!\! \alpha_j^{\top}\alpha_k
+$$
 
 Swapping item `j` for item `m` holds `|S| = n`, so `1/(n−1)` is identical on both sides:
 
-```
-E(S′) − E(S) = (b_m − b_j) + (1/(n−1))[ sum_{k≠j} α_m·α_k − sum_{k≠j} α_j·α_k ]
-             = (b_m − b_j) + α_m·ᾱ_j(S) − α_j·ᾱ_j(S)
-             = u_m − u_j
-```
+$$
+\begin{aligned}
+E(S') - E(S)
+&= (b_m - b_j) + \frac{1}{n-1}\Bigl[\sum_{k\neq j}\alpha_m^{\top}\alpha_k - \sum_{k\neq j}\alpha_j^{\top}\alpha_k\Bigr] \\
+&= (b_m - b_j) + \alpha_m^{\top}\bar\alpha_j(S) - \alpha_j^{\top}\bar\alpha_j(S) \\
+&= u_m - u_j
+\end{aligned}
+$$
 
 which is exactly the difference the candidate softmax scores at `27:492`. **The item
 head's conditionals are therefore the single-slot conditionals of `P(S) ∝ exp(E(S))` at
@@ -198,17 +233,19 @@ The paper gets its nest from a within-category softmax plus an outside good, whi
 exactly what unit demand buys it. Drop unit demand — 68.2% of baskets violate it — and
 that construction is gone; the nest is not. It survives as a **Poisson–multinomial factorisation**:
 
-```
-units from category c    Q_ict ~ Poisson( exp( a_ic + κ_c · IV_ict ) )
-allocation across items  multinomial( softmax_j u_ijt ),  j in c and carried at s
-inclusive value          IV_ict = log sum over j in c carried at s of exp(u_ijt)
-```
+$$
+\begin{aligned}
+\text{units from category } c:\quad & Q_{ict} \sim \mathrm{Poisson}\!\bigl(\exp(a_{ic} + \kappa_c\, IV_{ict})\bigr) \\
+\text{allocation across its items:}\quad & (q_{ijt})_{j\in c} \mid Q_{ict} \sim \mathrm{Multinomial}\bigl(Q_{ict},\; \mathrm{softmax}_j\, u_{ijt}\bigr) \\
+\text{inclusive value:}\quad & IV_{ict} \;=\; \log \!\!\sum_{j\in c,\; \texttt{carried}[j,s]} \!\! e^{\,u_{ijt}}
+\end{aligned}
+$$
 
 Poisson–multinomial factorises, so this is equivalent to independent per-item counts
 
-```
-q_ijt ~ Poisson( exp( a_ic + (κ_c − 1)·IV_ict + u_ijt ) )
-```
+$$
+q_{ijt} \;\sim\; \mathrm{Poisson}\!\Bigl(\exp\bigl(a_{ic} + (\kappa_c - 1)\,IV_{ict} + u_{ijt}\bigr)\Bigr)
+$$
 
 and `κ_c` is a nesting coefficient with the paper's interpretation:
 
@@ -218,7 +255,7 @@ and `κ_c` is a nesting coefficient with the paper's interpretation:
 | **= 0** | category volume is fixed; a price cut only moves share |
 | **> 1** | the category expands more than proportionally |
 
-`κ_c = softplus(κ_raw_c)` with `κ_raw` initialised at 0.5413 so `κ = 1.0` exactly — the
+$\kappa_c = \mathrm{softplus}(\kappa^{\mathrm{raw}}_c) = \log(1+e^{\kappa^{\mathrm{raw}}_c})$, with $\kappa^{\mathrm{raw}}$ initialised at 0.5413 so $\kappa = 1.0$ exactly — the
 "IV cancels" point — so the data has to move it in either direction (`27:254`).
 
 ### 3.5 The four heads
@@ -228,34 +265,46 @@ Four likelihood terms sharing `u_ijt` (`27:487-521`).
 **Item head** — allocation. Per purchased row, a softmax over the true item plus
 `n_neg = 20` sampled negatives, unavailable candidates masked to `−1e9`:
 
-```
-L_item = − mean over rows of  log [ exp(u_j) / sum over available m in cand of exp(u_m) ]
-```
+$$
+\mathcal{L}_{\text{item}}
+\;=\; -\frac{1}{|R|}\sum_{r\in R}
+\log \frac{e^{\,u_{j_r}}}{\displaystyle\sum_{m\in C_r} \mathbb{1}\{\texttt{avail}_m\}\, e^{\,u_m}}
+$$
+
+$R$ is the set of purchase rows in the batch, $C_r = \{j_r\}\cup\{20 \text{ negatives}\}$.
 
 **Quantity head** — units on a purchased line, with its **own** price coefficient so
 the two margins are not forced to share one elasticity:
 
-```
-z_ijt = q0_j − (γq_i · βq_j)·Δlog p_jst + ηq_j · x_ijt          clamped to [−6, 4]
-units − 1 ~ Poisson( exp(z) )
-L_qty  = mean( exp(z) − k·z + log Γ(k+1) ),   k = max(units − 1, 0)
-```
+$$
+z_{ijt} \;=\; \mathrm{clip}_{[-6,\,4]}\!\Bigl(q^{0}_j - \bigl(\gamma^{q\top}_i\beta^{q}_j\bigr)\Delta\log p_{jst} + \eta^{q\top}_j x_{ijt}\Bigr),
+\qquad
+\text{units}_{ijt} - 1 \;\sim\; \mathrm{Poisson}\bigl(e^{z_{ijt}}\bigr)
+$$
+
+$$
+\mathcal{L}_{\text{qty}} \;=\; \operatorname{mean}\Bigl(e^{z} - k\,z + \log\Gamma(k+1)\Bigr),
+\qquad k = \max(\text{units}-1,\,0)
+$$
 
 **Incidence head** — was this category bought on this trip. Bernoulli on
 
-```
-logit_ict = c0_c + (cu_i · cc_c) + (cs_c · x_ict) + κ_c · ( IV_ict − ivref_c )
-```
+$$
+\operatorname{logit}_{ict}
+\;=\; c^{0}_c \;+\; c^{u\top}_i c^{c}_c \;+\; c^{s\top}_c x_{ict}
+\;+\; \kappa_c\bigl(IV_{ict} - \overline{IV}_c\bigr)
+$$
 
 `ivref_c` is a frozen per-category constant (§5.3). `x_ict` is the state basis
 evaluated at the category's first block item.
 
 **Breadth head** — given the category was bought, how many *distinct* items:
 
-```
-zb_ic = b0_c + bu_i − bp_c · Δlog p̄_ct                          clamped to [−6, 3]
-distinct items − 1 ~ Poisson( exp(zb) )
-```
+$$
+z^{b}_{ic} \;=\; \mathrm{clip}_{[-6,\,3]}\!\Bigl(b^{0}_c + b^{u}_i - b^{p}_c\,\overline{\Delta\log p}_{ct}\Bigr),
+\qquad
+\bigl(\text{distinct items in } c\bigr) - 1 \;\sim\; \mathrm{Poisson}\bigl(e^{z^{b}}\bigr)
+$$
 
 fitted on bought categories only. `Δlog p̄_ct` is the mean price deviation across that
 category's stocked items (`27:427`), so a promotion widens the basket as well as
@@ -263,8 +312,14 @@ deepening it.
 
 **Why breadth needs its own head.** The incidence head only ever sees 0/1, so nothing
 else in the model knows how many distinct items a category purchase contains.
-Recovering a count from `P(buy)` via `λ = −log(1−p)` reproduces the probability but
-implies
+Recovering a count from $P(\text{buy})$ assumes $Q\sim\mathrm{Poisson}(\lambda)$ with
+$P(Q>0) = 1-e^{-\lambda} = p$, so $\lambda = -\log(1-p)$ and
+
+$$
+\mathbb{E}[\,Q \mid Q>0\,] \;=\; \frac{\lambda}{1-e^{-\lambda}} \;=\; \frac{\lambda}{p}
+$$
+
+which reproduces the probability but implies
 
 | P(buy) | implied E[items given bought] |
 |---|---|
@@ -280,10 +335,14 @@ among the fixes in §10 that was a *missing component* rather than a sampling bu
 
 One scalar per step (`27:612-618`):
 
-```
-loss = L_item + w_q·L_qty + w_c·L_incidence + w_b·L_breadth
-       + ( l2 · ||repr||²  +  l2price · ||price||² ) / B
-```
+$$
+\mathcal{L}
+\;=\; \mathcal{L}_{\text{item}}
+\;+\; w_q\mathcal{L}_{\text{qty}}
+\;+\; w_c\mathcal{L}_{\text{inc}}
+\;+\; w_b\mathcal{L}_{\text{brd}}
+\;+\; \frac{1}{B}\Bigl(\ell_2\lVert\Theta_{\text{repr}}\rVert^2 + \ell_2^{p}\lVert\Theta_{\text{price}}\rVert^2\Bigr)
+$$
 
 with `w_q = w_c = w_b = 1`, `l2 = 0.01`, `l2price = 0.0001`, and `B` the number of item
 rows in the batch.
@@ -324,9 +383,9 @@ claiming credit for a smaller choice set.
 Negatives are drawn from a unigram^0.75 distribution over **training** purchase counts
 (`27:151-153`):
 
-```
-p_neg(j) ∝ max(count_train(j), 1) ^ 0.75
-```
+$$
+p_{\text{neg}}(j) \;\propto\; \max\bigl(\mathrm{count}_{\text{train}}(j),\,1\bigr)^{0.75}
+$$
 
 `n_neg = 20` per positive, so each softmax has 21 candidates.
 
@@ -343,10 +402,11 @@ an unstocked draw contributes nothing to the denominator.
 `incidence_batch` (`27:337-433`) draws `n_cat = 16` categories per trip **uniformly**
 from all 188, independent of what the trip bought:
 
-```
-for each trip:  c ~ Uniform{0, ..., C−1},  n_cat draws
-                y = 1 if that trip bought category c, else 0
-```
+$$
+\text{for each trip: } c_1,\dots,c_{n_{\text{cat}}} \overset{\text{iid}}{\sim} \mathrm{Unif}\{0,\dots,C-1\},
+\qquad
+y = \mathbb{1}\{\text{the trip bought } c\}
+$$
 
 The base rate is low — 6.075 categories per training basket out of 188, so **3.23%** — and
 uniform sampling therefore sees about 0.52 positives per trip. That is the price paid,
@@ -373,13 +433,21 @@ and `losses` never reads it — dead code left from the case-control version.
 15, so a dense `IV` block spends most of its work on padding. Instead `iv_cap = 32`
 items are drawn per category (with replacement, `27:386-390`) and the sum scaled:
 
-```
-IV_hat = log ( sum over the m sampled items of exp(u) )  +  log( n_c / m )
-```
+$$
+\widehat{IV}_{ict} \;=\; \log\Bigl(\sum_{s=1}^{m} e^{\,u_{i j_s t}}\Bigr) \;+\; \log\frac{n_c}{m},
+\qquad j_s \overset{\text{iid}}{\sim} \mathrm{Unif}\{\text{stocked items of } c\}
+$$
 
-The **sum** inside is unbiased for `Σ_{j∈c} exp(u_j)`: each draw is uniform over the
-`n_c` valid items, so `E[(n_c/m)·Σ_sampled exp(u)] = Σ_j exp(u_j)`. The **log** of it is
-not — by Jensen, `E[log X] ≤ log E[X]`, so `IV_hat` is biased slightly low. The bias is
+The **sum** inside is unbiased. Each draw is uniform over the $n_c$ stocked items, so
+
+$$
+\mathbb{E}\Bigl[\frac{n_c}{m}\sum_{s=1}^{m} e^{\,u_{j_s}}\Bigr]
+\;=\; \frac{n_c}{m}\cdot m\cdot \frac{1}{n_c}\sum_{j\in c} e^{\,u_j}
+\;=\; \sum_{j\in c} e^{\,u_j}
+$$
+
+The **log** of it is not: by Jensen $\mathbb{E}[\log X] \le \log\mathbb{E}[X]$, so
+$\widehat{IV}$ is biased slightly low. The bias is
 absorbed into `c0_c` for training, which is why it does no harm there, and generation
 uses the same estimator so the two stay consistent.
 
@@ -400,9 +468,11 @@ category intercept explains them instead of the inclusive value dominating the l
 Validation is run every 6,000 iterations on up to 3,000 baskets. The checkpoint is kept
 on
 
-```
-score = val_item_loglik − w_q·val_quantity_NLL − w_c·val_incidence_NLL
-```
+$$
+\text{score} \;=\; \ell^{\text{val}}_{\text{item}}
+\;-\; w_q\,\mathrm{NLL}^{\text{val}}_{\text{qty}}
+\;-\; w_c\,\mathrm{NLL}^{\text{val}}_{\text{inc}}
+$$
 
 (`27:633`). **Breadth is not in the score** — it has no held-out scalar in `evaluate`,
 so it is trained but never used for model selection. The final test pass reloads the
@@ -410,6 +480,93 @@ best checkpoint and scores 6,000 baskets with a fixed seed.
 
 Note `--iv-center` is accepted, threaded through `evaluate` and `losses`, and **never
 read** — `losses` centres on `model.iv_ref` alone. Dead argument.
+
+### 5.5 What validation actually scores
+
+This is the part most easily misread, so it is written out in full.
+
+**Validation does not simulate a shopper filling a cart.** `evaluate` (`27:524-550`)
+takes **real held-out baskets** and scores each purchased row in place. For a basket
+$S$ with $n$ items, every one of the $n$ rows is scored independently:
+
+$$
+\ell_r \;=\; \log \frac{e^{\,u_{j_r}}}{\displaystyle\sum_{m \in C_r} \mathbb{1}\{\texttt{avail}_m\}\,e^{\,u_m}},
+\qquad C_r = \{j_r\} \cup \{20\ \text{negatives}\}
+$$
+
+and the reported number is the mean of $\ell_r$ over rows. The context used for row $r$
+is the leave-one-out mean over **the other items of that same real basket**:
+
+$$
+\bar\alpha_{j_r}(S) \;=\; \frac{1}{n-1}\Bigl(\sum_{k\in S}\alpha_k - \alpha_{j_r}\Bigr)
+$$
+
+So the question being answered is **"which item fills this slot, given the rest of the
+basket"** — a fill-in-the-blank score. It is not "predict the basket", and it is not
+"predict the next item". Nothing is ever asked sequentially.
+
+**A one-item basket.** When $n = 1$ there is no other item, and `27:308` sets the
+context to the zero vector rather than dividing by zero:
+
+$$
+n = 1 \;\Longrightarrow\; \bar\alpha_j(S) = \mathbf{0}
+\;\Longrightarrow\;
+u_{ijt} = \lambda_j + \theta_i^{\top}\alpha_j - (\gamma_i^{\top}\beta_j)\Delta\log p_{jst} + \eta_j^{\top}x_{ijt} + \mu_j^{\top}\delta_w + \zeta_j^{\top}\xi_s
+$$
+
+The interaction term contributes exactly nothing, and the choice rests on popularity,
+household taste, price, recency, season and store affinity. This is not a rare corner:
+
+| split | baskets | single-item baskets | share of scored rows they carry |
+|---|---|---|---|
+| train | 157,464 | 19.6% | 2.5% |
+| validation | 17,113 | 18.0% | 2.3% |
+| test | 24,768 | 17.8% | 2.2% |
+
+Nearly a fifth of baskets are scored with the interaction term switched off, but they
+are small baskets, so they account for only about 2% of the rows the log-likelihood
+averages over.
+
+**"I have bought $n$ items, what is item $n+1$?"** The model can answer this, but
+**nothing in the repository asks it.** Written out, adding an item to an existing
+basket $S_n = \{j_1,\dots,j_n\}$ makes the basket size $n+1$, so for a candidate $m$ the
+leave-one-out formula gives
+
+$$
+\bar\alpha_m(S_n \cup \{m\})
+\;=\; \frac{1}{(n+1)-1}\Bigl(\sum_{k\in S_n}\alpha_k + \alpha_m - \alpha_m\Bigr)
+\;=\; \frac{1}{n}\sum_{k\in S_n}\alpha_k
+$$
+
+— the plain mean of what is already in the cart, with no dependence on the candidate.
+Ranking candidates by
+
+$$
+u_{imt} \;=\; b_m \;+\; \alpha_m^{\top}\Bigl(\tfrac{1}{n}\textstyle\sum_{k\in S_n}\alpha_k\Bigr)
+$$
+
+is therefore well defined: items whose embedding points the same way as the cart's
+average get a boost, which is exactly the co-purchase structure the tied interaction
+was built to carry.
+
+**Two caveats on doing that.**
+
+*It ranks, it does not decide whether to stop.* §3.3 shows $E(S)$ is a family indexed by
+basket size: going from $n$ to $n+1$ changes the pairwise coupling from $\tfrac{1}{n-1}$
+to $\tfrac{1}{n}$ for **every** pair, so the item head gives no comparable probability
+for "add this item" against "add nothing". How many items a basket holds comes from the
+incidence and breadth heads, never from the item head.
+
+*The generator does not do it.* `28:198` passes a zero context, so generated baskets
+carry no co-purchase structure (§8.1b, §9). Adding the running mean above is the
+one-line version of the fix; Gibbs sweeps over a completed draft are the principled
+version, since the model conditions on the full set rather than a prefix.
+
+**One implementation detail with a real consequence.** The context is built from
+`model.alpha.detach()` (`27:303`). Gradient flows into $\alpha_m$ for the candidate
+being scored, but **not** into the $\alpha_k$ of the items forming the context — a
+stop-gradient on the context side. Each item's embedding is therefore pulled by the
+baskets it appears in *as the scored item*, and never by appearing as a neighbour.
 
 ---
 
@@ -606,8 +763,8 @@ Two results that cut against the model:
   exploit it against popularity-matched decoys. The learned tied embedding can:
   removing it costs 0.118 nats on this same scorer.
 
-**What this section does not measure.** The item log-likelihood is a *conditional*
-number: `P(item j | the other items in the same basket, household, week, store,
+**What this section does not measure** (see §5.5). The item log-likelihood is a
+*conditional* number: `P(item j | the other items in the same basket, household, week, store,
 prices)`. Test baskets are from held-out weeks, so nothing leaks across time, but every
 model here — the nested model and the co-occurrence baselines alike — is told the rest
 of the basket. It is a fill-in-the-blank score, not "predict the basket". The
@@ -659,15 +816,24 @@ on units**; the model's allocation channel alone is -0.991.
 A 1% cut in item `j`'s price moves demand through three channels. From the softmax and
 the Poisson–multinomial (`28:125-135`):
 
-```
-allocation   d log π_j / d log p_j  = −(γ_i·β_j) · (1 − π_j)
-incidence    d(κ·IV)  / d log p_j   = −κ_c · (γ_i·β_j) · π_j
-quantity     d log E[units]/d log p = −(γq_i·βq_j) · λ/(1+λ),   λ = exp(z)
-```
+$$
+\begin{aligned}
+\text{allocation}\quad & \frac{\partial \log \pi_j}{\partial \log p_j} = -\bigl(\gamma_i^{\top}\beta_j\bigr)\bigl(1-\pi_j\bigr) \\[4pt]
+\text{incidence}\quad  & \kappa_c\frac{\partial\, IV}{\partial \log p_j} = -\kappa_c\bigl(\gamma_i^{\top}\beta_j\bigr)\pi_j \\[4pt]
+\text{quantity}\quad   & \frac{\partial \log \mathbb{E}[\text{units}]}{\partial \log p_j} = -\bigl(\gamma^{q\top}_i\beta^{q}_j\bigr)\frac{\lambda}{1+\lambda},\qquad \lambda = e^{z}
+\end{aligned}
+$$
 
-The allocation and incidence terms are exact derivatives of the same softmax, which is
-why they carry `(1 − π_j)` and `π_j` respectively and why the two sum to
-`−(γ·β)·(1 − π_j(1 − κ))`. Evaluated on 12,724 held-out purchase rows:
+The first two are exact derivatives of the same softmax, which is why they carry
+$(1-\pi_j)$ and $\pi_j$; the third follows from $\mathbb{E}[\text{units}] = 1+\lambda$.
+Allocation and incidence therefore combine to
+
+$$
+-\bigl(\gamma_i^{\top}\beta_j\bigr)\bigl(1-\pi_j\bigr) - \kappa_c\bigl(\gamma_i^{\top}\beta_j\bigr)\pi_j
+\;=\; -\bigl(\gamma_i^{\top}\beta_j\bigr)\bigl[\,1 - \pi_j(1-\kappa_c)\,\bigr]
+$$
+
+Evaluated on 12,724 held-out purchase rows (`28:72-154`):
 
 ```
 total own-price elasticity (mean)   -1.188
@@ -782,7 +948,7 @@ the price move on what they repeatedly buy.
 | **Criterion 6 is marginally missed.** Embedding purity 69.6× and AUC 0.8222 against the flat model's 70.6× and 0.8233 | low — beats every control by 70×, and within seed range | open |
 | **The elasticity decomposition excludes the interaction.** Context is zeroed when it is computed, so a price cut that changes what *else* enters the basket is not counted in the -1.188 | medium — the number is a lower bound on the true own-price response | open |
 | **The generator zeroes the interaction term.** Not for want of a joint — §3.3 shows the conditionals match `P(S) ∝ exp(E(S))` at fixed `n`, and `n` is drawn before items, so Gibbs sweeps over a draft basket would converge to it. The sampler makes one pass and never revisits a slot | medium — marginals match, co-purchase structure is absent | open |
-| **There is no held-out joint likelihood.** `P(S)` needs the partition function over all size-`n` baskets, which is intractable to evaluate exactly. The reported item log-likelihood is conditional on the rest of the basket and is not a substitute | medium — the from-scratch evidence is §8.6 only | open |
+| **There is no held-out joint likelihood.** (§5.5) `P(S)` needs the partition function over all size-`n` baskets, which is intractable to evaluate exactly. The reported item log-likelihood is conditional on the rest of the basket and is not a substitute | medium — the from-scratch evidence is §8.6 only | open |
 | Store-level prices and affinity contribute +0.0005 nats, although `DATA_EXPLORATION.md` §7.3 shows households use 4 stores and switch on 30% of trips | medium | open |
 | `κ` moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now, but weakly identified | medium | documented, not resolved |
 | Breadth is trained but is **not in the checkpoint-selection score** (`27:633`), which covers item, quantity and incidence only | low | open |
