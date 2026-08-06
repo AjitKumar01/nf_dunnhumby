@@ -195,7 +195,8 @@ class NestedModel(nn.Module):
                  use_nest=True, use_quantity=True, use_store=True,
                  use_store_price=True, avail_only=False, use_state=True,
                  use_breadth=True, use_context=True, ctx_agg="mean",
-                 learn_ctx_scale=False):
+                 learn_ctx_scale=False, use_cat_context=False,
+                 use_cat_pair=False):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -219,6 +220,27 @@ class NestedModel(nn.Module):
         # A learnable scalar on the interaction lets the model choose its strength
         # rather than inheriting whatever the pooling implies.
         self.ctx_scale = nn.Parameter(torch.ones(1)) if learn_ctx_scale else None
+        # Which CATEGORIES land in a basket is decided by C independent Bernoulli
+        # draws, because the incidence head is given a zero context.  95% of item
+        # pairs are cross-category, so 95% of co-purchase structure is set by
+        # independent coin flips -- measured in NESTED_MODEL.md 8.6e: within-category
+        # pairs reach a rank correlation of +0.290 against real lift, cross-category
+        # pairs -0.094.  A category-level context fixes the level the item context
+        # cannot reach: same leave-one-out construction, one layer up.
+        self.use_cat_context = use_cat_context
+        self.cat_ctx_scale = nn.Parameter(torch.ones(1)) if use_cat_context else None
+        # A FULL pairwise matrix over categories.  For items this is impossible --
+        # 5,455^2 is 30M parameters -- which is why the item interaction is a dot
+        # product of embeddings, and why it can only express similarity: alpha is
+        # also carrying taste and is graded on sub-commodity clustering.  Categories
+        # are different.  C = 188 means C(C-1)/2 = 17,578 free parameters, so the
+        # pairwise log-odds can simply be LEARNED, with no embedding, no tying and no
+        # similarity constraint.  It can represent complementarity -- two categories
+        # that co-occur while being nothing alike -- which no dot product on a shared
+        # embedding can.  And 95% of item pairs are cross-category, so this is the
+        # level where the co-occurrence gap lives (NESTED_MODEL.md 8.6e).
+        self.use_cat_pair = use_cat_pair
+        self.cat_pair = nn.Parameter(torch.zeros(C, C)) if use_cat_pair else None
 
         def emb(n, k, sd=0.05):
             return nn.Parameter(torch.randn(n, k, generator=g) * sd)
@@ -271,6 +293,11 @@ class NestedModel(nn.Module):
     def kappa(self):
         return nn.functional.softplus(self.kappa_raw)
 
+    def cat_pair_sym(self):
+        """Symmetric, zero-diagonal: W[c,c'] is one number per unordered pair."""
+        w = 0.5 * (self.cat_pair + self.cat_pair.T)
+        return w - torch.diag_embed(torch.diagonal(w))
+
     def item_utility(self, users, items, ctx, dlogp, state, weeks, stores):
         s = self.lam[items]
         a = self.alpha[items]
@@ -294,6 +321,17 @@ class NestedModel(nn.Module):
         if self.use_quantity:
             ps += [self.q_state]
         return sum((p ** 2).sum() for p in ps if p is not None)
+
+    def l2_cat_pair(self):
+        """Penalised separately from the representation block.
+
+        Unregularised, the pairwise matrix absorbs signal that belongs to the
+        inclusive value: kappa fell 0.663 -> 0.597 and the price response recovered
+        from generated data dropped 82% -> 70%.  Price reaches incidence only through
+        kappa * IV, so anything that explains category co-occurrence more cheaply than
+        IV does will take that job and take the price response with it.
+        """
+        return (self.cat_pair ** 2).sum() if self.cat_pair is not None else 0.0
 
     def l2_price(self):
         ps = [self.gamma, self.beta]
@@ -373,11 +411,13 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     # The cost is more categories per trip to see enough positives, hence the higher
     # n_cat default for this sampler.
     cats, ys, trip, off, brd = [], [], [], [], []
+    bought_sets = []
     for ti, i in enumerate(bidx):
         rows_i = sp["cat"][sp["starts"][i]:sp["ends"][i]]
         cnt = {}
         for c in rows_i.tolist():
             cnt[c] = cnt.get(c, 0) + 1
+        bought_sets.append(sorted(cnt))
         for c in rng.integers(0, d.C, size=n_cat).tolist():
             cats.append(c); ys.append(1.0 if c in cnt else 0.0)
             trip.append(ti); off.append(0.0)
@@ -442,7 +482,34 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     cst = d.state(user, blk_np[:, 0], day)
     # mean price deviation across the category's stocked items, for the breadth head
     pdev = (dlogp * (msk > 0).float()).sum(1) / (msk > 0).float().sum(1).clamp_min(1)
+    # leave-one-out mean of the category embedding over the OTHER categories this
+    # trip bought.  Same construction as the item context, one level up: for a
+    # category the trip bought, itself is removed; for one it did not, nothing is.
+    # sum of the learned pairwise log-odds against the OTHER categories bought
+    pair_term = torch.zeros(P, device=device)
+    if getattr(model, "use_cat_pair", False):
+        Bmat = torch.zeros(len(bidx), model.d.C, device=device)
+        for ti, b in enumerate(bought_sets):
+            if b:
+                Bmat[ti, torch.as_tensor(b, device=device)] = 1.0
+        W = model.cat_pair_sym()
+        pair_term = (Bmat @ W)[torch.as_tensor(trip, device=device), ct]
+
+    cat_ctx = torch.zeros(P, model.K, device=device)
+    if getattr(model, "use_cat_context", False):
+        cc = model.c_cat.detach()
+        sums = torch.stack([cc[b].sum(0) if b else torch.zeros(model.K, device=device)
+                            for b in bought_sets])
+        nb_ = torch.as_tensor([len(b) for b in bought_sets], device=device,
+                              dtype=cc.dtype)
+        tt = torch.as_tensor(trip, device=device)
+        yv = torch.as_tensor(np.asarray(ys, dtype=np.float32), device=device)
+        num = sums[tt] - cc[ct] * yv.unsqueeze(1)
+        den = (nb_[tt] - yv).clamp_min(1.0).unsqueeze(1)
+        cat_ctx = torch.where((nb_[tt] - yv > 0).unsqueeze(1), num / den,
+                              torch.zeros_like(num))
     return dict(cat=ct, user=torch.as_tensor(user, device=device), iv=iv,
+                cat_ctx=cat_ctx, pair_term=pair_term,
                 state=torch.as_tensor(cst, device=device),
                 offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
                 breadth=torch.as_tensor(np.asarray(brd, dtype=np.float32), device=device),
@@ -524,6 +591,11 @@ def losses(model, bt, ib, iv_center):
                + (model.c_user[ib["user"]] * model.c_cat[ib["cat"]]).sum(-1)
                + (model.c_state[ib["cat"]] * ib["state"]).sum(-1)
                + kap * (ib["iv"] - model.iv_ref[ib["cat"]]))
+        if model.cat_pair is not None and "pair_term" in ib:
+            lin = lin + ib["pair_term"]
+        if model.cat_ctx_scale is not None and "cat_ctx" in ib:
+            lin = lin + model.cat_ctx_scale * (
+                model.c_cat[ib["cat"]] * ib["cat_ctx"]).sum(-1)
         out["incidence"] = nn.functional.binary_cross_entropy_with_logits(lin, ib["y"])
 
         if model.use_breadth:
@@ -580,7 +652,9 @@ def main(a):
                         avail_only=a.avail_only, use_state=not a.no_state,
                         use_breadth=not a.no_breadth,
                         use_context=not a.no_context, ctx_agg=a.ctx_agg,
-                        learn_ctx_scale=a.learn_ctx_scale).to(dev)
+                        learn_ctx_scale=a.learn_ctx_scale,
+                        use_cat_context=a.cat_context,
+                        use_cat_pair=a.cat_pair).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"context={not a.no_context} store={not a.no_store} "
@@ -631,7 +705,8 @@ def main(a):
         loss = (L["item"] + a.w_quantity * L.get("quantity", 0.0)
                 + a.w_incidence * L.get("incidence", 0.0)
                 + a.w_breadth * L.get("breadth", 0.0)
-                + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price())
+                + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price()
+                   + a.l2_cat_pair * model.l2_cat_pair())
                 / bt["cand"].shape[0])
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
 
@@ -696,6 +771,10 @@ if __name__ == "__main__":
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--l2", type=float, default=1e-2)
     p.add_argument("--l2-price", type=float, default=1e-4)
+    p.add_argument("--l2-cat-pair", type=float, default=1e-2,
+                   help="L2 on the category-pair matrix, separated from the "
+                        "representation block: too weak and it crowds out kappa*IV, "
+                        "which is the only channel price reaches incidence through")
     p.add_argument("--w-quantity", type=float, default=1.0)
     p.add_argument("--w-incidence", type=float, default=1.0)
     p.add_argument("--iv-center", type=float, default=0.0,
@@ -712,6 +791,14 @@ if __name__ == "__main__":
                    help="pool the basket context by mean (divides by n-1) or by sum. "
                         "sum makes E(S) one pairwise energy over all basket sizes and "
                         "stops a strong pair being diluted by 1/(n-1)")
+    p.add_argument("--cat-pair", action="store_true",
+                   help="learn the full C x C matrix of category-pair log-odds in the "
+                        "incidence head; 17,578 free parameters, no embedding, so it "
+                        "can express complementarity rather than only similarity")
+    p.add_argument("--cat-context", action="store_true",
+                   help="give the incidence head a leave-one-out context over the "
+                        "other categories in the basket, so which categories co-occur "
+                        "is modelled rather than left to independent Bernoulli draws")
     p.add_argument("--learn-ctx-scale", action="store_true",
                    help="a learnable scalar on the interaction term")
     p.add_argument("--no-context", action="store_true",

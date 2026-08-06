@@ -1129,6 +1129,78 @@ Not attempted here.
 basket volume, and not usable as a source of realistic co-purchase structure. Criterion
 7 in §7 tested the second-weakest of these five properties.
 
+### 8.6e Closing the co-occurrence gap: three mechanisms, and one that competes
+
+§8.6c found generated baskets carrying 43% of the real co-occurrence lift. Three
+separate causes were found, each by measurement rather than by argument.
+
+**Cause 1 — the wrong level.** Splitting generated pairs by whether the item Gibbs can
+reach them:
+
+| pair type | pairs | real lift | generated | Spearman vs real |
+|---|---|---|---|---|
+| same category — Gibbs can swap | 230 | 20.50 | 9.98 (49%) | **+0.290** |
+| cross category — Gibbs cannot | 4,047 | 3.64 | 1.63 (45%) | **−0.094** |
+
+The item Gibbs resamples a slot *from its own category*, because that is the move
+`E(S)` is defined over. **95% of item pairs are cross-category**, and which categories
+enter a basket was decided by C independent Bernoulli draws — the incidence head was
+given a zero context. So 95% of co-purchase structure was set by coin flips, and no
+amount of item-level work could reach it.
+
+**Cause 2 — dilution.** `ᾱ` divides by `n − 1`, so a partner worth
+$\alpha_j^{\top}\alpha_k = 6$ contributes $6/7$ in an 8-item basket. Free the scale and
+the model sets it to **5.5**, close to the average `n − 1`.
+
+**Cause 3 — tied embeddings encode similarity, not complementarity.** $\alpha^{\top}\alpha$
+is 4.34 within a sub-commodity and 0.47 across categories; `c_cat` is simultaneously
+carrying household taste through $c^{u\top}_i c^{c}_c$. When given a tied category
+context the model fitted `cat_ctx_scale` to **−3.0** — it used the term for basket-size
+competition, because it could not use it for complementarity.
+
+The escape is that **categories are small enough to skip the embedding**. C = 188 means
+the full symmetric pairwise matrix is 17,578 free parameters — cheaper than the store ×
+item block already in the model, and impossible at item level (5,455² = 30M). `W` can
+put two categories at +2 while their embeddings sit far apart.
+
+| variant | item log-lik | incidence NLL | κ | co-occ lift | Spearman | same-sub | price | TVD items |
+|---|---|---|---|---|---|---|---|---|
+| `nested` (current) | -1.9927 | 0.1104 | 0.663 | 43% | -0.003 | 57% | 82% | 0.36 |
+| `--learn-ctx-scale` | -1.9966 | 0.1116 | 0.658 | 44% | -0.029 | 80% | 80% | 0.38 |
+| `--ctx-agg sum` | -2.1026 | 0.1115 | 0.689 | 38% | -0.077 | 59% | 77% | 0.38 |
+| `--cat-context` | -1.9970 | 0.1075 | 0.828 | 44% | +0.003 | 89% | 84% | 0.34 |
+| `--cat-pair`, weak L2 | -1.9971 | 0.0987 | 0.597 | 49% | -0.029 | 121% | 70% | 0.27 |
+| `--cat-pair --l2-cat-pair 0.3` | -1.9966 | 0.1051 | 0.665 | 44% | -0.044 | 86% | 81% | 0.34 |
+| **both, regularised** | -1.9970 | 0.1012 | 0.815 | 46% | -0.003 | 92% | 87% | 0.30 |
+
+**The pair matrix competes with price.** Unregularised it is the best model of category
+co-occurrence — incidence NLL 0.1104 → 0.0987, lift 43% → 49% — and it drags the price
+response to **70%**. The mechanism is visible in κ, which falls 0.663 → 0.597: price
+reaches incidence through `κ·IV` alone, so 17,578 parameters that explain co-occurrence
+more cheaply take that job and the price signal with it. Penalising the matrix
+separately (`--l2-cat-pair 0.3`, the treatment `l2_price` already gets) restores κ to
+0.665 and price to 81% — and gives back the lift.
+
+**Stacking the two category mechanisms escapes the trade-off.** The tied category
+context pushes κ *up* (0.828) while the pair matrix pushes it *down* (0.597); together,
+with the matrix regularised, `nested_both` holds κ at 0.815 and improves four of the
+five checks against the current model at a cost of +0.0043 nats on item
+ranking — inside the 0.0032 seed spread:
+
+| | current | `nested_both` |
+|---|---|---|
+| price response | 82% | **87%** |
+| same-sub co-purchase | 57% | **92%** |
+| co-occurrence lift | 43% | **46%** |
+| incidence NLL | 0.1104 | **0.1012** |
+| basket-size TVD | 0.36 | **0.30** |
+| Spearman of per-pair lift | −0.003 | −0.003 |
+
+**What still fails.** The per-pair rank correlation is unchanged at zero. Every variant
+gets the *amount* of clustering closer to real and none gets the *pattern* right —
+which pairs cluster is still not learned. That is the honest remaining gap, and none of
+the three mechanisms above touches it.
+
 ### 8.7 Criterion 3 — household state
 
 Removing the state basis costs **0.076 nats**, the largest genuine gain of any

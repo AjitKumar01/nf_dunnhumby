@@ -63,7 +63,9 @@ def load(label, d, dev):
                        use_quantity=not cfg["no_quantity"],
                        use_store=not cfg["no_store"],
                        ctx_agg=cfg.get("ctx_agg", "mean"),
-                       learn_ctx_scale=cfg.get("learn_ctx_scale", False)).to(dev)
+                       learn_ctx_scale=cfg.get("learn_ctx_scale", False),
+                       use_cat_context=cfg.get("cat_context", False),
+                       use_cat_pair=cfg.get("cat_pair", False)).to(dev)
     m.load_state_dict(torch.load(os.path.join(OUT, f"{label}_nested.pt"),
                                  map_location=dev))
     m.eval()
@@ -271,7 +273,7 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
 
 @torch.no_grad()
 def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
-                     with_units=False, trips=None):
+                     with_units=False, trips=None, cat_sweeps=2):
     """Emit ACTUAL baskets -- item ids, not counts -- and measure co-purchase structure.
 
     `generate` above accumulates expected counts and never samples an item, which is why
@@ -335,7 +337,37 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
         lin = (m.c0 + (m.c_user[user].unsqueeze(0) * m.c_cat).sum(-1)
                + (m.c_state * torch.as_tensor(cst, device=dev)).sum(-1)
                + m.kappa() * iv)
-        bought = (torch.rand(d.C, generator=g) < torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)) & ok
+        # Pass 0 -- WHICH CATEGORIES.  Independent Bernoulli draws leave every
+        # cross-category pair at lift ~1, and 95% of item pairs are cross-category
+        # (NESTED_MODEL.md 8.6e).  With a category context the indicator vector is a
+        # C-dimensional binary field whose single-site conditionals the incidence head
+        # supplies, so Gibbs over it is the same move used for items, one level up.
+        bought = (torch.rand(d.C, generator=g)
+                  < torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)) & ok
+        has_pair = getattr(m, "cat_pair", None) is not None
+        if (has_pair or getattr(m, "cat_ctx_scale", None) is not None) and cat_sweeps:
+            W = m.cat_pair_sym() if has_pair else None
+            cc = m.c_cat.detach() if m.cat_ctx_scale is not None else m.c_cat.detach()
+            S = cc[bought].sum(0) if int(bought.sum()) else torch.zeros(m.K, device=dev)
+            nB = float(bought.sum())
+            order = torch.arange(d.C, device=dev)
+            for _ in range(cat_sweeps):
+                for c in order.tolist():
+                    if not bool(ok[c]):
+                        continue
+                    inb = float(bought[c])
+                    den = max(nB - inb, 1.0)
+                    ctx = (S - cc[c] * inb) / den
+                    lg = lin[c]
+                    if m.cat_ctx_scale is not None:
+                        lg = lg + m.cat_ctx_scale * (cc[c] * ctx).sum()
+                    if W is not None:
+                        lg = lg + (W[c] * bought.float()).sum() - W[c, c] * inb
+                    new_b = bool(torch.rand(1, generator=g) < torch.sigmoid(lg).clamp(1e-6, 1 - 1e-6))
+                    if new_b != bool(bought[c]):
+                        S = S + cc[c] if new_b else S - cc[c]
+                        nB = nB + 1 if new_b else nB - 1
+                        bought[c] = new_b
         pdev = torch.zeros(d.C, device=dev)
         if getattr(m, "use_breadth", False):
             zb = (m.b0 + m.b_user[user] - m.b_price * pdev).clamp(-6, 3)
