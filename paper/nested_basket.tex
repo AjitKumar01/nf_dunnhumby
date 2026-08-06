@@ -817,15 +817,64 @@ the treatment the price block already gets --- restores both.
 holds $\kappa$ at 0.815 and improves four of the five checks at a cost inside the seed
 spread.
 
+
+\subsection{SHOPPER's asymmetric interaction, and why it did not help}
+\label{sec:rho}
+
+Section~\ref{sec:cooc} concluded that the per-pair failure was a \emph{geometry} problem:
+$\alpha^{\top}\alpha$ is symmetric and large exactly when two items are alike, so
+complementarity --- two items co-purchased \emph{because} they differ --- is not
+representable. SHOPPER \cite{shopper} is built on exactly the mechanism that diagnosis
+calls for: $\rho$ untied from $\alpha$, deliberately asymmetric, and free to go negative
+for substitutes. We also implemented its sequential likelihood, drawing one random
+permutation per basket so each row sees only the items before it --- one unbiased sample
+from the permutation sum, and a context that matches sequential generation exactly.
+
+\begin{center}
+\begin{tabular}{lrrrrrrr}
+\toprule
+variant & item log-lik & inc.\ NLL & $\kappa$ & lift & Spearman & same-sub & price \\
+\midrule
+base & $-1.9927$ & 0.1104 & 0.663 & 43\% & $-0.003$ & 57\% & 82\% \\
+\textbf{both, regularised} & $-1.9970$ & 0.1012 & 0.815 & 46\% & $-0.003$ & 92\% & 87\% \\
+$+$ untied $\rho$ & $-2.0550$ & 0.1011 & 0.780 & 47\% & $-0.005$ & 62\% & 85\% \\
+$+$ untied $\rho$, sequential & $-2.0645$ & 0.1045 & 0.816 & 47\% & $+0.010$ & 57\% & 88\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Neither moved the number they were built for.} The per-pair rank correlation goes
+$-0.003 \to -0.005 \to +0.010$; that is zero in all three cases. Both cost item ranking
+(0.058 and 0.072 nats, 18$\times$ and 22$\times$ the seed spread) and both lose the
+same-sub co-purchase gain, which follows directly: with $\rho$ carrying the interaction,
+$\alpha$ no longer has to encode co-purchase structure at all. The freedom was used, not
+ignored --- $\cos(\rho_j,\alpha_j) = +0.31$, so $\rho$ found a
+substantially different direction. It simply did not find real complements.
+
+\textbf{This refutes the Section~\ref{sec:cooc} diagnosis.} The geometry was never the
+binding constraint: the mechanism that explanation demanded is representable here, was
+fitted, and bought nothing.
+
+The remaining hypothesis concerns the \emph{training signal} rather than the model.
+Negatives are drawn unigram$^{0.75}$ from the whole catalogue, so a decoy is almost always
+separable by $\lambda_j + \theta_i^{\top}\alpha_j$ before the interaction term is
+consulted. The softmax is asked ``is this item plausible at all'', never ``does this item
+fit \emph{this} basket''. No parameterisation can learn pairwise structure from a loss
+that does not require it. Drawing a fraction of negatives from the true item's own
+category, where popularity and broad taste cannot separate them, is the direct test.
+
 %======================================================================
 \section{What still fails}
 \label{sec:fail}
 
 \begin{enumerate}
-\item \textbf{The pattern of co-occurrence is not learned.} Every variant gets the
-\emph{amount} of clustering closer to real and none gets the per-pair rank correlation
-away from zero. The model knows baskets should be coherent; it does not know that hot
-dogs go with buns specifically.
+\item \textbf{The pattern of co-occurrence is not learned.} Nine variants --- spanning
+symmetric and asymmetric interactions, tied and untied embeddings, mean and sum pooling,
+a learnable scale, a category-level context, a free pairwise matrix over categories, and
+SHOPPER's sequential likelihood --- all leave the per-pair rank correlation at zero
+(Section~\ref{sec:rho}). The model knows baskets should be coherent; it does not know
+that hot dogs go with buns specifically. The evidence now points at the negative-sampling
+distribution rather than at the interaction's functional form.
 
 \item \textbf{Promotion weeks are steeper than the model's price term.} Section~\ref{sec:eda}
 measures an implied slope of $-2.83$ in the cut week against $-0.792$ on ordinary

@@ -46,4 +46,5 @@
 \contentsline {paragraph}{Cause 3: tied embeddings encode similarity, not complementarity.}{13}{section*.21}%
 \contentsline {paragraph}{Co-occurrence competes with price.}{13}{section*.22}%
 \contentsline {paragraph}{Stacking escapes the trade-off.}{13}{section*.23}%
-\contentsline {section}{\numberline {7}What still fails}{13}{section.7}%
+\contentsline {subsection}{\numberline {6.9}SHOPPER's asymmetric interaction, and why it did not help}{13}{subsection.6.9}%
+\contentsline {section}{\numberline {7}What still fails}{14}{section.7}%
