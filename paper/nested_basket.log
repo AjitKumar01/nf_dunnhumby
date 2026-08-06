@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.11.18)  6 AUG 2026 17:43
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.11.18)  6 AUG 2026 23:14
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -148,25 +148,6 @@ Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
 \@lastruleclass=\count288
 \@thisrulewidth=\dimen171
 )
-(/usr/local/texlive/2025basic/texmf-dist/tex/latex/tools/longtable.sty
-Package: longtable 2024-10-27 v4.22 Multi-page Table package (DPC)
-\LTleft=\skip54
-\LTright=\skip55
-\LTpre=\skip56
-\LTpost=\skip57
-\LTchunksize=\count289
-\LTcapwidth=\dimen172
-\LT@head=\box54
-\LT@firsthead=\box55
-\LT@foot=\box56
-\LT@lastfoot=\box57
-\LT@gbox=\box58
-\LT@cols=\count290
-\LT@rows=\count291
-\c@LT@tables=\count292
-\c@LT@chunks=\count293
-\LT@p@ftn=\toks24
-)
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/hyperref.sty
 Package: hyperref 2024-11-05 v7.01l Hypertext links for LaTeX
 
@@ -209,19 +190,19 @@ Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/kvoptions/kvoptions.sty
 Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
 ))
-\c@section@level=\count294
+\c@section@level=\count289
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/etoolbox/etoolbox.sty
 Package: etoolbox 2025/02/11 v2.5l e-TeX tools for LaTeX (JAW)
-\etb@tempcnta=\count295
+\etb@tempcnta=\count290
 )
 (/usr/local/texlive/2025basic/texmf-dist/tex/generic/stringenc/stringenc.sty
 Package: stringenc 2019/11/29 v1.12 Convert strings between diff. encodings (HO
 )
 )
-\@linkdim=\dimen173
-\Hy@linkcounter=\count296
-\Hy@pagecounter=\count297
+\@linkdim=\dimen172
+\Hy@linkcounter=\count291
+\Hy@pagecounter=\count292
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/pd1enc.def
 File: pd1enc.def 2024-11-05 v7.01l Hyperref: PDFDocEncoding definition (HO)
@@ -231,7 +212,7 @@ Now handling font encoding PD1 ...
 (/usr/local/texlive/2025basic/texmf-dist/tex/generic/intcalc/intcalc.sty
 Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
 )
-\Hy@SavedSpaceFactor=\count298
+\Hy@SavedSpaceFactor=\count293
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/hyperref/puenc.def
 File: puenc.def 2024-11-05 v7.01l Hyperref: PDF Unicode definition (HO)
@@ -245,14 +226,14 @@ Package hyperref Info: Plain pages OFF on input line 4172.
 Package hyperref Info: Backreferencing OFF on input line 4177.
 Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
 Package hyperref Info: Bookmarks ON on input line 4424.
-\c@Hy@tempcnt=\count299
+\c@Hy@tempcnt=\count294
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/url/url.sty
 \Urlmuskip=\muskip18
 Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
 )
 LaTeX Info: Redefining \url on input line 4763.
-\XeTeXLinkMargin=\dimen174
+\XeTeXLinkMargin=\dimen173
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/generic/bitset/bitset.sty
 Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
@@ -261,9 +242,9 @@ Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
 Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
 )
 ))
-\Fld@menulength=\count300
-\Field@Width=\dimen175
-\Fld@charsize=\dimen176
+\Fld@menulength=\count295
+\Field@Width=\dimen174
+\Fld@charsize=\dimen175
 Package hyperref Info: Hyper figures OFF on input line 6042.
 Package hyperref Info: Link nesting OFF on input line 6047.
 Package hyperref Info: Hyper index ON on input line 6050.
@@ -275,9 +256,9 @@ Package hyperref Info: PDF/A mode OFF on input line 6072.
 Package: atbegshi-ltx 2021/01/10 v1.0c Emulation of the original atbegshi
 package with kernel methods
 )
-\Hy@abspage=\count301
-\c@Item=\count302
-\c@Hfootnote=\count303
+\Hy@abspage=\count296
+\c@Item=\count297
+\c@Hfootnote=\count298
 )
 Package hyperref Info: Driver (autodetected): hpdftex.
 
@@ -289,8 +270,8 @@ Package: atveryend-ltx 2020/08/19 v1.0a Emulation of the original atveryend pac
 kage
 with kernel methods
 )
-\Fld@listcount=\count304
-\c@bookmark@seq@number=\count305
+\Fld@listcount=\count299
+\c@bookmark@seq@number=\count300
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/rerunfilecheck/rerunfilechec
 k.sty
@@ -303,16 +284,71 @@ Package: uniquecounter 2019/12/15 v1.4 Provide unlimited unique counter (HO)
 Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
 85.
 )
-\Hy@SectionHShift=\skip58
+\Hy@SectionHShift=\skip54
 ) (/usr/local/texlive/2025basic/texmf-dist/tex/latex/tools/array.sty
 Package: array 2024/10/17 v2.6g Tabular extension package (FMi)
-\col@sep=\dimen177
-\ar@mcellbox=\box59
-\extrarowheight=\dimen178
-\NC@list=\toks25
-\extratabsurround=\skip59
-\backup@length=\skip60
-\ar@cellbox=\box60
+\col@sep=\dimen176
+\ar@mcellbox=\box54
+\extrarowheight=\dimen177
+\NC@list=\toks24
+\extratabsurround=\skip55
+\backup@length=\skip56
+\ar@cellbox=\box55
+)
+(/usr/local/texlive/2025basic/texmf-dist/tex/latex/algorithm2e/algorithm2e.sty
+Package: algorithm2e 2017/07/18 v5.2 algorithms environments
+\c@AlgoLine=\count301
+
+(/usr/local/texlive/2025basic/texmf-dist/tex/latex/base/ifthen.sty
+Package: ifthen 2024/03/16 v1.1e Standard LaTeX ifthen package (DPC)
+)
+\algocf@hangindent=\skip57
+
+(/usr/local/texlive/2025basic/texmf-dist/tex/latex/ifoddpage/ifoddpage.sty
+Package: ifoddpage 2022/10/18 v1.2 Conditionals for odd/even page detection
+\c@checkoddpage=\count302
+)
+(/usr/local/texlive/2025basic/texmf-dist/tex/latex/tools/xspace.sty
+Package: xspace 2014/10/28 v1.13 Space after command names (DPC,MH)
+)
+(/usr/local/texlive/2025basic/texmf-dist/tex/latex/relsize/relsize.sty
+Package: relsize 2013/03/29 ver 4.1
+)
+\skiptotal=\skip58
+\skiplinenumber=\skip59
+\skiprule=\skip60
+\skiphlne=\skip61
+\skiptext=\skip62
+\skiplength=\skip63
+\algomargin=\skip64
+\skipalgocfslide=\skip65
+\algowidth=\dimen178
+\inoutsize=\dimen179
+\inoutindent=\dimen180
+\interspacetitleruled=\dimen181
+\interspacealgoruled=\dimen182
+\interspacetitleboxruled=\dimen183
+\algocf@ruledwidth=\skip66
+\algocf@inoutbox=\box56
+\algocf@inputbox=\box57
+\AlCapSkip=\skip67
+\AlCapHSkip=\skip68
+\algoskipindent=\skip69
+\algocf@nlbox=\box58
+\algocf@hangingbox=\box59
+\algocf@untilbox=\box60
+\algocf@skipuntil=\skip70
+\algocf@capbox=\box61
+\algocf@lcaptionbox=\skip71
+\algoheightruledefault=\skip72
+\algoheightrule=\skip73
+\algotitleheightruledefault=\skip74
+\algotitleheightrule=\skip75
+\c@algocfline=\count303
+\c@algocfproc=\count304
+\c@algocf=\count305
+\algocf@algoframe=\box62
+\algocf@algobox=\box63
 )
 Package hyperref Info: Option `colorlinks' set `true' on input line 8.
 
@@ -320,28 +356,28 @@ Package hyperref Info: Option `colorlinks' set `true' on input line 8.
 ef
 File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count306
-\l__pdf_internal_box=\box61
+\l__pdf_internal_box=\box64
 ) (./nested_basket.aux)
 \openout1 = `nested_basket.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 14.
+LaTeX Font Info:    ... okay on input line 14.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -391,30 +427,30 @@ File: pdftex.def 2024/04/13 v1.2c Graphics/color driver for pdftex
 (/usr/local/texlive/2025basic/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
 \scratchcounter=\count307
-\scratchdimen=\dimen179
-\scratchbox=\box62
+\scratchdimen=\dimen184
+\scratchbox=\box65
 \nofMPsegments=\count308
 \nofMParguments=\count309
-\everyMPshowfont=\toks26
+\everyMPshowfont=\toks25
 \MPscratchCnt=\count310
-\MPscratchDim=\dimen180
+\MPscratchDim=\dimen185
 \MPnumerator=\count311
 \makeMPintoPDFobject=\count312
-\everyMPtoPDFconversion=\toks27
+\everyMPtoPDFconversion=\toks26
 )) (/usr/local/texlive/2025basic/texmf-dist/tex/latex/graphics/mathcolor.ltx))
-Package hyperref Info: Link coloring ON on input line 16.
+Package hyperref Info: Link coloring ON on input line 14.
 
 (./nested_basket.out) (./nested_basket.out)
 \@outlinefile=\write3
 \openout3 = `nested_basket.out'.
 
-LaTeX Font Info:    Trying to load font information for U+msa on input line 18.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 16.
 
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 18.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 16.
 
 
 (/usr/local/texlive/2025basic/texmf-dist/tex/latex/amsfonts/umsb.fd
@@ -430,8 +466,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 
 
 
-[2{/usr/local/texlive/2025basic/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts
-1.enc}]
+[2]
 
 [3]
 
@@ -442,15 +477,14 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 [6]
 
 [7]
-Underfull \hbox (badness 5681) in paragraph at lines 503--503
-[]|\OT1/cmr/m/n/10.95 Split-half re-li-a-bil-ity of per-household
- []
-
-
 
 [8]
 
 [9]
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
 
 [10]
 
@@ -462,22 +496,26 @@ Underfull \hbox (badness 5681) in paragraph at lines 503--503
 
 [14]
 
-[15] (./nested_basket.aux)
+[15]
+
+[16]
+
+[17] (./nested_basket.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
  ***********
 Package rerunfilecheck Info: File `nested_basket.out' has not changed.
-(rerunfilecheck)             Checksum: 8D15E27E6F1285A134E48C3080DFE3DA;5131.
+(rerunfilecheck)             Checksum: 50DB253E3AB1119BD94C99E0D3B643C5;7384.
  ) 
 Here is how much of TeX's memory you used:
- 10293 strings out of 474662
- 156046 string characters out of 5751108
- 565152 words of memory out of 5000000
- 33119 multiletter control sequences out of 15000+600000
- 570210 words of font info for 79 fonts, out of 8000000 for 9000
+ 11304 strings out of 474662
+ 173129 string characters out of 5751108
+ 589433 words of memory out of 5000000
+ 34090 multiletter control sequences out of 15000+600000
+ 570037 words of font info for 79 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
- 75i,12n,79p,420b,560s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,12n,79p,483b,564s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx1
 0.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfonts/cm/c
 mbx12.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfonts/
@@ -494,12 +532,12 @@ onts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2025basic/texmf-di
 st/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/local/texlive/2025basic/texmf
 -dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive/2025basic/te
 xmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive/2025basi
-c/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/local/texlive
-/2025basic/texmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb>
-Output written on nested_basket.pdf (15 pages, 272275 bytes).
+c/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/2025
+basic/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
+Output written on nested_basket.pdf (17 pages, 298986 bytes).
 PDF statistics:
- 403 PDF objects out of 1000 (max. 8388607)
- 345 compressed objects within 4 object streams
- 99 named destinations out of 1000 (max. 500000)
- 225 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 510 PDF objects out of 1000 (max. 8388607)
+ 452 compressed objects within 5 object streams
+ 126 named destinations out of 1000 (max. 500000)
+ 313 words of extra memory for PDF output out of 10000 (max. 10000000)
 

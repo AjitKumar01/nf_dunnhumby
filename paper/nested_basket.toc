@@ -1,50 +1,72 @@
-\contentsline {section}{\numberline {1}The problem}{2}{section.1}%
-\contentsline {section}{\numberline {2}Data}{2}{section.2}%
-\contentsline {paragraph}{Splits are by calendar week, not at random.}{2}{section*.2}%
-\contentsline {paragraph}{Prices are deviations, not levels.}{3}{section*.3}%
-\contentsline {section}{\numberline {3}What the data says}{3}{section.3}%
-\contentsline {subsection}{\numberline {3.1}Demand responds to price}{3}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}A price cut moves three separate margins}{3}{subsection.3.2}%
-\contentsline {subsection}{\numberline {3.3}Promotions: an event study}{4}{subsection.3.3}%
-\contentsline {subsection}{\numberline {3.4}Households differ, and the difference is measurable}{5}{subsection.3.4}%
-\contentsline {paragraph}{Taste.}{5}{section*.4}%
-\contentsline {paragraph}{Price sensitivity.}{5}{section*.5}%
-\contentsline {subsection}{\numberline {3.5}Stores are not interchangeable}{5}{subsection.3.5}%
+\contentsline {section}{\numberline {1}Introduction}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Main idea}{2}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Main results}{3}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Relation to prior work}{3}{subsection.1.3}%
+\contentsline {section}{\numberline {2}Data}{3}{section.2}%
+\contentsline {paragraph}{Filters.}{3}{section*.2}%
+\contentsline {paragraph}{Splits are temporal.}{4}{section*.3}%
+\contentsline {paragraph}{Prices.}{4}{section*.4}%
+\contentsline {section}{\numberline {3}What the data says}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Demand responds to price}{4}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}A price cut moves three margins, and they can be measured separately}{4}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Promotions: an event study}{5}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Households differ, and by how much can be measured}{5}{subsection.3.4}%
+\contentsline {paragraph}{Taste.}{5}{section*.5}%
+\contentsline {paragraph}{Price sensitivity is real but poorly measured.}{6}{section*.6}%
+\contentsline {subsection}{\numberline {3.5}Stores are not interchangeable}{6}{subsection.3.5}%
 \contentsline {subsection}{\numberline {3.6}Base rates the model must reproduce}{6}{subsection.3.6}%
 \contentsline {section}{\numberline {4}The model}{6}{section.4}%
 \contentsline {subsection}{\numberline {4.1}Item utility}{6}{subsection.4.1}%
-\contentsline {subsection}{\numberline {4.2}The memory term}{6}{subsection.4.2}%
-\contentsline {subsection}{\numberline {4.3}The basket interaction}{7}{subsection.4.3}%
-\contentsline {paragraph}{Tied versus untied.}{7}{section*.6}%
-\contentsline {paragraph}{The joint this implies (tied case).}{7}{section*.7}%
-\contentsline {subsection}{\numberline {4.4}The nest}{7}{subsection.4.4}%
-\contentsline {subsection}{\numberline {4.5}Four heads}{8}{subsection.4.5}%
-\contentsline {paragraph}{Item.}{8}{section*.8}%
-\contentsline {paragraph}{Quantity.}{8}{section*.9}%
-\contentsline {paragraph}{Incidence.}{8}{section*.10}%
-\contentsline {paragraph}{Breadth.}{8}{section*.11}%
-\contentsline {subsection}{\numberline {4.6}Objective}{8}{subsection.4.6}%
-\contentsline {section}{\numberline {5}From measurement to model}{8}{section.5}%
-\contentsline {section}{\numberline {6}Experiments}{9}{section.6}%
-\contentsline {subsection}{\numberline {6.1}Are the equations what the code computes?}{9}{subsection.6.1}%
-\contentsline {subsection}{\numberline {6.2}Ablations}{9}{subsection.6.2}%
-\contentsline {paragraph}{Stores, split honestly.}{10}{section*.12}%
-\contentsline {subsection}{\numberline {6.3}Against simple alternatives}{10}{subsection.6.3}%
-\contentsline {paragraph}{What this number is.}{10}{section*.13}%
-\contentsline {subsection}{\numberline {6.4}Is the price response causal?}{10}{subsection.6.4}%
-\contentsline {subsection}{\numberline {6.5}Where a price cut goes}{11}{subsection.6.5}%
-\contentsline {subsection}{\numberline {6.6}Do the embeddings recover product structure?}{11}{subsection.6.6}%
-\contentsline {subsection}{\numberline {6.7}Generation: does the distribution match?}{11}{subsection.6.7}%
-\contentsline {paragraph}{1. Shape.}{12}{section*.14}%
-\contentsline {paragraph}{2. Item marginals.}{12}{section*.15}%
-\contentsline {paragraph}{3. Co-occurrence lift.}{12}{section*.16}%
-\contentsline {paragraph}{4. Held-out labels.}{12}{section*.17}%
-\contentsline {paragraph}{5. Price response recovered from generated data.}{12}{section*.18}%
-\contentsline {subsection}{\numberline {6.8}The co-occurrence investigation}{12}{subsection.6.8}%
-\contentsline {paragraph}{Cause 1: the wrong level.}{12}{section*.19}%
-\contentsline {paragraph}{Cause 2: dilution.}{13}{section*.20}%
-\contentsline {paragraph}{Cause 3: tied embeddings encode similarity, not complementarity.}{13}{section*.21}%
-\contentsline {paragraph}{Co-occurrence competes with price.}{13}{section*.22}%
-\contentsline {paragraph}{Stacking escapes the trade-off.}{13}{section*.23}%
-\contentsline {subsection}{\numberline {6.9}SHOPPER's asymmetric interaction, and why it did not help}{13}{subsection.6.9}%
-\contentsline {section}{\numberline {7}What still fails}{14}{section.7}%
+\contentsline {paragraph}{Popularity and taste.}{6}{section*.7}%
+\contentsline {paragraph}{Price.}{6}{section*.8}%
+\contentsline {paragraph}{Memory.}{7}{section*.9}%
+\contentsline {paragraph}{Season and store.}{7}{section*.10}%
+\contentsline {paragraph}{Interaction.}{7}{section*.11}%
+\contentsline {subsection}{\numberline {4.2}The basket interaction}{7}{subsection.4.2}%
+\contentsline {paragraph}{The joint the tied form implies.}{7}{section*.12}%
+\contentsline {subsection}{\numberline {4.3}The nest}{8}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Full specification: four likelihood terms}{8}{subsection.4.4}%
+\contentsline {paragraph}{Item (allocation).}{8}{section*.13}%
+\contentsline {paragraph}{Quantity.}{8}{section*.14}%
+\contentsline {paragraph}{Incidence.}{8}{section*.15}%
+\contentsline {paragraph}{Breadth.}{8}{section*.16}%
+\contentsline {section}{\numberline {5}Inference}{8}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Objective}{9}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Negative sampling}{9}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}The inclusive value is estimated, not summed}{9}{subsection.5.3}%
+\contentsline {paragraph}{A frozen reference.}{9}{section*.17}%
+\contentsline {subsection}{\numberline {5.4}Category sampling for the incidence head}{9}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.5}Computational cost}{10}{subsection.5.5}%
+\contentsline {paragraph}{Scalability.}{10}{section*.18}%
+\contentsline {section}{\numberline {6}Sampling}{10}{section.6}%
+\contentsline {paragraph}{What we have.}{10}{section*.19}%
+\contentsline {paragraph}{A sequential alternative.}{10}{section*.20}%
+\contentsline {paragraph}{What generation does not carry.}{10}{section*.21}%
+\contentsline {section}{\numberline {7}From measurement to model}{11}{section.7}%
+\contentsline {section}{\numberline {8}Empirical study}{11}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Protocol, and what is comparable}{11}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Do the equations match the code?}{12}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Ablations}{12}{subsection.8.3}%
+\contentsline {paragraph}{Stores, split honestly.}{12}{section*.22}%
+\contentsline {subsection}{\numberline {8.4}Against simpler alternatives}{12}{subsection.8.4}%
+\contentsline {subsection}{\numberline {8.5}Is the price response causal?}{13}{subsection.8.5}%
+\contentsline {subsection}{\numberline {8.6}Where a price cut goes}{13}{subsection.8.6}%
+\contentsline {subsection}{\numberline {8.7}Do the embeddings recover product structure?}{14}{subsection.8.7}%
+\contentsline {subsection}{\numberline {8.8}Generation: does the distribution match?}{14}{subsection.8.8}%
+\contentsline {paragraph}{1. Shape.}{14}{section*.23}%
+\contentsline {paragraph}{2. Item marginals.}{14}{section*.24}%
+\contentsline {paragraph}{3. Co-occurrence lift.}{14}{section*.25}%
+\contentsline {paragraph}{4. Held-out labels.}{14}{section*.26}%
+\contentsline {paragraph}{5. Price response from generated data.}{14}{section*.27}%
+\contentsline {subsection}{\numberline {8.9}The co-occurrence failure, and eleven attempts on it}{15}{subsection.8.9}%
+\contentsline {paragraph}{Cause 1: the wrong level.}{15}{section*.28}%
+\contentsline {paragraph}{Cause 2: dilution.}{15}{section*.29}%
+\contentsline {paragraph}{Cause 3: tied embeddings encode similarity.}{15}{section*.30}%
+\contentsline {subsection}{\numberline {8.10}SHOPPER's asymmetric interaction and sequential likelihood}{15}{subsection.8.10}%
+\contentsline {subsection}{\numberline {8.11}The resolution: harder negatives}{16}{subsection.8.11}%
+\contentsline {paragraph}{Recommendation.}{16}{section*.31}%
+\contentsline {section}{\numberline {9}Related work}{16}{section.9}%
+\contentsline {section}{\numberline {10}Discussion}{17}{section.10}%
+\contentsline {paragraph}{What the model does well.}{17}{section*.32}%
+\contentsline {paragraph}{What it does not do.}{17}{section*.33}%
+\contentsline {paragraph}{A methodological lesson.}{17}{section*.34}%
