@@ -133,6 +133,9 @@ class NestedData:
             ci[c, :len(js)] = js; cm[c, :len(js)] = 1.0
         self.cat_items = torch.as_tensor(ci, device=device)
         self.cat_mask = torch.as_tensor(cm, device=device)
+        self.cat_items_np = ci                       # for in-category negatives
+        self.cat_nvalid_np = cm.sum(1).astype(np.int64)
+        self.item_cat_np = it_cat
 
         bk = bk.sort_values(["split", "BASKET_ID", "item_id"]).reset_index(drop=True)
         self.splits = {}
@@ -196,7 +199,8 @@ class NestedModel(nn.Module):
                  use_store_price=True, avail_only=False, use_state=True,
                  use_breadth=True, use_context=True, ctx_agg="mean",
                  learn_ctx_scale=False, use_cat_context=False,
-                 use_cat_pair=False):
+                 use_cat_pair=False, untie_rho=False, prefix_context=False,
+                 neg_in_cat=0.0):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -241,6 +245,25 @@ class NestedModel(nn.Module):
         # level where the co-occurrence gap lives (NESTED_MODEL.md 8.6e).
         self.use_cat_pair = use_cat_pair
         self.cat_pair = nn.Parameter(torch.zeros(C, C)) if use_cat_pair else None
+        # SHOPPER (Ruiz, Athey & Blei 2020, eq. 4) writes the interaction as
+        # rho_c . mean(alpha of items already in the basket) with rho UNTIED from
+        # alpha.  The factorisation is deliberately asymmetric: the effect of k on j is
+        # rho_j . alpha_k, which need not equal rho_k . alpha_j, and which may be
+        # NEGATIVE.  That is what lets taco shells and beans be complements while their
+        # attributes sit far apart, and what lets two brands of the same yogurt repel
+        # as substitutes.  The tied form alpha_j . alpha_k can do neither: it is
+        # symmetric and large exactly when two items are alike, which is why
+        # NESTED_MODEL.md 8.6e found every variant getting the AMOUNT of clustering
+        # right and none getting the PATTERN right.
+        self.untie_rho = untie_rho
+        # SHOPPER is a sequential model: the context at step i is the mean over the
+        # i-1 items already placed, and the unordered likelihood sums over
+        # permutations (eq. 6).  With prefix_context a random permutation is drawn per
+        # basket and each row sees only the items before it -- one unbiased sample from
+        # that sum -- so training matches sequential generation instead of the
+        # leave-one-out full-basket context.
+        self.prefix_context = prefix_context
+        self.neg_in_cat = neg_in_cat
 
         def emb(n, k, sd=0.05):
             return nn.Parameter(torch.randn(n, k, generator=g) * sd)
@@ -248,6 +271,7 @@ class NestedModel(nn.Module):
         # --- item layer (as stage 23, tied interaction)
         self.lam = nn.Parameter(torch.zeros(J))
         self.alpha = emb(J, K)
+        self.rho = emb(J, K) if untie_rho else None
         self.theta = emb(N, K)
         self.gamma = emb(N, Kp, 0.1); self.beta = emb(J, Kp, 0.1)
         self.use_state = use_state
@@ -303,7 +327,8 @@ class NestedModel(nn.Module):
         a = self.alpha[items]
         s = s + torch.einsum("bk,bmk->bm", self.theta[users], a)
         if self.use_context:
-            inter = (a * ctx.unsqueeze(1)).sum(-1)
+            r = self.rho[items] if self.rho is not None else a
+            inter = (r * ctx.unsqueeze(1)).sum(-1)
             s = s + (inter * self.ctx_scale if self.ctx_scale is not None else inter)
         s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
         if self.eta is not None:
@@ -321,6 +346,12 @@ class NestedModel(nn.Module):
         if self.use_quantity:
             ps += [self.q_state]
         return sum((p ** 2).sum() for p in ps if p is not None)
+
+    def l2_rho(self):
+        """Penalised separately: untied rho has J*K free parameters with nothing
+        anchoring it, and the flat model's attempt (BASKET_MODEL.md 2) lost 0.17 nats
+        of fit without one."""
+        return (self.rho ** 2).sum() if self.rho is not None else 0.0
 
     def l2_cat_pair(self):
         """Penalised separately from the representation block.
@@ -357,12 +388,52 @@ def make_batch(d, model, split, bidx, n_neg, rng, device):
     sums = torch.zeros(len(bidx), model.K, device=device, dtype=a_all.dtype)
     sums.index_add_(0, ow, a_all)
     n_in = torch.as_tensor(lens, device=device, dtype=a_all.dtype)[ow]
-    ctx = sums[ow] - a_all
-    if getattr(model, "ctx_agg", "mean") == "mean":
-        ctx = ctx / (n_in - 1).clamp_min(1).unsqueeze(1)
-    ctx = torch.where((n_in > 1).unsqueeze(1), ctx, torch.zeros_like(ctx))
+    if getattr(model, "prefix_context", False):
+        # SHOPPER eq. 6: draw one permutation per basket and let each row see only the
+        # items BEFORE it.  Vectorised as a cumulative sum along a random order.
+        key = rng.random(B)
+        order = np.lexsort((key, owner))            # random within basket
+        pos = np.empty(B, dtype=np.int64)
+        pos[order] = np.arange(B) - np.repeat(
+            np.concatenate([[0], np.cumsum(lens)[:-1]]), lens)
+        a_ord = a_all[torch.as_tensor(order, device=device)]
+        csum = torch.cumsum(a_ord, 0)
+        base = torch.zeros_like(csum)
+        starts_c = np.concatenate([[0], np.cumsum(lens)[:-1]])
+        base_idx = torch.as_tensor(np.repeat(starts_c, lens), device=device)
+        # prefix sum within basket = cumsum up to here minus cumsum before the basket
+        before = torch.cat([torch.zeros(1, model.K, device=device, dtype=csum.dtype),
+                            csum])[base_idx]
+        pre_ord = torch.cat([torch.zeros(1, model.K, device=device, dtype=csum.dtype),
+                             csum])[torch.arange(B, device=device)] - before
+        ctx_ord = pre_ord / torch.as_tensor(pos[order], device=device,
+                                            dtype=csum.dtype).clamp_min(1).unsqueeze(1)
+        ctx_ord = torch.where(
+            torch.as_tensor(pos[order] > 0, device=device).unsqueeze(1),
+            ctx_ord, torch.zeros_like(ctx_ord))
+        ctx = torch.zeros_like(ctx_ord)
+        ctx[torch.as_tensor(order, device=device)] = ctx_ord
+    else:
+        ctx = sums[ow] - a_all
+        if getattr(model, "ctx_agg", "mean") == "mean":
+            ctx = ctx / (n_in - 1).clamp_min(1).unsqueeze(1)
+        ctx = torch.where((n_in > 1).unsqueeze(1), ctx, torch.zeros_like(ctx))
 
     neg = rng.choice(d.J, size=(B, n_neg), p=d.neg_p).astype(np.int64)
+    # Harder negatives.  Drawn from the whole catalogue, a decoy is usually separable
+    # by lambda_j + theta_i.alpha_j alone, so the softmax rarely has to ask "does this
+    # item fit THIS basket" -- which may be why no interaction parameterisation moved
+    # the per-pair co-occurrence rank correlation off zero (NESTED_MODEL.md 8.6f).
+    # Replacing a fraction with items from the TRUE item's own category removes
+    # popularity and broad taste as discriminators and leaves the basket context as
+    # the signal that can separate them.
+    frac = getattr(model, "neg_in_cat", 0.0)
+    if frac > 0:
+        kk = max(1, int(round(n_neg * frac)))
+        cpos = d.item_cat_np[item]
+        nv = d.cat_nvalid_np[cpos]
+        pick = (rng.random((B, kk)) * nv[:, None]).astype(np.int64)
+        neg[:, :kk] = d.cat_items_np[cpos[:, None], pick]
     cand = np.concatenate([item[:, None], neg], axis=1)
     M = cand.shape[1]
     day_r = np.repeat(day[:, None], M, 1)
@@ -654,7 +725,9 @@ def main(a):
                         use_context=not a.no_context, ctx_agg=a.ctx_agg,
                         learn_ctx_scale=a.learn_ctx_scale,
                         use_cat_context=a.cat_context,
-                        use_cat_pair=a.cat_pair).to(dev)
+                        use_cat_pair=a.cat_pair, untie_rho=a.untie_rho,
+                        prefix_context=a.prefix_context,
+                        neg_in_cat=a.neg_in_cat).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"context={not a.no_context} store={not a.no_store} "
@@ -706,7 +779,8 @@ def main(a):
                 + a.w_incidence * L.get("incidence", 0.0)
                 + a.w_breadth * L.get("breadth", 0.0)
                 + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price()
-                   + a.l2_cat_pair * model.l2_cat_pair())
+                   + a.l2_cat_pair * model.l2_cat_pair()
+                   + a.l2_rho * model.l2_rho())
                 / bt["cand"].shape[0])
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
 
@@ -791,6 +865,22 @@ if __name__ == "__main__":
                    help="pool the basket context by mean (divides by n-1) or by sum. "
                         "sum makes E(S) one pairwise energy over all basket sizes and "
                         "stops a strong pair being diluted by 1/(n-1)")
+    p.add_argument("--neg-in-cat", type=float, default=0.0,
+                   help="fraction of negatives drawn from the TRUE item's own "
+                        "category, so popularity and taste cannot separate them and "
+                        "only the basket context can. NOTE: this changes the negative "
+                        "distribution, so item log-likelihood is no longer comparable "
+                        "across settings; use 31_benchmark.py, which fixes its own")
+    p.add_argument("--untie-rho", action="store_true",
+                   help="SHOPPER's asymmetric interaction rho_j . alpha_k instead of "
+                        "the tied alpha_j . alpha_k, so complements and substitutes "
+                        "are representable")
+    p.add_argument("--l2-rho", type=float, default=1e-2,
+                   help="L2 on rho, separated from the representation block")
+    p.add_argument("--prefix-context", action="store_true",
+                   help="context is the mean over a random PREFIX of the basket "
+                        "(SHOPPER eq. 6, one permutation sample) rather than "
+                        "leave-one-out over all of it; matches sequential generation")
     p.add_argument("--cat-pair", action="store_true",
                    help="learn the full C x C matrix of category-pair log-odds in the "
                         "incidence head; 17,578 free parameters, no embedding, so it "

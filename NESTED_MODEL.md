@@ -1201,6 +1201,62 @@ gets the *amount* of clustering closer to real and none gets the *pattern* right
 which pairs cluster is still not learned. That is the honest remaining gap, and none of
 the three mechanisms above touches it.
 
+### 8.6f SHOPPER's asymmetric interaction, and why it did not help
+
+§8.6e concluded that the per-pair failure was a *geometry* problem: $\alpha^{\top}\alpha$
+is symmetric and large exactly when two items are alike, so complementarity —
+two items co-purchased *because* they differ — is not representable. SHOPPER
+(Ruiz, Athey & Blei 2020, eq. 4) is built on exactly the mechanism that diagnosis
+calls for:
+
+$$
+\Psi(c, y) = \psi_{tc} + \rho_c^{\top}\Bigl(\tfrac{1}{i-1}\sum_j \alpha_{y_j}\Bigr)
+$$
+
+with $\rho$ **untied** from $\alpha$. The paper is explicit: the factorisation is
+deliberately asymmetric, so "even though two items might be different in their latent
+attributes (e.g. taco shells and beans), they still may be co-purchased because they are
+complements", and "when the expression is negative, the items are **substitutes**".
+
+Two variants were fitted on top of `nested_both`: `--untie-rho` alone, and with
+`--prefix-context`, which follows SHOPPER's sequential likelihood (eq. 6) by drawing one
+random permutation per basket so each row sees only the items *before* it — one unbiased
+sample from the permutation sum, and a context that matches sequential generation
+exactly, removing the need for Gibbs.
+
+| variant | item log-lik | inc NLL | $\kappa$ | lift | Spearman of lift | same-sub | price |
+|---|---|---|---|---|---|---|---|
+| `nested` (current) | -1.9927 | 0.1104 | 0.663 | 43% | **-0.003** | 57% | 82% |
+| **`nested_both`** | -1.9970 | 0.1012 | 0.815 | 46% | **-0.003** | 92% | 87% |
+| `--untie-rho` | -2.0550 | 0.1011 | 0.780 | 47% | **-0.005** | 62% | 85% |
+| `--untie-rho --prefix-context` | -2.0645 | 0.1045 | 0.816 | 47% | **+0.010** | 57% | 88% |
+
+**Neither moved the number they were built for.** The per-pair rank correlation goes
+$-0.003 \to -0.005 \to +0.010$. That is zero in all three cases. Both cost item
+ranking — 0.058 and 0.072 nats, 18× and 22× the seed spread — and both lose the same-sub
+co-purchase gain (92% back to 62% and 57%), which is the predictable consequence: with
+$\rho$ carrying the interaction, $\alpha$ no longer has to encode co-purchase structure
+at all.
+
+The freedom was used, not ignored: $\cos(\rho_j, \alpha_j) = +0.31$, so $\rho$
+found a substantially different direction from $\alpha$. It simply did not find real
+complements.
+
+**This refutes the §8.6e diagnosis.** The geometry was never the binding constraint. The
+mechanism that explanation demanded is representable in this codebase, was fitted, and
+bought nothing.
+
+**The remaining hypothesis is the training signal, not the model.** Negatives are drawn
+unigram$^{0.75}$ from the whole catalogue, so a decoy is almost always separable by
+$\lambda_j + \theta_i^{\top}\alpha_j$ before the interaction term is consulted. The
+softmax is asked "is this item plausible at all", never "does this item fit *this*
+basket". No parameterisation can learn pairwise structure from a loss that does not
+require it. `--neg-in-cat` tests this by drawing a fraction of negatives from the true
+item's own category, where popularity and broad taste cannot separate them and the
+basket context is the only signal that can. Note this changes the negative distribution,
+so item log-likelihood stops being comparable across settings; §8.1c's benchmark, which
+fixes its own candidate sets, remains the comparable measure.
+
 ### 8.7 Criterion 3 — household state
 
 Removing the state basis costs **0.076 nats**, the largest genuine gain of any

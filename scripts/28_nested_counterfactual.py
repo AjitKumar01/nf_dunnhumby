@@ -65,7 +65,9 @@ def load(label, d, dev):
                        ctx_agg=cfg.get("ctx_agg", "mean"),
                        learn_ctx_scale=cfg.get("learn_ctx_scale", False),
                        use_cat_context=cfg.get("cat_context", False),
-                       use_cat_pair=cfg.get("cat_pair", False)).to(dev)
+                       use_cat_pair=cfg.get("cat_pair", False),
+                       untie_rho=cfg.get("untie_rho", False),
+                       prefix_context=cfg.get("prefix_context", False)).to(dev)
     m.load_state_dict(torch.load(os.path.join(OUT, f"{label}_nested.pt"),
                                  map_location=dev))
     m.eval()
@@ -271,6 +273,28 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             "trips": int(len(bsel))}
 
 
+def _cat_cache(m, d, dev, cats, user, day, store):
+    """Per-category (stocked items, state, price deviation) for one trip, built once.
+
+    Both the sequential sampler and the Gibbs sweep need utilities for a single
+    category at a time; recomputing all C per draw is 188x the work.
+    """
+    out = {}
+    for c in cats:
+        jj = d.cat_items[c][d.cat_mask[c] > 0]
+        if m.use_store:
+            jj = jj[d.carried[jj, store]]
+        n = len(jj)
+        if n == 0:
+            out[c] = (jj, None, None, 0)
+            continue
+        stc = torch.as_tensor(
+            d.state(np.full(n, user), jj.cpu().numpy(), np.full(n, day)), device=dev)
+        dpc = d.log_price_dev[jj, torch.full((n,), day, device=dev, dtype=torch.long)]
+        out[c] = (jj, stc, dpc, n)
+    return out
+
+
 @torch.no_grad()
 def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                      with_units=False, trips=None, cat_sweeps=2):
@@ -377,34 +401,52 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
         k = torch.minimum(k, (msk > 0).float().sum(1)).long()
 
         slots = []                                   # (category, item_id)
-        for c in torch.nonzero(k > 0).flatten().tolist():
-            pi = torch.softmax(u[c], 0) * (msk[c] > 0).float()
-            if float(pi.sum()) <= 0:
-                continue
-            pick = torch.multinomial(pi / pi.sum(), int(k[c]), replacement=False,
-                                     generator=g)
-            slots += [(c, int(blk[c, q])) for q in pick.tolist()]
+        if getattr(m, "prefix_context", False):
+            # SHOPPER's generative process: items are placed one at a time and each
+            # sees the mean of alpha over the items already placed.  This is exactly
+            # the context the model was TRAINED on under --prefix-context, so
+            # training and generation agree with no Gibbs and no compatibility
+            # assumption.  Slot order is randomised because the data has none.
+            todo = [c for c in torch.nonzero(k > 0).flatten().tolist()
+                    for _ in range(int(k[c]))]
+            perm = torch.randperm(len(todo), generator=g).tolist()
+            # Cache each needed category's items, state and price ONCE.  Calling
+            # cat_utilities per slot recomputes all C categories for one draw, which
+            # is 188x the work and does not finish on the full test set.
+            cache = _cat_cache(m, d, dev, sorted(set(todo)), user, day, store)
+            run = torch.zeros(m.K, device=dev)
+            for si, ti in enumerate(perm):
+                c = todo[ti]
+                jj, stc, dpc, nnj = cache[c]
+                if not nnj:
+                    continue
+                ctx = run / si if si else torch.zeros(m.K, device=dev)
+                uc = m.item_utility(
+                    torch.full((1,), user, device=dev, dtype=torch.long),
+                    jj.unsqueeze(0), ctx.unsqueeze(0), dpc.unsqueeze(0),
+                    stc.unsqueeze(0),
+                    torch.full((1,), week, device=dev, dtype=torch.long),
+                    torch.full((1,), store, device=dev, dtype=torch.long))[0]
+                q = int(torch.multinomial(torch.softmax(uc, 0), 1, generator=g))
+                j = int(jj[q])
+                slots.append((c, j))
+                run = run + A[j]
+        else:
+            for c in torch.nonzero(k > 0).flatten().tolist():
+                pi = torch.softmax(u[c], 0) * (msk[c] > 0).float()
+                if float(pi.sum()) <= 0:
+                    continue
+                pick = torch.multinomial(pi / pi.sum(), int(k[c]), replacement=False,
+                                         generator=g)
+                slots += [(c, int(blk[c, q])) for q in pick.tolist()]
 
         # ---- pass 2: Gibbs sweeps with the context recomputed from the draft
         #
         # Only the category being resampled is recomputed.  Recomputing all C per slot
         # is ~42k utility evaluations and as many state lookups for one draw, which is
         # 188x the work for no extra information: every other category is frozen.
-        if use_ctx and len(slots) > 1:
-            cats_used = sorted({c for c, _ in slots})
-            cache = {c: (d.cat_items[c][d.cat_mask[c] > 0],) for c in cats_used}
-            for c in cats_used:
-                jj = cache[c][0]
-                if m.use_store:
-                    jj = jj[d.carried[jj, store]]
-                nnj = len(jj)
-                if nnj == 0:
-                    cache[c] = (jj, None, None, None)
-                    continue
-                stc = d.state(np.full(nnj, user), jj.cpu().numpy(), np.full(nnj, day))
-                dpc = d.log_price_dev[jj, torch.full((nnj,), day, device=dev,
-                                                     dtype=torch.long)]
-                cache[c] = (jj, torch.as_tensor(stc, device=dev), dpc, nnj)
+        if use_ctx and len(slots) > 1 and not getattr(m, "prefix_context", False):
+            cache = _cat_cache(m, d, dev, sorted({c for c, _ in slots}), user, day, store)
             tot = A[[j for _, j in slots]].sum(0)
             n_slots = len(slots)
             for _ in range(sweeps):

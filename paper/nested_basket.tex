@@ -1,0 +1,862 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{array}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\title{A Nested Basket Model for the dunnhumby Complete Journey Data\\
+\large What the data says, what the model does about it, and what still fails}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+We build a model of grocery baskets that can answer price counterfactuals and generate
+synthetic shopping data. The document is organised around one discipline: every design
+choice is justified by a measurement on the data, and every claim about the model is a
+number from a held-out test set. We first describe what the data actually contains
+(Section~\ref{sec:eda}), then the model (Section~\ref{sec:model}), then a explicit map
+from each data finding to the model component that answers it
+(Section~\ref{sec:mapping}), then experiments (Section~\ref{sec:exp}). Section~\ref{sec:fail}
+lists what the model still gets wrong. The headline results: the model beats the
+strongest simple baseline by $+0.342$ nats, its price coefficient survives a
+structural placebo (retaining 0.0\%), and synthetic baskets it generates carry
+87\% of the real price elasticity. The main remaining failure is that generated
+baskets contain roughly the right \emph{amount} of co-purchase structure but put it on
+the wrong \emph{pairs}.
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{The problem}
+
+A retailer wants to know: if I cut the price of one product, what happens? Not just to
+that product, but to the whole basket. Do people buy more of it, switch to it from a
+competitor, or start buying the category at all when they otherwise would not? And can
+we answer this for one household, so that coupons can be targeted?
+
+Answering this needs a model of the whole basket. Three quantities matter and they are
+different from each other:
+
+\begin{itemize}
+\item \textbf{Incidence.} Does this household buy from this category on this trip?
+\item \textbf{Allocation.} Given that it does, which product does it pick?
+\item \textbf{Quantity.} How many units, and how many different products from the category?
+\end{itemize}
+
+A model that only answers ``which product'' cannot distinguish a price cut that grows a
+category from one that merely moves share within it. That distinction is the retailer's
+actual question.
+
+%======================================================================
+\section{Data}
+\label{sec:data}
+
+The dunnhumby ``Complete Journey'' data: two years of transactions from a grocery chain.
+After filtering, the working dataset is:
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+quantity & value \\
+\midrule
+households $N$              & 2,066 \\
+items $J$                   & 5,455 \\
+categories $C$              & 188 \\
+sub-commodities $S$         & 758 \\
+stores                      & 115 \\
+days $D$                    & 712 \\
+(basket, item) rows         & 1,566,063 \\
+baskets                     & 199,345 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The only item filter is at least 100 purchase lines, which is statistical support
+for that item's own parameters. Households need 20--300 trips. Nothing is
+dropped to protect a modelling assumption.
+
+\paragraph{Splits are by calendar week, not at random.}
+Train is week $<83$, validation 83--90, test $\ge91$. A model whose
+point is to answer ``what happens next week'' must be scored on later weeks. A random
+split would let it see each household's future.
+
+\paragraph{Prices are deviations, not levels.}
+For item $j$ on day $t$ we use
+\begin{equation}
+\Delta\log p_{jt} \;=\; \log p_{jt} \;-\; \frac{1}{D}\sum_{t'=1}^{D}\log p_{jt'},
+\end{equation}
+so an item's price \emph{level} is absorbed by its own intercept and what identifies the
+response is that item moving against its own normal price. Where a store-level price was
+observed we add the store deviation on top; otherwise it falls back to the chain price.
+
+%======================================================================
+\section{What the data says}
+\label{sec:eda}
+
+This section reports measurements taken \emph{before} any model, using nothing but
+counts and least squares. Each subsection ends with the design consequence.
+
+\subsection{Demand responds to price}
+
+Build a panel with one row per (item, week). Let $b_{jw}$ be the number of purchase
+lines and $T_w$ the number of baskets chain-wide that week. Define
+\begin{equation}
+y_{jw} \;=\; \log\frac{b_{jw}+0.5}{T_w},
+\qquad
+x_{jw} \;=\; \text{mean } \log p_{jw} .
+\end{equation}
+The $0.5$ keeps zero-purchase weeks in the panel. The elasticity is an ordinary least
+squares slope after removing each item's own mean from both sides --- a
+\emph{within-item} regression, so the comparison is an item against itself over time
+rather than expensive items against cheap ones:
+\begin{equation}
+\hat\varepsilon
+\;=\;
+\frac{\sum_{j,w}\bigl(x_{jw}-\bar x_j\bigr)\bigl(y_{jw}-\bar y_j\bigr)}
+     {\sum_{j,w}\bigl(x_{jw}-\bar x_j\bigr)^2}
+\qquad\text{over 556,410 item-weeks.}
+\label{eq:within}
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+left-hand side & elasticity & what it measures \\
+\midrule
+log buyers per trip   & $-0.792$  & whether a household buys the item at all \\
+log units per trip    & $-0.945$  & total units moved \\
+log units per buyer   & $-0.235$  & how much a buyer takes, given that they buy \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A 10\% price cut raises total units by about 9.5\%. Of that, $-0.235/-0.945 = 0.25$
+comes from existing buyers taking \emph{more}, and the rest from more
+households buying at all.
+
+\textbf{Consequence.} A model that treats purchase as binary discards a quarter of the
+price response. Quantity needs its own component.
+
+\subsection{A price cut moves three separate margins}
+
+The units bought from a category factor exactly:
+\begin{equation}
+\underbrace{\frac{\text{units}}{\text{basket}}}_{\text{total}}
+=
+\underbrace{\frac{\text{visits}}{\text{baskets}}}_{\text{incidence}}
+\times
+\underbrace{\frac{\text{lines}}{\text{visit}}}_{\text{breadth}}
+\times
+\underbrace{\frac{\text{units}}{\text{line}}}_{\text{depth}} .
+\label{eq:decomp}
+\end{equation}
+Taking logs, the three elasticities must add to the total. Estimating each with
+Eq.~\ref{eq:within} on a (category, week) panel of 15,309 cells, against the mean
+price of \emph{every} item in the category that week:
+
+\begin{center}
+\begin{tabular}{llr}
+\toprule
+margin & quantity regressed & elasticity \\
+\midrule
+incidence & $\log(\text{visits}/\text{baskets})$ & $-0.675$ \\
+breadth   & $\log(\text{lines}/\text{visit})$    & $-0.092$ \\
+depth     & $\log(\text{units}/\text{line})$     & $-0.158$ \\
+\midrule
+sum       &                                      & $-0.925$ \\
+independent estimate (Eq.~\ref{eq:within}, item panel) & & $-0.945$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The sum matches the independently measured total to 0.021. Two panels, two units of
+analysis, no shared code path. About 73\% of the entire units response is
+households deciding to enter a category at all.
+
+\textbf{Consequence.} Incidence is the dominant margin and must be modelled explicitly.
+
+\subsection{Promotions: an event study}
+
+Find every item-week where the log price fell by at least $0.15$ against the previous
+week. There are 37,132 such events over 4,712 items. Normalise demand by the
+item's own mean so a staple and a niche item can be averaged together:
+\begin{equation}
+\mathrm{norm}_{jw} \;=\; b_{jw}\;/\;\overline{b_j}.
+\end{equation}
+
+Events are not independent: an item is cut about eight times, and 57.7\% of
+consecutive cuts for the same item fall less than seven weeks apart, so their windows
+overlap. We therefore also report \textbf{isolated} events --- no other cut of that item
+within $\pm3$ weeks --- of which there are 20,725.
+
+Neither $1.0$ nor the pre-period is a valid baseline. $\mathrm{norm}$ averages exactly
+$1.0$ over all of an item's weeks \emph{including its own promotions}, and the
+pre-period is selected to be expensive by the event definition. We use a \textbf{quiet
+week}: an item-week more than three weeks from any cut of that item. There are
+368,173, and they run at 0.896 of the item's mean demand at essentially its
+normal price.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+weeks from cut & demand & price (log dev.) & demand $\div$ quiet \\
+\midrule
+$-3$ & 0.925 & $+0.050$ & 1.03 \\
+$-2$ & 0.859 & $+0.098$ & 0.96 \\
+$-1$ & 0.870 & $+0.123$ & 0.97 \\
+$\ \ 0$ & \textbf{2.136} & $-0.194$ & \textbf{2.38} \\
+$+1$ & 1.337 & $-0.139$ & 1.49 \\
+$+2$ & 1.117 & $-0.055$ & 1.25 \\
+$+3$ & 1.065 & $-0.003$ & 1.19 \\
+\midrule
+quiet week & 0.896 & $+0.011$ & 1.00 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Three readings.
+
+\emph{The pre-period does not ramp.} Demand before the cut is within 3\% of the quiet
+level. If retailers timed promotions to demand that was already rising, the spike would
+be partly its own cause. It is not.
+
+\emph{The promotion week is far steeper than elasticity alone.} From $-1$ to $0$ the
+price moves $-0.317$ in logs and demand moves $\log(2.136/0.870)=+0.898$, an implied
+slope of $-2.83$ --- $3.4\times$ the $-0.792$ measured on ordinary week-to-week
+variation. A promoted price arrives with an endcap and a shelf tag that the price
+variable does not carry.
+
+\emph{Most of the tail is the promotion still running.} At $+1$ the price is still
+$0.139$ below normal. By $+3$ the price has returned and demand is 1.19 of quiet.
+No offset dips below quiet, so no stockpiling is visible within three weeks.
+
+\subsection{Households differ, and the difference is measurable}
+
+\paragraph{Taste.} Split each household's purchases in half by date. Count purchases per
+category in each half, giving two vectors in $\mathbb{R}^{188}$, and scale each to unit
+length. Compare with a dot product (a cosine, since both are unit length). Averaging
+over 2,066 households and comparing against \emph{every} cross-household pair:
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+ & cosine \\
+\midrule
+a household's own two halves & \textbf{0.7838} \\
+two different households, all 4,266,290 pairs & 0.4710 \\
+ratio & \textbf{1.66$\times$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A stranger already scores 0.4710 because everyone buys milk and bread; the
+\emph{gap} is what is personal.
+
+\paragraph{Price sensitivity.} For each household, regress $\log(\text{units})$ on
+$\log(\text{price})$ using only (household, item) pairs bought three or more times, after
+subtracting each pair's own means:
+\begin{equation}
+\hat\beta_i \;=\;
+\frac{\sum_{j,t} \tilde x_{ijt}\,\tilde y_{ijt}}{\sum_{j,t}\tilde x_{ijt}^{2}},
+\qquad
+\tilde x_{ijt} = \log p_{jt} - \overline{\log p_{ij}},\quad
+\tilde y_{ijt} = \log u_{ijt} - \overline{\log u_{ij}} .
+\end{equation}
+Across 1,640 households the median is $-0.169$ with p10--p90 of
+$-0.427$--$-0.016$. But the spread alone proves nothing: noisy estimates are
+spread out even when the truth is identical for everyone. Measuring each household twice
+on disjoint halves gives a split-half correlation of only \textbf{$+0.236$} on
+1,374 households.
+
+Why so low: the estimator divides by $\sum \tilde x^2$, the price movement that household
+actually saw. 18.6\% of qualifying rows come from a (household, item) pair whose
+price never moved. Splitting households by how much price movement they had:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+ & spread of slopes (sd) & share positive \\
+\midrule
+little price movement & 0.226 & 11.5\% \\
+much price movement   & 0.129 & 3.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Where prices genuinely moved the estimates are tighter and almost all negative. Much of
+the apparent heterogeneity is bad measurement.
+
+\textbf{Consequence.} Household parameters are justified, but a targeting policy should
+weight by how much is known about each household.
+
+\subsection{Stores are not interchangeable}
+
+15.8\% of store-item-weeks sit more than a cent from the chain price. More
+importantly, the median store ever sold only 63\% of the catalogue.
+
+\textbf{Consequence.} Scoring an item a store never stocked as a \emph{rejected}
+alternative is a specification error --- it was not there to reject.
+
+\subsection{Base rates the model must reproduce}
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+quantity & value \\
+\midrule
+categories per basket, of 188 & 6.12 (3.25\%) \\
+items per basket, of 5,455      & 7.86 \\
+units per basket                & 10.64 \\
+rows buying more than one unit  & 22.3\%, carrying 42.6\% of all units \\
+distinct items per purchased category & 1.284 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%======================================================================
+\section{The model}
+\label{sec:model}
+
+Household $i$, day $t$, week-of-year $w$, store $s$, item $j$, category $c=\mathrm{cat}(j)$.
+
+\subsection{Item utility}
+
+Everything is built on one quantity:
+\begin{equation}
+u_{ijt}
+= \lambda_j
++ \theta_i^{\top}\alpha_j
++ \rho_j^{\top}\bar\alpha_j(S)
+- \bigl(\gamma_i^{\top}\beta_j\bigr)\,\Delta\log p_{jst}
++ \eta_j^{\top}x_{ijt}
++ \mu_j^{\top}\delta_w
++ \zeta_j^{\top}\xi_s .
+\label{eq:util}
+\end{equation}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+term & meaning \\
+\midrule
+$\lambda_j$                    & item popularity \\
+$\theta_i^{\top}\alpha_j$      & household taste $\times$ item attributes \\
+$\rho_j^{\top}\bar\alpha_j(S)$ & interaction with the rest of the basket \\
+$-(\gamma_i^{\top}\beta_j)\Delta\log p_{jst}$ & price, with per-household sensitivity \\
+$\eta_j^{\top}x_{ijt}$         & how long since this household last bought this kind of thing \\
+$\mu_j^{\top}\delta_w$         & seasonality \\
+$\zeta_j^{\top}\xi_s$          & store $\times$ item affinity \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The price coefficient $\gamma_i^{\top}\beta_j$ is a low-rank bilinear form, so every
+household gets its own sensitivity and every item its own loading at $(N+J)K_p$
+parameters instead of $NJ$. It enters with a minus sign, so a \emph{positive} value means
+demand falls when price rises.
+
+\subsection{The memory term}
+
+Let $\tau_{ijt}$ be the days since household $i$ last bought item $j$'s
+\emph{sub-commodity}. Then
+\begin{equation}
+x_{ijt} =
+\begin{bmatrix}
+\mathbb{1}\{\text{no previous purchase}\}\\
+e^{-\tau/7}\\
+e^{-\tau/g_{\mathrm{sub}(j)}}\\
+\log(1+\tau)/\log 100
+\end{bmatrix},
+\end{equation}
+with the last three set to zero when there is no previous purchase. $g_{\mathrm{sub}}$ is
+that sub-commodity's median repurchase gap, so ``a long time'' means the right number of
+days for milk and for shampoo.
+
+\subsection{The basket interaction}
+
+For item $j$ in a basket $S$ of $n$ items,
+\begin{equation}
+\bar\alpha_j(S) \;=\; \frac{1}{n-1}\Bigl(\sum_{k\in S}\alpha_k-\alpha_j\Bigr),
+\qquad \bar\alpha_j(S):=\mathbf{0} \text{ when } n=1,
+\end{equation}
+so the interaction contributes $\frac{1}{n-1}\sum_{k\neq j}\rho_j^{\top}\alpha_k$: the
+average affinity between $j$ and each other item in the basket.
+
+\paragraph{Tied versus untied.} With $\rho_j=\alpha_j$ the interaction is
+$\alpha_j^{\top}\alpha_k$: symmetric, and large exactly when two items are \emph{alike}.
+That forces co-purchase structure into $\alpha$, which is what makes the embedding
+recover product categories (Section~\ref{sec:embed}), but it cannot express
+complementarity --- two items that go together \emph{because} they are different. Untying
+$\rho$ from $\alpha$ follows SHOPPER \cite{shopper}: the effect of $k$ on $j$ is
+$\rho_j^{\top}\alpha_k$, which need not equal $\rho_k^{\top}\alpha_j$ and may be negative,
+so complements and substitutes both become representable. Section~\ref{sec:cooc} measures
+the trade.
+
+\paragraph{The joint this implies (tied case).} Write $b_j$ for everything in
+Eq.~\ref{eq:util} not involving other basket items, and define for baskets of size $n$
+\begin{equation}
+E(S) \;=\; \sum_{j\in S} b_j \;+\; \frac{1}{n-1}\sum_{\{j,k\}\subset S}\alpha_j^{\top}\alpha_k .
+\end{equation}
+Swapping item $j$ for item $m$ keeps $|S|=n$, so $1/(n-1)$ is identical on both sides and
+\begin{equation}
+E(S')-E(S)
+= (b_m-b_j) + \alpha_m^{\top}\bar\alpha_j(S) - \alpha_j^{\top}\bar\alpha_j(S)
+= u_m-u_j ,
+\end{equation}
+which is exactly what the choice softmax scores. So the item head's conditionals are those
+of $P(S)\propto e^{E(S)}$ at fixed basket size, and Gibbs sampling --- resample one slot
+at a time from the current draft --- converges to it. This identity is verified
+numerically in Section~\ref{sec:exp}.
+
+\subsection{The nest}
+
+Category volume and item allocation factor as a Poisson--multinomial:
+\begin{align}
+Q_{ict} &\sim \mathrm{Poisson}\bigl(\exp(a_{ic}+\kappa_c\, IV_{ict})\bigr), \\
+(q_{ijt})_{j\in c}\mid Q_{ict} &\sim \mathrm{Multinomial}\bigl(Q_{ict},\ \mathrm{softmax}_j\, u_{ijt}\bigr), \\
+IV_{ict} &= \log\!\!\sum_{j\in c,\ \text{stocked at }s}\!\! e^{u_{ijt}} .
+\end{align}
+This factorises into independent per-item counts
+\begin{equation}
+q_{ijt}\sim\mathrm{Poisson}\bigl(\exp(a_{ic}+(\kappa_c-1)IV_{ict}+u_{ijt})\bigr),
+\end{equation}
+which shows what $\kappa_c$ means: at $\kappa=1$ the inclusive value cancels and category
+volume is whatever the items sum to; at $\kappa=0$ category volume is fixed and a price
+cut only moves share; at $\kappa>1$ the category expands more than proportionally.
+$\kappa_c=\mathrm{softplus}(\kappa^{\text{raw}}_c)$ is initialised at exactly $1.0$ so the
+data must move it in either direction.
+
+\subsection{Four heads}
+
+\paragraph{Item.} A softmax over the true item plus 20 sampled negatives, with
+unavailable items masked out:
+\begin{equation}
+\mathcal{L}_{\text{item}}
+= -\frac{1}{|R|}\sum_{r\in R}\log
+\frac{e^{u_{j_r}}}{\sum_{m\in C_r}\mathbb{1}\{\text{avail}_m\}e^{u_m}} .
+\end{equation}
+
+\paragraph{Quantity.} With its own price coefficient, so the two margins need not share
+one elasticity:
+\begin{equation}
+z_{ijt}=q^0_j-(\gamma^{q\top}_i\beta^q_j)\Delta\log p_{jst}+\eta^{q\top}_j x_{ijt},
+\qquad \text{units}-1\sim\mathrm{Poisson}(e^{z}).
+\end{equation}
+
+\paragraph{Incidence.} A Bernoulli per (trip, category):
+\begin{equation}
+\mathrm{logit}_{ict}
+= c^0_c + c^{u\top}_i c^c_c + c^{s\top}_c x_{ict}
++ \kappa_c\bigl(IV_{ict}-\overline{IV}_c\bigr)
++ \underbrace{\textstyle\sum_{c'\in B,\,c'\neq c} W_{cc'}}_{\text{optional, Section~\ref{sec:cooc}}} .
+\end{equation}
+
+\paragraph{Breadth.} Given the category is bought, how many \emph{distinct} items:
+\begin{equation}
+z^b_{ic}=b^0_c+b^u_i-b^p_c\,\overline{\Delta\log p}_{ct},
+\qquad (\text{distinct items})-1\sim\mathrm{Poisson}(e^{z^b}).
+\end{equation}
+This head is necessary rather than decorative. Deriving a count from $P(\text{buy})$ alone
+assumes $Q\sim\mathrm{Poisson}(\lambda)$ with $1-e^{-\lambda}=p$, giving
+$\mathbb{E}[Q\mid Q>0]=\lambda/p$, which is between $1.01$ and $1.12$ for realistic
+incidence rates --- against a real 1.284.
+
+\subsection{Objective}
+
+\begin{equation}
+\mathcal{L}=\mathcal{L}_{\text{item}}
++w_q\mathcal{L}_{\text{qty}}+w_c\mathcal{L}_{\text{inc}}+w_b\mathcal{L}_{\text{brd}}
++\frac{1}{B}\Bigl(\ell_2\lVert\Theta_{\text{repr}}\rVert^2+\ell^p_2\lVert\Theta_{\text{price}}\rVert^2\Bigr).
+\end{equation}
+The two penalties are separate on purpose: shrinking the price block at the
+representation block's rate biases the elasticity toward zero, and the elasticity is the
+quantity being measured.
+
+%======================================================================
+\section{From measurement to model}
+\label{sec:mapping}
+
+Each row is a finding from Section~\ref{sec:eda} and the component that answers it.
+
+\begin{center}
+\begin{tabular}{p{0.42\textwidth}p{0.5\textwidth}}
+\toprule
+what the data showed & what the model does \\
+\midrule
+25\% of the units response is existing buyers taking more &
+quantity head with its \emph{own} price coefficient \\
+73\% of the units response is entering a category at all &
+the nest, with $\kappa_c$ estimated rather than assumed \\
+1.284 distinct items per purchased category; 22.3\% of rows buy more than one unit &
+breadth head; units kept as counts, never binarised \\
+Taste is 1.66$\times$ more self-similar within household than across &
+per-household $\theta_i$, and per-household price sensitivity $\gamma_i$ \\
+Split-half reliability of per-household slopes is only $+0.236$ &
+price sensitivity is low-rank ($\gamma_i^{\top}\beta_j$), not a free per-pair parameter \\
+Median store carries only 63\% of the catalogue &
+availability mask: unstocked items leave the choice set entirely \\
+15.8\% of store-item-weeks differ from the chain price &
+store-level price deviation added where observed \\
+Promotion weeks are $3.4\times$ steeper than ordinary price variation &
+\emph{not} addressed; see Section~\ref{sec:fail} \\
+Demand does not ramp before a cut &
+supports reading the price coefficient causally; tested by placebo \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%======================================================================
+\section{Experiments}
+\label{sec:exp}
+
+All numbers are on the held-out test weeks. The seed spread on item log-likelihood is
+\textbf{0.0032} nats, so any gap larger than about $0.01$ is real.
+
+\subsection{Are the equations what the code computes?}
+
+Fifteen checks compare each printed formula against the fitted model --- exactly where
+the document states an identity, by finite difference where it states a derivative.
+All pass: the utility term by term; the context formula; the $E(S')-E(S)=u_m-u_j$
+identity; the Poisson likelihood; $\kappa=\mathrm{softplus}$; the implied breadth
+$\lambda/p$; the three elasticity derivatives; and that the sampled inclusive value is
+unbiased for the sum but biased low for its logarithm by Jensen's inequality.
+
+\subsection{Ablations}
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+model & item log-lik & top-1 & cost of removing \\
+\midrule
+full model            & $-1.9927$ & 0.378 & --- \\
+seed replicate        & $-1.9895$ & 0.379 & --- \\
+no store              & $-2.1820$ & 0.355 & \textbf{0.189} \\
+no interaction        & $-2.1074$ & 0.347 & \textbf{0.115} \\
+no household state    & $-2.0684$ & 0.360 & \textbf{0.076} \\
+prices scrambled      & $-2.0416$ & 0.362 & 0.049 \\
+availability mask only& $-1.9932$ & 0.375 & 0.001 \\
+no breadth            & $-1.9927$ & 0.378 & 0.000 \\
+no quantity           & $-1.9925$ & 0.378 & 0.000 \\
+no nest               & $-1.9877$ & 0.380 & $-0.005$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Three heads cost nothing on item ranking, and the nest is marginally better
+without.} This is the design working, not failing: the item head ranks items, while the
+nest, quantity and breadth heads answer questions the item head never asks. They share
+only $u_{ijt}$. A head that improved item ranking \emph{because} it also modelled
+incidence would mean the two were entangled. Each head must therefore be scored on its
+own quantity --- the breadth head is worth $0.000$ nats here and yet fixes the only
+generation criterion that was failing.
+
+\paragraph{Stores, split honestly.} Of the $0.189$ nats the store information is worth,
+\textbf{99.7\%} is the availability mask, which merely makes the choice set smaller.
+Modelling stores was still correct, but it is a correctness fix, not an information gain.
+
+\subsection{Against simple alternatives}
+
+Every model scored through \emph{one} scorer on identical candidate sets: same positives,
+same negatives, same availability mask, 51,167 held-out purchases with 20
+negatives each. Baseline weights are tuned on validation.
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+model & log-lik & top-1 \\
+\midrule
+\textbf{nested}                 & \textbf{$-2.0011$} & \textbf{0.371} \\
+nested, no interaction          & $-2.1195$ & 0.342 \\
+household repeat-purchase       & $-2.3428$ & 0.285 \\
+popularity                      & $-2.7375$ & 0.091 \\
+random                          & $-2.7378$ & 0.067 \\
+household $+$ co-occurrence     & $-3.0526$ & 0.182 \\
+item--item co-occurrence        & $-3.0655$ & 0.078 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The strongest baseline is not popularity but \emph{household repeat-purchase}. Grocery is
+repetitive and most of what any model can predict is that people rebuy what they always
+rebuy. The real margin is \textbf{$+0.342$ nats and 8.5 points of top-1}.
+
+Two results cut against the model. Popularity is indistinguishable from random here,
+because negatives are drawn popularity-weighted --- so ``we beat popularity'' is a weaker
+claim than it sounds. And raw item--item co-occurrence scores \emph{below} random: the
+signal exists but counting cannot exploit it against popularity-matched decoys.
+
+\paragraph{What this number is.} It is a \emph{conditional} likelihood: the probability of
+one item given the rest of the basket. Test baskets are from held-out weeks so nothing
+leaks across time, but this is a fill-in-the-blank score, not ``predict the basket''. The
+from-scratch test is Section~\ref{sec:gen}.
+
+\subsection{Is the price response causal?}
+
+We refit the entire model on a price panel scrambled before fitting, including the
+store-level deviations --- leaving those real would leak genuine prices back in.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+model & price coefficient & quantity price coef. & $\kappa$ \\
+\midrule
+fitted            & \textbf{$+0.794$} & $+0.134$ & 0.663 \\
+seed replicate    & $+0.794$ & $+0.109$ & 0.674 \\
+prices scrambled  & \textbf{$-0.000$} & \textbf{$-0.000$} & 0.675 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The placebo retains 0.0\% of the coefficient and costs 0.049 nats of ranking, while
+leaving $\kappa$ and the incidence likelihood untouched. Prices scramble; category
+structure does not.
+
+\subsection{Where a price cut goes}
+
+From the softmax and the Poisson--multinomial, a 1\% cut in item $j$'s price moves demand
+through three channels:
+\begin{align}
+\text{allocation:}\quad & \frac{\partial\log\pi_j}{\partial\log p_j}
+= -\bigl(\gamma_i^{\top}\beta_j\bigr)\bigl(1-\pi_j\bigr), \\
+\text{incidence:}\quad & \kappa_c\frac{\partial IV}{\partial\log p_j}
+= -\kappa_c\bigl(\gamma_i^{\top}\beta_j\bigr)\pi_j, \\
+\text{quantity:}\quad & \frac{\partial\log\mathbb{E}[\text{units}]}{\partial\log p_j}
+= -\bigl(\gamma^{q\top}_i\beta^q_j\bigr)\frac{\lambda}{1+\lambda},\quad \lambda=e^{z}.
+\end{align}
+The first two are exact derivatives of the same softmax, which is why they carry
+$(1-\pi_j)$ and $\pi_j$ and why they combine to
+$-(\gamma^{\top}\beta)[1-\pi_j(1-\kappa_c)]$. Evaluated on 12,724 held-out purchases:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+channel & elasticity & share \\
+\midrule
+allocation (share within category) & $-0.991$ & 83\% \\
+incidence (category expands)       & $-0.058$   & 5\% \\
+quantity (units per buyer)         & $-0.139$   & 12\% \\
+\midrule
+total (mean)                       & $-1.188$   & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Mostly it moves share. The quantity margin is 12\% --- a share a binary-purchase
+model cannot reach at all, and independently corroborated by the model-free
+units-per-buyer elasticity of $-0.235$ in Section~\ref{sec:eda}. Note $\kappa=0.663$
+moved across three incidence samplers before settling, so it is weakly identified and no
+argument here rests on its exact value.
+
+\subsection{Do the embeddings recover product structure?}
+\label{sec:embed}
+
+Sub-commodity labels are held out of the model entirely.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+ & kNN purity & $\times$ chance & AUC \\
+\midrule
+fitted $\alpha$      & 0.2976 & 69.6$\times$ & 0.8222 \\
+no interaction       & 0.2119 & 49.5$\times$ & 0.7267 \\
+random control       & 0.0037 & $0.9\times$ & 0.499 \\
+popularity control   & 0.0038 & $0.9\times$ & 0.510 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The interaction term is the only component besides the availability mask that materially
+moves the embedding. Against the paper's own model on a common 409-item universe, $\alpha$
+reaches $12.1\times$ chance and AUC $0.805$, against $1.0\times$ and $0.379$.
+
+\subsection{Generation: does the distribution match?}
+\label{sec:gen}
+
+Comparing three means is not enough, and comparing $\alpha^{\top}\alpha$ is close to
+circular --- the model is trained to make co-purchased items have large
+$\alpha^{\top}\alpha$, so scoring generated baskets with it grades the exam with the
+answer key. Every check below is \textbf{model-free} (item ids and counts only) and
+\textbf{distributional} (a whole distribution or a per-item vector). Generated trips are
+matched to real ones: same household, day, week and store, so any gap is the model's.
+All 24,768 test baskets.
+
+\paragraph{1. Shape.} Total variation distance is
+$\frac12\sum_x|P_{\text{real}}(x)-P_{\text{gen}}(x)|$; zero is identical.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+ & real (mean) & generated (mean) & TVD \\
+\midrule
+items per basket      & 8.18 & 9.11 & \textbf{0.30} \\
+categories per basket & 6.38 & 6.85 & \textbf{0.30} \\
+units per basket      & 11.06 & 12.16 & \textbf{0.29} \\
+distinct items / category & 1.28 & 1.33 & 0.06 \\
+units per line        & 1.35 & 1.34 & 0.02 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The means agree and the distributions do not. Real baskets are far more skewed. Notably
+the two quantities the heads model \emph{directly} --- breadth and units per line ---
+match closely; the three that emerge from composing them do not.
+
+\paragraph{2. Item marginals.} Purchase rate of each of the 5,455 items, real against
+generated: Spearman $+0.406$, with 0.1\% of items bought in the real data never
+generated. No mode collapse.
+
+\paragraph{3. Co-occurrence lift.} For the commonest items,
+$\mathrm{lift}(j,k)=P(j,k\text{ together})/(P(j)P(k))$. This is the model-free version of
+the interaction term.
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+ & mean lift & Spearman vs real \\
+\midrule
+real                      & 3.48 & --- \\
+generated                 & 1.61  & \textbf{$-0.003$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{4. Held-out labels.} Share of within-basket pairs sharing a sub-commodity:
+real 0.0646, generated 0.0593.
+
+\paragraph{5. Price response recovered from generated data.} Rebuild the item $\times$
+week panel \emph{from generated baskets} and run Eq.~\ref{eq:within} on it. This is the
+property a pricing policy would be learned from.
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+ & elasticity & item-weeks \\
+\midrule
+real held-out & $-0.6480$ & 49,784 \\
+generated     & $-0.5669$  & 56,180 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Generated data carries 87\% of the real price response --- the best of the five
+checks, and the one that matters most for the stated purpose.
+
+\subsection{The co-occurrence investigation}
+\label{sec:cooc}
+
+Generated baskets carried only 43\% of the real co-occurrence lift. Three separate
+causes were found, each by measurement.
+
+\paragraph{Cause 1: the wrong level.} The item-level Gibbs sweep resamples a slot
+\emph{from its own category}, because that is the move $E(S)$ is defined over. Splitting
+generated pairs by whether the sweep can reach them:
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+pair type & pairs & generated / real lift & Spearman vs real \\
+\midrule
+same category (reachable)  & 230   & 49\% & \textbf{$+0.290$} \\
+cross category (not)       & 4,047 & 45\% & \textbf{$-0.094$} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{95\% of item pairs are cross-category}, and which categories entered a basket was
+decided by $C$ independent Bernoulli draws. So most co-purchase structure was set by
+independent coin flips and no item-level work could reach it.
+
+\paragraph{Cause 2: dilution.} $\bar\alpha$ divides by $n-1$, so a partner worth
+$\alpha_j^{\top}\alpha_k=6$ contributes $6/7$ in an eight-item basket. Given a free
+scalar on the interaction, the model sets it to \textbf{5.5} --- close to the average
+$n-1$.
+
+\paragraph{Cause 3: tied embeddings encode similarity, not complementarity.}
+$\alpha^{\top}\alpha$ averages $4.34$ within a sub-commodity and $0.47$ across categories.
+Given a \emph{tied} category-level context the model fitted its scale to $-3.0$: it used
+the term for basket-size competition, because it could not use it for complementarity.
+
+The escape at category level is arithmetic. With $C=188$, a full symmetric pairwise
+matrix $W$ is 17,578 free parameters --- cheaper than blocks already in the model,
+and impossible at item level ($J^2 \approx 30$M). $W$ can place two categories at $+2$
+while their embeddings sit far apart.
+
+\begin{center}
+\begin{tabular}{lrrrrrr}
+\toprule
+variant & item log-lik & inc.\ NLL & $\kappa$ & lift & same-sub & price \\
+\midrule
+base                       & $-1.9927$ & 0.1104 & 0.663 & 43\% & 57\% & 82\% \\
+$+$ learnable scale        & $-1.9966$ & 0.1116 & 0.658 & 44\% & 80\% & 80\% \\
+$+$ category context       & $-1.9970$ & 0.1075 & 0.828 & 44\% & 89\% & 84\% \\
+$+$ pair matrix, weak $L_2$& $-1.9971$ & 0.0987 & 0.597 & 49\% & 121\% & 70\% \\
+$+$ pair matrix, $L_2=0.3$ & $-1.9966$ & 0.1051 & 0.665 & 44\% & 86\% & 81\% \\
+\textbf{both, regularised} & $-1.9970$ & 0.1012 & 0.815 & 46\% & 92\% & 87\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Co-occurrence competes with price.} Unregularised, the pair matrix is the best
+model of category co-occurrence and drags the price response down to 70\%. The
+mechanism is visible in $\kappa$, which falls to 0.597: price reaches incidence
+\emph{only} through $\kappa\cdot IV$, so any mechanism explaining co-occurrence more
+cheaply takes that job and the price signal with it. Penalising the matrix separately ---
+the treatment the price block already gets --- restores both.
+
+\paragraph{Stacking escapes the trade-off.} The tied category context pushes $\kappa$
+\emph{up} while the pair matrix pushes it \emph{down}; together, regularised, the model
+holds $\kappa$ at 0.815 and improves four of the five checks at a cost inside the seed
+spread.
+
+%======================================================================
+\section{What still fails}
+\label{sec:fail}
+
+\begin{enumerate}
+\item \textbf{The pattern of co-occurrence is not learned.} Every variant gets the
+\emph{amount} of clustering closer to real and none gets the per-pair rank correlation
+away from zero. The model knows baskets should be coherent; it does not know that hot
+dogs go with buns specifically.
+
+\item \textbf{Promotion weeks are steeper than the model's price term.} Section~\ref{sec:eda}
+measures an implied slope of $-2.83$ in the cut week against $-0.792$ on ordinary
+variation. A promoted price arrives with display and feature that the price variable does
+not carry, so a single coefficient must average two regimes.
+
+\item \textbf{Basket-size distribution.} Means match to a hundredth; the distributions sit
+0.30 apart in total variation. Real baskets are far more skewed.
+
+\item \textbf{No held-out joint likelihood.} $P(S)$ needs a partition function over all
+size-$n$ baskets, which is intractable to evaluate. The reported item log-likelihood is
+conditional on the rest of the basket and is not a substitute.
+
+\item \textbf{$\kappa$ is weakly identified.} It moved with the incidence sampler rather
+than with the data before settling.
+
+\item \textbf{Per-household price sensitivity is barely measurable for light shoppers.}
+Split-half reliability is $+0.236$ overall and rises with data volume, so targeting
+should weight by how much is known about each household.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{shopper}
+F.~J.~R. Ruiz, S.~Athey and D.~M. Blei.
+\emph{SHOPPER: A Probabilistic Model of Consumer Choice with Substitutes and Complements}.
+Annals of Applied Statistics, 2020. arXiv:1711.03560.
+
+\bibitem{nf}
+S.~Donnelly, F.~J.~R. Ruiz, D.~M. Blei and S.~Athey.
+\emph{Counterfactual Inference for Consumer Choice Across Many Product Categories}.
+Quantitative Marketing and Economics, 2021.
+\end{thebibliography}
+
+\end{document}
