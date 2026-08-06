@@ -12,6 +12,20 @@
     "test_quantity_nll": 0.6665549763102107,
     "test_incidence_nll": 0.11036467709143956
   },
+  "nested_pl": {
+    "placebo_price": "permute",
+    "nest": true,
+    "quantity": true,
+    "store": true,
+    "price_coef": -2.7988624682422085e-39,
+    "quantity_price_coef": -2.399265395558415e-39,
+    "median_kappa": 0.6751742959022522,
+    "test_item": -2.0416026751319105,
+    "test_top1": 0.3624289212634375,
+    "test_quantity_nll": 0.6887091804225116,
+    "test_incidence_nll": 0.11028630157311757,
+    "retained": -3.5229929288229763e-39
+  },
   "decomposition": {
     "n": 12724,
     "allocation": -0.9912288784980774,
@@ -32,7 +46,7 @@
       "p90": 21.0
     },
     "generated_items": {
-      "mean": 8.273958333333333,
+      "mean": 8.140791666666667,
       "median": 7.833333333333333,
       "p90": 23.5
     },
@@ -42,7 +56,7 @@
       "p90": 16.0
     },
     "generated_categories": {
-      "mean": 6.249041666666666,
+      "mean": 6.243166666666666,
       "median": 7.833333333333333,
       "p90": 15.666666666666666
     },
@@ -52,10 +66,43 @@
       "p90": 28.0
     },
     "generated_units": {
-      "mean": 11.113086025784412,
-      "median": 8.691042174895603,
-      "p90": 30.29204988479614
+      "mean": 10.94812867370248,
+      "median": 8.683325201272964,
+      "p90": 29.58844080766042
     },
     "trips": 4000
+  },
+  "co_purchase": {
+    "n_trips_per_seed": 300,
+    "seeds": 5,
+    "sweeps": 4,
+    "real": {
+      "items": 8.37,
+      "items_sd": 0.3359761896325393,
+      "alpha_dot": 0.5580230834857687,
+      "alpha_dot_sd": 0.04426458571155746,
+      "same_sub_pair_share": 0.06560186627916678,
+      "same_sub_pair_share_sd": 0.012112542039588873
+    },
+    "generated_context_zeroed": {
+      "items": 8.172666666666666,
+      "items_sd": 0.43172728017168976,
+      "alpha_dot": 0.13341170467458352,
+      "alpha_dot_sd": 0.00865762127824184,
+      "same_sub_pair_share": 0.02696514545666141,
+      "same_sub_pair_share_sd": 0.004505162370453465,
+      "share_of_real_alpha_dot": 0.23907918618923213,
+      "share_of_real_same_sub_pair_share": 0.4110423526963705
+    },
+    "generated_gibbs": {
+      "items": 8.25,
+      "items_sd": 0.27663855278845156,
+      "alpha_dot": 0.28200550700266563,
+      "alpha_dot_sd": 0.029407800346316817,
+      "same_sub_pair_share": 0.035789499584407414,
+      "same_sub_pair_share_sd": 0.0035565967466939124,
+      "share_of_real_alpha_dot": 0.5053653071860021,
+      "share_of_real_same_sub_pair_share": 0.5455561192742028
+    }
   }
 }

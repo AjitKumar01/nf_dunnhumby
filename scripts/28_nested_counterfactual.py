@@ -267,6 +267,190 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             "trips": int(len(bsel))}
 
 
+@torch.no_grad()
+def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True):
+    """Emit ACTUAL baskets -- item ids, not counts -- and measure co-purchase structure.
+
+    `generate` above accumulates expected counts and never samples an item, which is why
+    the question "where does the basket context come from at generation time" never
+    arose there: there is no basket.  That is fine for checking marginals and useless
+    for anything downstream that needs item ids, an MDP included.
+
+    Here a basket is materialised in two stages.
+
+      pass 1   for every category, draw incidence from the Bernoulli head and breadth
+               from the breadth head, then sample that many DISTINCT items from
+               softmax(u) over the category's stocked items.  The context is zero,
+               because at this point no basket exists.
+
+      pass 2   Gibbs sweeps.  NESTED_MODEL.md 3.3 shows the item head's conditionals are
+               those of P(S) prop exp(E(S)) at fixed basket size, so resampling one slot
+               at a time from its own category, with the context recomputed from the
+               current draft, targets exactly that joint.  Category composition and
+               basket size are held fixed, which is the move E(S) is defined over.
+
+    `use_ctx=False` skips pass 2 and reproduces what the model emits today, so the two
+    can be compared on the same trips.
+    """
+    sp = d.splits["test"]
+    rng = np.random.default_rng(seed)
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    bsel = rng.choice(sp["n_baskets"], size=min(n_trips, sp["n_baskets"]), replace=False)
+    A = m.alpha.detach()
+
+    def cat_utilities(user, day, week, store, ctx):
+        """u and stocked-mask for EVERY category, for one trip.  [C, Mx]."""
+        blk, msk = d.cat_items, d.cat_mask.clone()
+        Mx = blk.shape[1]
+        blk_np = blk.cpu().numpy()
+        rep = lambda v: np.full((d.C, Mx), v)
+        st = d.state(rep(user).ravel(), blk_np.ravel(), rep(day).ravel()).reshape(
+            d.C, Mx, nb.N_STATE_FEATURES)
+        dlogp = d.log_price_dev[blk, torch.as_tensor(rep(day), device=dev)]
+        if m.use_store:
+            msk = msk * d.carried[blk, torch.as_tensor(rep(store), device=dev)].float()
+        u = m.item_utility(torch.full((d.C,), user, device=dev, dtype=torch.long), blk,
+                           ctx.unsqueeze(0).expand(d.C, -1), dlogp,
+                           torch.as_tensor(st, device=dev),
+                           torch.full((d.C,), week, device=dev, dtype=torch.long),
+                           torch.full((d.C,), store, device=dev, dtype=torch.long))
+        return u.masked_fill(msk == 0, -1e9), msk, blk
+
+    out = []
+    for i in bsel:
+        first = sp["starts"][i]
+        user, day = int(sp["user"][first]), int(sp["day"][first])
+        week, store = int(sp["week"][first]), int(sp["store"][first])
+        zero = torch.zeros(m.K, device=dev)
+        u, msk, blk = cat_utilities(user, day, week, store, zero)
+        iv = torch.logsumexp(u, dim=1)
+        ok = msk.sum(1) > 0
+        iv = torch.where(ok, iv - m.iv_ref, torch.zeros_like(iv))
+        cst = d.state(np.full(d.C, user), blk[:, 0].cpu().numpy(), np.full(d.C, day))
+        allc = torch.arange(d.C, device=dev)
+        lin = (m.c0 + (m.c_user[user].unsqueeze(0) * m.c_cat).sum(-1)
+               + (m.c_state * torch.as_tensor(cst, device=dev)).sum(-1)
+               + m.kappa() * iv)
+        bought = (torch.rand(d.C, generator=g) < torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)) & ok
+        pdev = torch.zeros(d.C, device=dev)
+        if getattr(m, "use_breadth", False):
+            zb = (m.b0 + m.b_user[user] - m.b_price * pdev).clamp(-6, 3)
+            k = (1.0 + torch.poisson(torch.exp(zb), generator=g)) * bought.float()
+        else:
+            k = bought.float()
+        k = torch.minimum(k, (msk > 0).float().sum(1)).long()
+
+        slots = []                                   # (category, item_id)
+        for c in torch.nonzero(k > 0).flatten().tolist():
+            pi = torch.softmax(u[c], 0) * (msk[c] > 0).float()
+            if float(pi.sum()) <= 0:
+                continue
+            pick = torch.multinomial(pi / pi.sum(), int(k[c]), replacement=False,
+                                     generator=g)
+            slots += [(c, int(blk[c, q])) for q in pick.tolist()]
+
+        # ---- pass 2: Gibbs sweeps with the context recomputed from the draft
+        #
+        # Only the category being resampled is recomputed.  Recomputing all C per slot
+        # is ~42k utility evaluations and as many state lookups for one draw, which is
+        # 188x the work for no extra information: every other category is frozen.
+        if use_ctx and len(slots) > 1:
+            cats_used = sorted({c for c, _ in slots})
+            cache = {c: (d.cat_items[c][d.cat_mask[c] > 0],) for c in cats_used}
+            for c in cats_used:
+                jj = cache[c][0]
+                if m.use_store:
+                    jj = jj[d.carried[jj, store]]
+                nnj = len(jj)
+                if nnj == 0:
+                    cache[c] = (jj, None, None, None)
+                    continue
+                stc = d.state(np.full(nnj, user), jj.cpu().numpy(), np.full(nnj, day))
+                dpc = d.log_price_dev[jj, torch.full((nnj,), day, device=dev,
+                                                     dtype=torch.long)]
+                cache[c] = (jj, torch.as_tensor(stc, device=dev), dpc, nnj)
+            tot = A[[j for _, j in slots]].sum(0)
+            n_slots = len(slots)
+            for _ in range(sweeps):
+                for si in range(n_slots):
+                    c, cur = slots[si]
+                    jj, stc, dpc, nnj = cache[c]
+                    if not nnj:
+                        continue
+                    ctx = (tot - A[cur]) / (n_slots - 1)
+                    uc = m.item_utility(
+                        torch.full((1,), user, device=dev, dtype=torch.long),
+                        jj.unsqueeze(0), ctx.unsqueeze(0), dpc.unsqueeze(0),
+                        stc.unsqueeze(0),
+                        torch.full((1,), week, device=dev, dtype=torch.long),
+                        torch.full((1,), store, device=dev, dtype=torch.long))[0]
+                    q = int(torch.multinomial(torch.softmax(uc, 0), 1, generator=g))
+                    new_j = int(jj[q])
+                    tot = tot - A[cur] + A[new_j]      # keep the running sum exact
+                    slots[si] = (c, new_j)
+        out.append([j for _, j in slots])
+    return out
+
+
+@torch.no_grad()
+def co_purchase_check(m, d, dev, n_trips=300, seeds=5, sweeps=4):
+    """Do generated baskets carry co-purchase structure, and how much of the real kind?
+
+    Two measures, both computed inside a basket and averaged over its item pairs:
+
+      alpha.alpha    mean dot product between the embeddings of two items in the same
+                     basket.  This is the quantity the interaction term acts on, so it
+                     is the direct read on whether the term reached the output.
+      same-sub       share of within-basket item pairs sharing a SUB_COMMODITY, a label
+                     the model never sees.  A held-out check on the same question.
+
+    Compared across real held-out baskets, generation with the context zeroed (what this
+    script emitted before), and generation with Gibbs sweeps (NESTED_MODEL.md 3.3).
+    """
+    items = pd.read_parquet(os.path.join(IN, "items.parquet")).sort_values("item_id")
+    sub = torch.as_tensor(items.sub_id.to_numpy(), device=dev)
+    A = m.alpha.detach()
+    sp = d.splits["test"]
+
+    def stat(baskets):
+        pr, ss, sz = [], [], []
+        for b in baskets:
+            sz.append(len(b))
+            if len(b) < 2:
+                continue
+            v = A[b]
+            G = v @ v.T
+            n = len(b)
+            pr.append(float((G.sum() - G.diag().sum()) / (n * (n - 1))))
+            s = sub[b]
+            ss.append(float((s.unsqueeze(0) == s.unsqueeze(1)).float().sum() - n)
+                      / (n * (n - 1)))
+        return float(np.mean(sz)), float(np.mean(pr)), float(np.mean(ss))
+
+    def agg(fn):
+        R = np.array([fn(100 + s) for s in range(seeds)])
+        return {"items": R[:, 0].mean(), "items_sd": R[:, 0].std(),
+                "alpha_dot": R[:, 1].mean(), "alpha_dot_sd": R[:, 1].std(),
+                "same_sub_pair_share": R[:, 2].mean(),
+                "same_sub_pair_share_sd": R[:, 2].std()}
+
+    def real_fn(s):
+        bs = np.random.default_rng(s).choice(sp["n_baskets"], size=n_trips, replace=False)
+        return stat([sp["item"][sp["starts"][i]:sp["ends"][i]].tolist() for i in bs])
+
+    out = {"n_trips_per_seed": n_trips, "seeds": seeds, "sweeps": sweeps,
+           "real": agg(real_fn),
+           "generated_context_zeroed": agg(
+               lambda s: stat(generate_baskets(m, d, dev, n_trips, s, use_ctx=False))),
+           "generated_gibbs": agg(
+               lambda s: stat(generate_baskets(m, d, dev, n_trips, s, sweeps=sweeps,
+                                               use_ctx=True)))}
+    for k in ("alpha_dot", "same_sub_pair_share"):
+        for g in ("generated_gibbs", "generated_context_zeroed"):
+            out[g][f"share_of_real_{k}"] = out[g][k] / out["real"][k]
+    return out
+
+
 def main(a):
     os.makedirs(FIG, exist_ok=True)
     dev = torch.device(a.device)
@@ -324,6 +508,23 @@ def main(a):
             rr, gg = gen[f"real_{k}"], gen[f"generated_{k}"]
             log(f"   {k:11s} real mean {rr['mean']:6.2f} median {rr['median']:5.1f}   "
                 f"generated mean {gg['mean']:6.2f} median {gg['median']:5.1f}")
+
+        log("")
+        log("4. do generated baskets carry co-purchase structure?")
+        cp = co_purchase_check(m, d, dev, sweeps=a.gibbs_sweeps)
+        res["co_purchase"] = cp
+        for k, lab in [("real", "real held-out"),
+                       ("generated_context_zeroed", "generated, context zeroed"),
+                       ("generated_gibbs", f"generated, {a.gibbs_sweeps} Gibbs sweeps")]:
+            v = cp[k]
+            log(f"   {lab:32s} items {v['items']:5.2f}  "
+                f"alpha.alpha {v['alpha_dot']:+.4f}+-{v['alpha_dot_sd']:.4f}  "
+                f"same-sub pairs {v['same_sub_pair_share']:.4f}"
+                f"+-{v['same_sub_pair_share_sd']:.4f}")
+        gz, gg = cp["generated_context_zeroed"], cp["generated_gibbs"]
+        log(f"   -> Gibbs lifts alpha.alpha {gz['alpha_dot']:.4f} -> "
+            f"{gg['alpha_dot']:.4f} ({gg['alpha_dot'] / gz['alpha_dot']:.2f}x), "
+            f"reaching {gg['share_of_real_alpha_dot']:.0%} of the real level")
 
     with open(os.path.join(OUT, "nested_counterfactual.json"), "w") as f:
         json.dump(res, f, indent=2, default=float)
@@ -389,5 +590,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--labels", nargs="+", default=["nested", "nested_pl"])
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--gibbs-sweeps", type=int, default=4,
+                   help="Gibbs sweeps over a draft basket when generating actual "
+                        "item ids; 0 reproduces the zeroed context")
     p.add_argument("--device", default="cpu")
     main(p.parse_args())

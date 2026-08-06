@@ -626,7 +626,7 @@ Nothing is quadratic in items or households.
 | 4 | **nested theory retained** | `κ` estimated per category | ⚠️ `κ` = 0.663, stable across seeds, but weakly identified (§8.4) |
 | 5 | **store information used** | prices, affinity, availability | ⚠️ used, but 99.7% of the gain is the availability mask, not information (§8.2) |
 | 6 | **embeddings recover sub-commodity structure** | `24_embedding_eval.py`, against random / popularity / nf | ⚠️ 69.6× chance, AUC 0.8222 — beats every control decisively, but marginally **below** the flat model's 70.6× and 0.8233 (§8.5) |
-| 7 | **data generation** | roll incidence → breadth → items → units forward | ✅ items -1.0%, units -1.4%, categories -3.8% against held-out (§8.6) |
+| 7 | **data generation** | roll incidence → breadth → items → units forward; item ids via `generate_baskets` | ✅ items -1.0%, units -1.4%, categories -3.8% against held-out (§8.6) |
 | 8 | **what-if on price** | structural placebo + elasticity decomposition | ✅ placebo retains 0.0% of the coefficient; decomposition sums exactly (§8.3) |
 | 9 | **beats a simpler alternative** | one scorer, identical candidate sets, tuned baselines | ✅ +0.342 nats and 8.5 points of top-1 over household repeat-purchase (§8.1c) |
 
@@ -924,9 +924,61 @@ Four of the five generator versions were wrong, each for a different reason:
 
 Only the last was a model gap; the rest were sampling.
 
-**What generation does not carry.** The context is zeroed throughout (§8.1b), so
-generated baskets reproduce the *marginals* — how many items, categories and units —
-with no co-purchase structure inside them.
+### 8.6b Generation with actual item ids, and the context problem
+
+**`generate` never samples an item.** It accumulates expected counts — `n_items`,
+`n_c`, `n_u` at `28:253-255` — and uses the within-category choice probabilities only to
+weight expected units. So §8.6 measures basket *shape*, and the question "where does the
+basket context come from at generation time" never arose there, because no basket
+exists. Nothing downstream that needs item ids, an MDP included, can consume that output.
+
+`generate_baskets` (`28:158`) emits actual items, in two passes.
+
+**Pass 1 — build a draft.** For every one of the 188 categories: incidence from the
+Bernoulli head, breadth from the breadth head, then that many **distinct** items drawn
+without replacement from `softmax(u)` over the category's stocked items. The context is
+zero here, and correctly so — no basket exists yet.
+
+**Pass 2 — Gibbs sweeps.** §3.3 shows the item head's conditionals are those of
+$P(S)\propto e^{E(S)}$ at fixed basket size, so resampling one slot at a time from its
+own category, with
+
+$$
+\bar\alpha_{j}(S) = \frac{1}{n-1}\Bigl(\sum_{k\in S}\alpha_k - \alpha_{j}\Bigr)
+$$
+
+recomputed from the current draft, targets exactly that joint. Basket size and category
+composition are held fixed, which is the move $E(S)$ is defined over. The running sum
+$\sum_k \alpha_k$ is updated incrementally, and only the resampled category's utilities
+are recomputed — touching all 188 per slot is 188× the work for no extra information.
+
+**Does it work?** Two measures, both averaged over the item pairs inside a basket:
+the mean $\alpha_j^{\top}\alpha_k$, which is the quantity the interaction term acts on;
+and the share of pairs sharing a `SUB_COMMODITY`, a label the model never sees. Five
+seeds of 300 trips each:
+
+| | items | mean $\alpha_j^{\top}\alpha_k$ | same-sub pair share |
+|---|---|---|---|
+| **real held-out** | 8.37 | **+0.5580** ± 0.0443 | **0.0656** ± 0.0121 |
+| generated, context zeroed | 8.17 | +0.1334 ± 0.0087 | 0.0270 ± 0.0045 |
+| generated, 4 Gibbs sweeps | 8.25 | **+0.2820** ± 0.0294 | **0.0358** ± 0.0036 |
+
+Gibbs **2.1×** the within-basket embedding alignment, from 0.1334 to 0.2820 —
+far outside the ±0.0294 seed spread — and lifts the same-sub pair share from
+0.0270 to 0.0358. Mean basket size is unchanged (8.17 → 8.25 against a real
+8.37), so the structure is added without distorting the marginals §8.6 reports. The
+chain settles after roughly one sweep; more sweeps do not climb further.
+
+**It closes about half the gap, not all of it.** Generated baskets reach
+**51%** of the real $\alpha^{\top}\alpha$ level and **55%** of the real same-sub share.
+Real baskets are more internally coherent than anything this model generates. The
+interaction term is worth 0.115 nats when the basket is *given* (§8.1b); asked to
+produce that structure from nothing, it recovers half of it.
+
+**What generation carries, stated plainly.** With the context zeroed it reproduces
+marginals only. With Gibbs sweeps it also carries roughly half the real co-purchase
+structure. Neither is the full joint: §9 records that there is no held-out joint
+likelihood, because the partition function over size-$n$ baskets is intractable.
 
 ### 8.7 Criterion 3 — household state
 
@@ -947,7 +999,8 @@ the price move on what they repeatedly buy.
 |---|---|---|
 | **Criterion 6 is marginally missed.** Embedding purity 69.6× and AUC 0.8222 against the flat model's 70.6× and 0.8233 | low — beats every control by 70×, and within seed range | open |
 | **The elasticity decomposition excludes the interaction.** Context is zeroed when it is computed, so a price cut that changes what *else* enters the basket is not counted in the -1.188 | medium — the number is a lower bound on the true own-price response | open |
-| **The generator zeroes the interaction term.** Not for want of a joint — §3.3 shows the conditionals match `P(S) ∝ exp(E(S))` at fixed `n`, and `n` is drawn before items, so Gibbs sweeps over a draft basket would converge to it. The sampler makes one pass and never revisits a slot | medium — marginals match, co-purchase structure is absent | open |
+| **`generate` emits counts, not baskets.** It accumulates expected `n_items`/`n_c`/`n_u` (`28:253-255`) and never samples an item, so its output cannot feed anything needing item ids | medium — §8.6 measures shape only | **fixed**: `generate_baskets` emits items |
+| **Generated baskets recover about half the real co-purchase structure.** Gibbs sweeps lift within-basket $\alpha^\top\alpha$ from 0.1334 to 0.2820 against a real 0.5580 (51%) | medium — marginals are right, internal coherence is half | open |
 | **There is no held-out joint likelihood.** (§5.5) `P(S)` needs the partition function over all size-`n` baskets, which is intractable to evaluate exactly. The reported item log-likelihood is conditional on the rest of the basket and is not a substitute | medium — the from-scratch evidence is §8.6 only | open |
 | Store-level prices and affinity contribute +0.0005 nats, although `DATA_EXPLORATION.md` §7.3 shows households use 4 stores and switch on 30% of trips | medium | open |
 | `κ` moved 1.411 → 0.790 → 0.663 across three incidence samplers — with the *sampler*, not the data. Stable across seeds now, but weakly identified | medium | documented, not resolved |
@@ -983,6 +1036,7 @@ the price move on what they repeatedly buy.
 | 13 | **breadth head** — `distinct items − 1 ~ Poisson`, per category | the only *model* gap among these fixes. The incidence head sees 0/1, so deriving a count from `P(buy)` can only ever yield ≈1.0–1.1 items per purchased category against a real 1.284 |
 | 14 | `--no-context` flag added | the tied interaction was hard-wired, so the claim that it is load-bearing rested on the flat model's evidence and had never been tested here |
 | 15 | benchmark scorer gives each model its own basket context | the shared batch builder computed context from a stub with zero `α`, so the nested model was scored with its interaction disabled and lost to its own no-interaction ablation |
+| 17 | **`generate_baskets`: real item ids, plus Gibbs sweeps for the context** | `generate` only ever accumulated counts, so nothing downstream could consume it and the interaction term never reached the output. Gibbs lifts within-basket $\alpha^\top\alpha$ 0.1334 → 0.2820 (2.1×), reaching 51% of the real level, with basket size unchanged |
 | 16 | **this document rewritten against the code** | §5 still described case-control sampling with the `log(π₁/π₀)` offset, three releases after fix 10 replaced it with uniform sampling. The audit that found it is §12 |
 
 ---
