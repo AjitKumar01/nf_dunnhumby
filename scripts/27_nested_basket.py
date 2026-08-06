@@ -200,7 +200,7 @@ class NestedModel(nn.Module):
                  use_breadth=True, use_context=True, ctx_agg="mean",
                  learn_ctx_scale=False, use_cat_context=False,
                  use_cat_pair=False, untie_rho=False, prefix_context=False,
-                 neg_in_cat=0.0):
+                 neg_in_cat=0.0, item_loss="softmax"):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -264,6 +264,7 @@ class NestedModel(nn.Module):
         # leave-one-out full-basket context.
         self.prefix_context = prefix_context
         self.neg_in_cat = neg_in_cat
+        self.item_loss = item_loss
 
         def emb(n, k, sd=0.05):
             return nn.Parameter(torch.randn(n, k, generator=g) * sd)
@@ -644,7 +645,24 @@ def losses(model, bt, ib, iv_center):
     u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                            bt["state"], bt["week"], bt["store"])
     u = u.masked_fill(~bt["avail"], -1e9)
-    out["item"] = -torch.log_softmax(u, dim=1)[:, 0].mean()
+    if getattr(model, "item_loss", "softmax") == "ove":
+        # Titsias' one-vs-each bound, which is what SHOPPER optimises by default
+        # (`-likelihood 1` in shopper-src): log softmax_i >= sum_{i'} log sigmoid(u_i - u_i').
+        #
+        # This is a different LEARNING SIGNAL, not a different model.  In a sampled
+        # softmax the normaliser is shared, so once lambda_j + theta_i.alpha_j
+        # separates the decoys the probability saturates and every negative's gradient
+        # goes to zero together -- the loss stops asking anything of the interaction
+        # term.  One-vs-each makes the true item beat each negative INDIVIDUALLY, and
+        # the gradient on a negative is 1 - sigmoid(u_i - u_i'), which stays large for
+        # any competitor that is not yet clearly beaten.  That is the pressure the
+        # interaction needs and never got.
+        d_ = u[:, :1] - u[:, 1:]
+        ok = bt["avail"][:, 1:]
+        lse = torch.nn.functional.logsigmoid(d_)
+        out["item"] = -(lse * ok).sum(1).div(ok.sum(1).clamp_min(1)).mean()
+    else:
+        out["item"] = -torch.log_softmax(u, dim=1)[:, 0].mean()
 
     if model.use_quantity:
         # units - 1 ~ Poisson(exp(z)), with its own price coefficient so the quantity
@@ -727,7 +745,7 @@ def main(a):
                         use_cat_context=a.cat_context,
                         use_cat_pair=a.cat_pair, untie_rho=a.untie_rho,
                         prefix_context=a.prefix_context,
-                        neg_in_cat=a.neg_in_cat).to(dev)
+                        neg_in_cat=a.neg_in_cat, item_loss=a.item_loss).to(dev)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"context={not a.no_context} store={not a.no_store} "
@@ -865,6 +883,10 @@ if __name__ == "__main__":
                    help="pool the basket context by mean (divides by n-1) or by sum. "
                         "sum makes E(S) one pairwise energy over all basket sizes and "
                         "stops a strong pair being diluted by 1/(n-1)")
+    p.add_argument("--item-loss", default="softmax", choices=["softmax", "ove"],
+                   help="'ove' is Titsias' one-vs-each bound, SHOPPER's default. "
+                        "Evaluation always uses the sampled softmax, so item "
+                        "log-likelihood stays comparable across this flag")
     p.add_argument("--neg-in-cat", type=float, default=0.0,
                    help="fraction of negatives drawn from the TRUE item's own "
                         "category, so popularity and taste cannot separate them and "

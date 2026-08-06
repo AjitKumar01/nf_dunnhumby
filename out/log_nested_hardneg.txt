@@ -3,3 +3,16 @@
 [27] model nested_hardneg: K=64 nest=True quantity=True context=True store=True avail_only=False -> 905,738 parameters
 [27]   froze IV reference at iteration 500: mean 2.000, 188 of 188 categories observed
 [27]   it  1000  item -2.1373  top1 0.343  qNLL 0.6843  cNLL 0.1126  kappa 0.788  breadth 1.459  price +0.192 *
+[27]   it  2000  item -2.1019  top1 0.357  qNLL 0.6803  cNLL 0.1099  kappa 0.765  breadth 1.374  price +0.442 *
+[27]   it  3000  item -2.1172  top1 0.355  qNLL 0.6377  cNLL 0.1084  kappa 0.750  breadth 1.329  price +0.571 *
+[27]   it  4000  item -2.1013  top1 0.357  qNLL 0.6448  cNLL 0.1088  kappa 0.751  breadth 1.312  price +0.639 *
+[27]   it  5000  item -2.1022  top1 0.362  qNLL 0.6505  cNLL 0.0987  kappa 0.764  breadth 1.293  price +0.682 *
+[27]   it  6000  item -2.0848  top1 0.362  qNLL 0.6594  cNLL 0.1011  kappa 0.775  breadth 1.290  price +0.711 *
+[27]   it  7000  item -2.0711  top1 0.375  qNLL 0.6533  cNLL 0.1029  kappa 0.796  breadth 1.286  price +0.728 *
+[27]   it  8000  item -2.0891  top1 0.365  qNLL 0.6580  cNLL 0.1045  kappa 0.807  breadth 1.285  price +0.734
+[27]   it  9000  item -2.0935  top1 0.364  qNLL 0.6630  cNLL 0.1035  kappa 0.811  breadth 1.282  price +0.738
+[27]   it 10000  item -2.0814  top1 0.368  qNLL 0.6679  cNLL 0.1053  kappa 0.816  breadth 1.281  price +0.742
+[27]   it 11000  item -2.0820  top1 0.370  qNLL 0.6452  cNLL 0.1030  kappa 0.822  breadth 1.281  price +0.743
+[27]   it 12000  item -2.0602  top1 0.372  qNLL 0.6620  cNLL 0.0984  kappa 0.825  breadth 1.280  price +0.744 *
+[27] best at 12000; TEST item -2.1237 top1 0.355 qNLL 0.6687 cNLL 0.1037
+[27] saved nested_hardneg_nested.pt

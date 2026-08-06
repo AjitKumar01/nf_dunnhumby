@@ -1,0 +1,163 @@
+{
+  "n_trips": 24768,
+  "sweeps_tested": [
+    0,
+    4
+  ],
+  "shape": {
+    "items per basket": {
+      "real": {
+        "mean": 8.184068152454781,
+        "median": 5.0,
+        "p90": 20.0
+      },
+      "gibbs0": {
+        "mean": 9.23469799741602,
+        "median": 8.0,
+        "p90": 17.0,
+        "tvd_vs_real": 0.31447392465011337
+      },
+      "gibbs4": {
+        "mean": 9.203932493540051,
+        "median": 8.0,
+        "p90": 17.0,
+        "tvd_vs_real": 0.3133808578051561
+      }
+    },
+    "categories per basket": {
+      "real": {
+        "mean": 6.375080749354005,
+        "median": 4.0,
+        "p90": 15.0
+      },
+      "gibbs0": {
+        "mean": 6.9931363049095605,
+        "median": 6.0,
+        "p90": 12.0,
+        "tvd_vs_real": 0.3285476324858882
+      },
+      "gibbs4": {
+        "mean": 6.967982881136951,
+        "median": 6.0,
+        "p90": 12.0,
+        "tvd_vs_real": 0.32317911139766875
+      }
+    },
+    "units per basket": {
+      "real": {
+        "mean": 11.060198643410853,
+        "median": 6.0,
+        "p90": 27.0
+      },
+      "gibbs0": {
+        "mean": 12.2468507751938,
+        "median": 10.0,
+        "p90": 23.0,
+        "tvd_vs_real": 0.30328119151060795
+      },
+      "gibbs4": {
+        "mean": 12.314760981912144,
+        "median": 10.0,
+        "p90": 23.0,
+        "tvd_vs_real": 0.2988687079963915
+      }
+    },
+    "distinct items / cat": {
+      "real": {
+        "mean": 1.28375913564453,
+        "median": 1.0,
+        "p90": 2.0
+      },
+      "gibbs0": {
+        "mean": 1.320537394778472,
+        "median": 1.0,
+        "p90": 2.0,
+        "tvd_vs_real": 0.05639746879746778
+      },
+      "gibbs4": {
+        "mean": 1.3208890794574204,
+        "median": 1.0,
+        "p90": 2.0,
+        "tvd_vs_real": 0.0582669584516024
+      }
+    },
+    "units per line": {
+      "real": {
+        "mean": 1.3514304179020538,
+        "median": 1.0,
+        "p90": 2.0
+      },
+      "gibbs0": {
+        "mean": 1.326177724341458,
+        "median": 1.0,
+        "p90": 2.0,
+        "tvd_vs_real": 0.016388453151777654
+      },
+      "gibbs4": {
+        "mean": 1.3379890596280974,
+        "median": 1.0,
+        "p90": 2.0,
+        "tvd_vs_real": 0.01953394253438412
+      }
+    }
+  },
+  "item_marginals": {
+    "gibbs0": {
+      "pearson": 0.8028126293058294,
+      "spearman": 0.4690829906469637,
+      "items_compared": 5454,
+      "share_real_items_never_generated": 0.0009540164090822362
+    },
+    "gibbs4": {
+      "pearson": 0.7968594573657402,
+      "spearman": 0.5192338205012645,
+      "items_compared": 5453,
+      "share_real_items_never_generated": 0.0013356229727151307
+    }
+  },
+  "cooccurrence": {
+    "top_items": 500,
+    "gibbs0": {
+      "pairs_compared": 22661,
+      "spearman_of_lift": 0.0032430444582907036,
+      "mean_lift_real": 3.317159799779207,
+      "mean_lift_generated": 1.6245848601282182
+    },
+    "gibbs4": {
+      "pairs_compared": 22548,
+      "spearman_of_lift": 0.08720041661442009,
+      "mean_lift_real": 3.3580529176789793,
+      "mean_lift_generated": 1.8123529443185564
+    }
+  },
+  "held_out_labels": {
+    "real": {
+      "same_sub": 0.06460396282768478,
+      "same_dept": 0.558080598250227
+    },
+    "gibbs0": {
+      "same_sub": 0.024581942691387932,
+      "same_dept": 0.5778574180835155
+    },
+    "gibbs4": {
+      "same_sub": 0.05222428350302825,
+      "same_dept": 0.5741019604688119
+    }
+  },
+  "price_response": {
+    "real": {
+      "elasticity": -0.6479547044114536,
+      "item_weeks": 49784
+    },
+    "gibbs0": {
+      "elasticity": -0.5695067451364247,
+      "item_weeks": 55919,
+      "ratio_to_real": 0.8789298715775444
+    },
+    "gibbs4": {
+      "elasticity": -0.576919914962302,
+      "item_weeks": 54820,
+      "ratio_to_real": 0.8903707481934658
+    }
+  }
+}

@@ -1257,6 +1257,58 @@ basket context is the only signal that can. Note this changes the negative distr
 so item log-likelihood stops being comparable across settings; §8.1c's benchmark, which
 fixes its own candidate sets, remains the comparable measure.
 
+### 8.6g The fix was the negatives, not the model
+
+Eleven variants changed the model: symmetric and asymmetric interactions, tied and
+untied embeddings, mean and sum pooling, a learnable scale, a category-level context, a
+free pairwise matrix over categories, SHOPPER's sequential likelihood, and SHOPPER's
+one-vs-each loss. **Every one left the per-pair co-occurrence rank correlation at
+zero.**
+
+One change to the *negatives* moved it. Negatives are drawn unigram^0.75 from the whole
+catalogue, so a decoy is almost always separable by `λ_j + θ_i·α_j` before the
+interaction term is consulted: the softmax is asked "is this item plausible at all",
+never "does this item fit *this* basket". `--neg-in-cat f` replaces a fraction `f` of
+them with items from the **true item's own category**, where popularity and broad taste
+cannot discriminate and the basket context is the only signal that can. SHOPPER's own
+source has the same option (`-nsFreq >= 2`, "biased to upweight items in the same group
+as the target item").
+
+| in-category fraction | inc NLL | κ | lift | Spearman of lift | z | same-sub | price | item marginals |
+|---|---|---|---|---|---|---|---|---|
+| 0\% (`nested_both`) | 0.1012 | 0.815 | 46% | **-0.003** | -0.4 | 92% | 87% | +0.406 |
+| 25\% | 0.1044 | 0.850 | 50% | **+0.028** | +4.1 | 84% | 88% | +0.472 |
+| **50\%** | 0.1037 | 0.825 | 54% | **+0.087** | +13.1 | 81% | 89% | +0.519 |
+| **75\%** | 0.1068 | 0.781 | 54% | **+0.091** | +14.1 | 88% | 85% | +0.564 |
+| 100\% | 0.1062 | 0.626 | 56% | **+0.081** | +13.4 | 75% | 76% | +0.579 |
+| 50\%, 50 negatives | 0.1043 | 0.827 | 52% | **+0.063** | +9.5 | 81% | 84% | +0.522 |
+
+**It is a dose-response curve, which is what makes it a mechanism rather than a lucky
+setting.** Spearman climbs −0.003 → +0.028 → +0.087 → +0.091 monotonically to 75%, and
+the per-pair *ranking* of co-occurrence finally carries real signal (z = +14.1 on
+~22,000 pairs, against z = −0.4 at 0%). Co-occurrence lift rises 46% → 54%, and item
+marginals improve monotonically all the way to 100% (+0.406 → +0.579), so the model also
+gets item popularity substantially more right.
+
+**Beyond 75% it costs more than it buys.** At 100% every decoy shares the true item's
+category, so the model never learns to reject an implausible item, and κ collapses
+0.815 → 0.626 — the crowding-out signature of §8.6e, since price reaches incidence only
+through `κ·IV`. The generated price response falls to 76%, the worst of the sweep.
+
+**More negatives is not the same as harder negatives.** At the same 50% fraction, going
+from 20 to 50 negatives makes everything worse — Spearman +0.087 → +0.063, lift 54% →
+52%, price 89% → 84%. SHOPPER defaults to 50; on this data 20 harder ones beat 50.
+
+**Recommended setting: 50--75%.** At 50% the price response peaks at 89% (the best of
+any variant in this document) with Spearman +0.087. At 75% the pairwise ranking and item
+marginals are best and same-sub co-purchase recovers to 88%, at a price cost of 4 points.
+Which to prefer depends on whether the generator is being used for pricing policy (50%)
+or for basket composition (75%).
+
+**Note on comparability.** Changing the negative distribution changes what item
+log-likelihood means, so that column is omitted here. Every column shown is comparable:
+the incidence head is unaffected, and all five generator checks use no negatives at all.
+
 ### 8.7 Criterion 3 — household state
 
 Removing the state basis costs **0.076 nats**, the largest genuine gain of any
