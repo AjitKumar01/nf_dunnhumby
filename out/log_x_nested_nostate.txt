@@ -2,7 +2,7 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27] model nested_nostate: K=64 nest=True quantity=True context=True store=True avail_only=False -> 848,572 parameters
 [27]   froze IV reference at iteration 500: mean 2.482, 188 of 188 categories observed
-[27]   it  1000  item -2.0474  top1 0.348  qNLL 0.6851  cNLL 0.1167  kappa 0.772  breadth 1.458  price +0.236 *
+[27]   it  1000  item -2.0474  top1 0.349  qNLL 0.6851  cNLL 0.1167  kappa 0.772  breadth 1.458  price +0.236 *
 [27]   it  2000  item -1.9870  top1 0.373  qNLL 0.6626  cNLL 0.1187  kappa 0.741  breadth 1.363  price +0.491 *
 [27]   it  3000  item -1.9412  top1 0.391  qNLL 0.6641  cNLL 0.1167  kappa 0.693  breadth 1.329  price +0.620 *
 [27]   it  4000  item -1.9553  top1 0.384  qNLL 0.6627  cNLL 0.1150  kappa 0.641  breadth 1.309  price +0.685

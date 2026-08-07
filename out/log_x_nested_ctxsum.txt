@@ -1,0 +1,8 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model nested_ctxsum: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,392 parameters
+[27]   froze IV reference at iteration 500: mean 2.267, 188 of 188 categories observed
+[27]   it  1000  item -2.0619  top1 0.371  qNLL 0.6844  cNLL 0.1176  kappa 0.782  breadth 1.458  price +0.184 *
+[27]   it  2000  item -2.0470  top1 0.377  qNLL 0.6660  cNLL 0.1197  kappa 0.761  breadth 1.363  price +0.418 *
+[27]   it  3000  item -2.0223  top1 0.388  qNLL 0.6632  cNLL 0.1178  kappa 0.723  breadth 1.329  price +0.541 *
+[27]   it  4000  item -2.0422  top1 0.384  qNLL 0.6633  cNLL 0.1163  kappa 0.679  breadth 1.309  price +0.611

@@ -4,5 +4,4 @@
 [27]   froze IV reference at iteration 500: mean 2.321, 188 of 188 categories observed
 [27]   it  1000  item -2.0577  top1 0.346  qNLL 0.6844  cNLL 0.1180  kappa 0.779  breadth 1.458  price +0.241 *
 [27]   it  2000  item -2.0050  top1 0.366  qNLL 0.6660  cNLL 0.1198  kappa 0.743  breadth 1.363  price +0.502 *
-[27]   it  3000  item -1.9719  top1 0.379  qNLL 0.6632  cNLL 0.1172  kappa 0.692  breadth 1.329  price +0.632 *
-[27]   it  4000  item -1.9769  top1 0.375  qNLL 0.6633  cNLL 0.1152  kappa 0.635  breadth 1.309  price +0.701
+[27]   it  3000  item -1.9719  top1 0.378  qNLL 0.6632  cNLL 0.1172  kappa 0.692  breadth 1.329  price +0.632 *
