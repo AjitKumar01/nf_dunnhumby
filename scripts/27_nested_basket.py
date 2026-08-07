@@ -507,7 +507,7 @@ def make_batch(d, model, split, bidx, n_neg, rng, device, clean_neg=True):
         week=torch.as_tensor(week, device=device),
         store=torch.as_tensor(store, device=device),
         units=torch.as_tensor(units, device=device), avail=avail,
-        logq=logq if clean_neg else None)
+        logq=logq)
 
 
 def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
@@ -758,7 +758,7 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
     sp = d.splits[split]
     nb = min(sp["n_baskets"], max_baskets)
     idx = rng.choice(sp["n_baskets"], size=nb, replace=False)
-    s_item = s_q = s_c = s_b = 0.0
+    s_item = s_cor = s_q = s_c = s_b = 0.0
     n_i = n_q = n_c = n_b = hits = 0
     for a in range(0, nb, 256):
         b = idx[a:a + 256]
@@ -772,6 +772,14 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
         lp = torch.log_softmax(u, dim=1)[:, 0]
         s_item += float(lp.sum()); n_i += lp.shape[0]
         hits += int((u.argmax(1) == 0).sum())
+        # The SAME candidate set, but with the proposal divided out.  Without this the
+        # metric's optimal scorer is log p - log q, not log p, so a model that learns the
+        # true choice probability looks WORSE on it -- and selection then picks an
+        # undertrained checkpoint (measured: it chose iteration 1000 of 12000 while top-1,
+        # qNLL, cNLL and bNLL were all still improving).  This corrected number estimates
+        # the full-catalogue log P(j) and is what model selection uses.
+        uc = (u - bt["logq"]).masked_fill(~bt["avail"], -1e9)
+        s_cor += float(torch.log_softmax(uc, dim=1)[:, 0].sum())
         L = losses(model, bt, None, iv_center)
         if "quantity" in L:
             s_q += float(L["quantity"]) * lp.shape[0]; n_q += lp.shape[0]
@@ -784,7 +792,8 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
                     nb_ = int((ib["y"] > 0).sum())
                     s_b += float(Lc["breadth"]) * nb_; n_b += nb_
     return (s_item / max(n_i, 1), hits / max(n_i, 1),
-            s_q / max(n_q, 1), s_c / max(n_c, 1), s_b / max(n_b, 1))
+            s_q / max(n_q, 1), s_c / max(n_c, 1), s_b / max(n_b, 1),
+            s_cor / max(n_i, 1))
 
 
 def main(a):
@@ -865,8 +874,8 @@ def main(a):
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
 
         if it % a.eval_every == 0 or it == a.iters:
-            vi, vacc, vq, vc, vb = evaluate(model, d, "validation", a.n_neg, ev, dev,
-                                            a.iv_center, iv_cap=a.iv_cap)
+            vi, vacc, vq, vc, vb, vcor = evaluate(model, d, "validation", a.n_neg, ev,
+                                                  dev, a.iv_center, iv_cap=a.iv_cap)
             kap = float(model.kappa().detach().median()) if model.use_nest else float("nan")
             brd = float(1.0 + torch.exp(model.b0.detach()).mean()) \
                 if model.use_breadth else float("nan")
@@ -875,34 +884,35 @@ def main(a):
                 if model.use_quantity else float("nan")
             hist.append({"iter": it, "val_item": vi, "val_top1": vacc,
                          "val_quantity_nll": vq, "val_incidence_nll": vc,
-                         "val_breadth_nll": vb,
+                         "val_breadth_nll": vb, "val_item_corrected": vcor,
                          "kappa_median": kap, "price_coef": pc,
                          "quantity_price_coef": qc, "secs": time.time() - t0})
             # breadth is in the selection score now.  It was trained but had no
             # held-out number, so checkpointing was blind to the head that decides how
             # many DIFFERENT products a category contributes -- the one that fixed
             # generated basket size (6.94 -> 8.27 items).
-            score = vi - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
+            score = vcor - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
             star = ""
             if score > best:
                 best, best_it = score, it
                 torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_nested.pt"))
                 star = " *"
-            log(f"  it {it:5d}  item {vi:.4f}  top1 {vacc:.3f}  qNLL {vq:.4f}  "
+            log(f"  it {it:5d}  item {vi:.4f} (cor {vcor:.4f})  top1 {vacc:.3f}  qNLL {vq:.4f}  "
                 f"cNLL {vc:.4f}  bNLL {vb:.4f}  kappa {kap:.3f}  breadth {brd:.3f}  "
                 f"price {pc:+.3f}{star}")
 
     model.load_state_dict(torch.load(os.path.join(OUT, f"{a.label}_nested.pt"),
                                      map_location=dev))
-    ti, tacc, tq, tc, tb = evaluate(model, d, "test", a.n_neg,
+    ti, tacc, tq, tc, tb, tcor = evaluate(model, d, "test", a.n_neg,
                                     np.random.default_rng(999), dev, a.iv_center, 6000,
                                     iv_cap=a.iv_cap)
-    log(f"best at {best_it}; TEST item {ti:.4f} top1 {tacc:.3f} qNLL {tq:.4f} cNLL {tc:.4f}")
+    log(f"best at {best_it}; TEST item {ti:.4f} (cor {tcor:.4f}) top1 {tacc:.3f} "
+        f"qNLL {tq:.4f} cNLL {tc:.4f} bNLL {tb:.4f}")
     with open(os.path.join(OUT, f"{a.label}_nested_history.json"), "w") as f:
         json.dump({"config": vars(a), "history": hist, "n_parameters": n_par,
                    "best_iter": best_it, "test_item": ti, "test_top1": tacc,
                    "test_quantity_nll": tq, "test_incidence_nll": tc,
-                   "test_breadth_nll": tb}, f, indent=2)
+                   "test_breadth_nll": tb, "test_item_corrected": tcor}, f, indent=2)
     log(f"saved {a.label}_nested.pt")
 
 
