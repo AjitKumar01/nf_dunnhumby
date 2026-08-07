@@ -1,0 +1,39 @@
+{
+  "HPF (user x item)": {
+    "loglik": -2.6027872562408447,
+    "top1": 0.16346671451641845,
+    "loglik_high_price": -2.626000165939331,
+    "top1_high_price": 0.15221291866028708
+  },
+  "B-Emb (item-item)": {
+    "loglik": -2.4684243202209473,
+    "top1": 0.23856091871523416,
+    "loglik_high_price": -2.4919774532318115,
+    "top1_high_price": 0.22816985645933013
+  },
+  "nested (nested)": {
+    "loglik": -1.997072458267212,
+    "top1": 0.376009330701597,
+    "loglik_high_price": -1.876421332359314,
+    "top1_high_price": 0.4291267942583732
+  },
+  "nested (nested_both)": {
+    "loglik": -1.990825891494751,
+    "top1": 0.3800765596028471,
+    "loglik_high_price": -1.8704618215560913,
+    "top1_high_price": 0.4297248803827751
+  },
+  "nested (nested_hardneg)": {
+    "loglik": -2.0867421627044678,
+    "top1": 0.35794604940486874,
+    "loglik_high_price": -1.979009985923767,
+    "top1_high_price": 0.4063995215311005
+  },
+  "_meta": {
+    "rows": 33438,
+    "n_neg": 20,
+    "K": 50,
+    "high_price_rows": 3344,
+    "top_frac": 0.1
+  }
+}

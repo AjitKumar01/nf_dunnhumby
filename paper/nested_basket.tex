@@ -80,6 +80,17 @@ the real data (Section~\ref{sec:gen}).
 \item \textbf{Matching means is not matching distributions.} Basket size agrees with
 real data to a hundredth on the mean and sits 0.30 away in total variation.
 
+\item \textbf{The model improves exactly where prices move.} On the decile of held-out
+purchases with the largest price deviation it \emph{gains} +0.121 nats while
+two learned baselines without a price term each lose about $0.02$
+(Section~\ref{sec:strong}).
+
+\item \textbf{It works without a basket, with one caveat.} Scored cold, with no cart
+at all, it reaches $-2.1385$ against
+$-2.5230$ for the best basket-free baseline. But a cart holding exactly one
+item is \emph{worse} than an empty one unless the context is rescaled
+(Section~\ref{sec:deploy}).
+
 \item \textbf{A negative result with a resolution.} Generated baskets initially
 reproduced the right \emph{amount} of co-purchase structure on the wrong \emph{pairs}.
 Eleven changes to the interaction term --- symmetric and asymmetric, tied and untied,
@@ -703,7 +714,8 @@ baskets hold 6.94 items against a real 8.18.
 stores was a correctness fix, not an information gain, and it makes item log-likelihood
 incomparable to models that score unstocked items as rejected alternatives.
 
-\subsection{Against simpler alternatives}
+\subsection{Against heuristic baselines}
+\label{sec:bench}
 
 Every model is scored through one scorer on identical candidate sets --- same positives,
 same negatives, same availability mask --- on 51,167 held-out purchases with
@@ -732,6 +744,118 @@ results cut against the model: popularity is indistinguishable from random, beca
 negatives are drawn popularity-weighted, so ``we beat popularity'' is weaker than it
 sounds; and raw item--item co-occurrence scores \emph{below} random, so the signal exists
 but counting cannot exploit it against popularity-matched decoys.
+
+
+\subsection{Against learned baselines, and where prices move}
+\label{sec:strong}
+
+The comparisons in Section~\ref{sec:bench} are against heuristics. Three are weak by
+construction and the fourth --- raw item--item co-occurrence --- scores \emph{below}
+random, which flatters our model: it is a counting rule standing in for what should be a
+learned item--item model. SHOPPER \cite{shopper} compares against two latent-factor
+models instead, and they are the right competitors. \textbf{HPF} \cite{hpf} factorises
+the household $\times$ item matrix: it has the household half of our model and neither
+interaction nor price. \textbf{B-Emb} \cite{bemb} is a skip-gram with negative sampling
+over within-basket pairs: the interaction half, and neither household nor price. Between
+them they bracket our specification. Both temperatures are tuned on validation.
+
+SHOPPER also runs a second evaluation we had not: scoring only those held-out purchases
+whose price sits furthest from its item's own average. That is where a model claiming to
+answer price counterfactuals has to prove itself, and it is a harder subset than an
+average trip. We report both.
+
+\begin{center}
+\begin{tabular}{lrrrrr}
+\toprule
+& \multicolumn{2}{c}{full test set} & \multicolumn{2}{c}{top 10\% price variation} & \\
+model & log-lik & top-1 & log-lik & top-1 & change \\
+\midrule
+HPF (user $\times$ item) \cite{hpf} & $-2.6028$ & 0.163 & $-2.6260$ & 0.152 & $-0.023$ \\
+B-Emb (item--item) \cite{bemb} & $-2.4684$ & 0.239 & $-2.4920$ & 0.228 & $-0.024$ \\
+\textbf{nested} & $-1.9971$ & 0.376 & $-1.8764$ & 0.429 & $+0.121$ \\
+nested\_both & $-1.9908$ & 0.380 & $-1.8705$ & 0.430 & $+0.120$ \\
+nested\_hardneg & $-2.0867$ & 0.358 & $-1.9790$ & 0.406 & $+0.108$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two things follow, one of which corrects Section~\ref{sec:bench}.
+
+\textbf{B-Emb is the strongest baseline, at $-2.4684$.} It beats household
+repeat-purchase and it beats raw co-occurrence by more than half a nat. The margin our
+model actually earns over a serious competitor is therefore +0.471 nats, not
+the larger figure the co-occurrence comparison implied. Measuring a learned interaction
+against a counting rule was measuring against a straw man.
+
+\textbf{The model improves where prices move and the baselines degrade.} On the top
+price-variation decile the nested model gains +0.121 nats and its top-1 rises from
+0.376 to 0.429, while HPF and B-Emb each lose about $0.02$. Neither baseline has a price
+term, so on the subset where price is doing the work they fall back; ours does not. This
+is stronger evidence than the placebo of Section~\ref{sec:causal}: the placebo shows the
+coefficient dies when prices are destroyed, whereas this shows the model \emph{gaining}
+exactly where the mechanism should bite.
+
+\subsection{Deployment: recommending without a basket}
+\label{sec:deploy}
+
+Every item log-likelihood in this paper is conditional on the rest of the basket. A
+recommender does not have that. At the moment a recommendation is made the cart holds
+$0,1,2,\dots$ items, never all of them but one. So we score the held-out item given a
+random $k$-item prefix of its own basket (\code{scripts/35\_context\_ablation.py}).
+
+\begin{center}
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{5}{c}{items already in the cart} & \\
+model / repair & $k=0$ & $1$ & $2$ & $4$ & $8$ & full \\
+\midrule
+\textbf{nested}, raw & $-2.1385$ & $-2.1832$ & $-2.0823$ & $-2.0299$ & $-2.0068$ & $-1.9971$ \\
+\quad norm-matched & $-2.1385$ & $-2.0930$ & $-2.0703$ & $-2.0463$ & $-2.0261$ & $-1.9971$ \\
+nested\_both, raw & $-2.2483$ & $-3.0861$ & $-2.5009$ & $-2.2084$ & $-2.0641$ & $-1.9908$ \\
+\quad norm-matched & $-2.2483$ & $-2.2786$ & $-2.1860$ & $-2.1086$ & $-2.0387$ & $-1.9908$ \\
+nested\_hardneg, raw & $-2.3096$ & $-2.9013$ & $-2.4586$ & $-2.2481$ & $-2.1363$ & $-2.0867$ \\
+\quad norm-matched & $-2.3096$ & $-2.3105$ & $-2.2390$ & $-2.1836$ & $-2.1248$ & $-2.0867$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{The model is usable without a basket.} At $k=0$ it scores $-2.1385$ against
+$-2.5230$ for tuned household repeat-purchase, which needs no basket at all. Not
+knowing the basket costs 0.141 nats against the full-basket score, so the
+headline number does overstate the deployment setting, by about 7\% of the model's
+margin over popularity. A model \emph{trained} without the context reaches $-2.2483$ at
+$k=0$, so the mismatch penalty from deploying a context-trained model without context is
+only 0.020 nats: one model suffices.
+
+\textbf{One item in the cart is worse than none.} Every model degrades at $k=1$, and
+\code{nested\_both} catastrophically, to $-3.0861$ --- a full nat below cold start. The
+cause is a norm mismatch, not a modelling error. Averaging shrinks a vector, so
+$\lVert\bar\alpha\rVert$ over a full basket is much smaller than over a single item:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+$\lVert\bar\alpha\rVert$ relative to training & $k=1$ & $k=2$ & $k=4$ & $k=8$ \\
+\midrule
+nested & 2.31$\times$ & 1.74$\times$ & 1.36$\times$ & 1.15$\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At $k=1$ the context is 2.31$\times$ the norm training ever produced, and
+\code{nested\_both} multiplies that by its learnable scale of 5.52, which is
+why it fails hardest. \textbf{Rescaling $\bar\alpha$ to the training norm repairs it}
+without retraining: \code{nested\_both} recovers 0.81 nats at $k=1$, and for every
+model the repaired $k=1$ score is better than cold start rather than worse. Simply
+ignoring a small cart also avoids the failure but is strictly weaker, since it discards
+the information a one- or two-item cart carries.
+
+Two caveats. Norm-matching costs a little at large $k$ for the tied model
+($-2.0068$ raw against $-2.0261$ matched at $k=8$), because forcing a fixed
+norm discards the genuine signal that a large cart's context is legitimately smaller; a
+$k$-dependent shrinkage would likely dominate both and we have not tested it. And the
+variants recommended for \emph{generation} are the worst for \emph{recommendation}:
+plain \code{nested} leads at every cart size below 8.
 
 \subsection{Is the price response causal?}
 \label{sec:causal}
@@ -977,6 +1101,10 @@ uncertainty quantification and gains an order of magnitude in fitting time.
 Section~\ref{sec:rho} reports that its asymmetric interaction did not improve generation
 on this dataset, and Section~\ref{sec:negfix} that its group-biased negative sampling did.
 
+Section~\ref{sec:strong} compares against the two latent-factor baselines SHOPPER
+uses --- hierarchical Poisson factorization \cite{hpf} and exponential family embeddings
+\cite{bemb} --- and adopts its evaluation on high price-variation purchases.
+
 The nested factorization of \cite{nf} supplies the nesting coefficient's interpretation
 and the argument that week effects suffice to identify the price effect. Its
 within-category softmax requires at most one item per category per trip, which
@@ -1007,6 +1135,11 @@ size-$n$ baskets is intractable. The reported item log-likelihood is conditional
 not a substitute.
 \item \textbf{$\kappa$ is weakly identified}, having moved with the incidence sampler
 rather than the data before settling.
+\item \textbf{Partial baskets need a correction at serving time.} The interaction
+term is trained on a context averaged over a whole basket, and a one-item cart produces a
+vector 2.31 times that norm. Without rescaling, a cart with one item is worse
+than an empty one (Section~\ref{sec:deploy}).
+
 \item \textbf{No uncertainty quantification.} We report point estimates; the seed spread
 bounds run-to-run noise but is not a posterior.
 \end{enumerate}
@@ -1028,6 +1161,12 @@ Annals of Applied Statistics, 2020. arXiv:1711.03560.
 S.~Donnelly, F.~J.~R. Ruiz, D.~M. Blei and S.~Athey.
 \emph{Counterfactual Inference for Consumer Choice Across Many Product Categories}.
 Quantitative Marketing and Economics, 2021.
+\bibitem{hpf}
+P.~Gopalan, J.~M. Hofman and D.~M. Blei. \emph{Scalable Recommendation with Hierarchical
+Poisson Factorization}. UAI, 2015.
+\bibitem{bemb}
+M.~Rudolph, F.~J.~R. Ruiz, S.~Mandt and D.~M. Blei. \emph{Exponential Family Embeddings}.
+NeurIPS, 2016.
 \bibitem{titsias}
 M.~K. Titsias. \emph{One-vs-Each Approximation to Softmax for Large Scale Classification}.
 NeurIPS, 2016.
