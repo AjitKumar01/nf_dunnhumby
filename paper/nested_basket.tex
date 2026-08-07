@@ -142,17 +142,94 @@ scored on later weeks; a random split would let it see each household's future.
 Held-out rows whose item or household never appears in training are dropped rather than
 scored as a cold start.
 
-\paragraph{Prices.} We use the log price deviated within item,
+\paragraph{Prices.} The model sees a within-item log price deviation,
 \begin{equation}
-\Delta\log p_{jt} = \log p_{jt} - \tfrac{1}{D}\textstyle\sum_{t'}\log p_{jt'},
-\qquad
 \Delta\log p_{jst} = \Delta\log p_{jt} + d_{jsw},
 \label{eq:price}
 \end{equation}
-where $d_{jsw}$ is a store-level deviation, zero wherever that store-week was not
-observed. Deviating within item means the item's price \emph{level} is absorbed by its
-own intercept, so what identifies the price response is an item moving against its own
-normal price rather than expensive items differing from cheap ones.
+built in six steps set out in Section~\ref{sec:pricebuild}. Deviating within item means
+the item's price \emph{level} is absorbed by its own intercept, so what identifies the
+price response is an item moving against its own normal price rather than expensive items
+differing from cheap ones.
+
+\subsection{Notation}
+\label{sec:notation}
+
+\begin{center}
+\begin{tabular}{ll@{\ }ll}
+\toprule
+symbol & meaning & symbol & meaning \\
+\midrule
+$i$ & household, $1..N$ & $N$ & 2,066 households \\
+$j,k,m$ & item, $1..J$ & $J$ & 5,455 items \\
+$c$ & category, $1..C$ & $C$ & 188 categories \\
+$t$ & day, $1..D$ & $D$ & 712 days in the panel \\
+$w$ & week-of-year, $1..52$ & $s$ & store, $1..115$ \\
+$S$ & the set of items in a basket & $n$ & $|S|$, basket size \\
+$B$ & the set of categories bought on a trip & $n_c$ & items of category $c$ the store carries \\
+$R$ & purchase rows in a training batch & $C_r$ & candidate set for row $r$ \\
+$\mathrm{sub}(j)$ & item $j$'s sub-commodity, of 758 & $\tau_{ijt}$ & days since $i$ last bought $\mathrm{sub}(j)$ \\
+$\pi_j$ & within-category choice probability & $\lambda$ & a Poisson rate \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{How the price series is built}
+\label{sec:pricebuild}
+
+The price entering Eq.~\ref{eq:price} is the end of a chain, and each step is a choice.
+
+\paragraph{Step 1: which price.} A dunnhumby transaction line records
+four fields we need: \code{SALES\_VALUE} (what the retailer
+banked), \code{QUANTITY}, \code{COUPON\_MATCH\_DISC} (the retailer's match of a
+manufacturer coupon), and \code{RETAIL\_DISC} (the loyalty-card discount). Three different
+prices can be reconstructed and they answer different questions. We use the
+\textbf{loyalty price}, what a card holder faces at the shelf:
+\begin{equation}
+\mathrm{price}_{\ell} = \frac{\texttt{SALES\_VALUE} - \texttt{COUPON\_MATCH\_DISC}}{\texttt{QUANTITY}} .
+\end{equation}
+Subtracting the coupon match removes the part of the receipt the manufacturer refunded,
+which is not a price the shopper responded to. We do \emph{not} use the paid price
+(which adds \code{COUPON\_DISC} back), because two shoppers at the same shelf with
+different coupons would then face different ``prices'' for the same item on the same day,
+and the model has one price per (item, day).
+
+\paragraph{Step 2: one number per item-day.} $\mathrm{price}_{jt}$ is the \emph{median}
+loyalty price over all purchase lines of item $j$ on day $t$. A median rather than a mean
+because a single mis-keyed quantity produces a wild per-unit value.
+
+\paragraph{Step 3: fill the gaps.} Only 24.7\% of the $J\times D$ item-day grid is
+directly observed. Missing days are filled by carrying the last observed price forward,
+then the first observed price backward for days before an item's first sale. This assumes
+a posted price persists until it is next seen to change, which is what a shelf tag does.
+
+\paragraph{Step 4: log and deviate.}
+\begin{equation}
+\log p_{jt} = \log\max(\mathrm{price}_{jt},\,10^{-3}),
+\qquad
+\Delta\log p_{jt} = \log p_{jt} - \frac{1}{D}\sum_{t'=1}^{D}\log p_{jt'},
+\end{equation}
+where the mean runs over \textbf{all $D=712$ days of the panel}, filled days included,
+so it is the item's average posted price over the two years rather than an average over
+the days it happened to sell.
+
+\paragraph{Step 5: the store deviation.} For each (item, store, week) actually observed,
+\begin{equation}
+d_{jsw} = \log \tilde p_{jsw} - \log \tilde p_{jw},
+\end{equation}
+where $\tilde p_{jsw}$ is the median loyalty price of item $j$ at store $s$ in week $w$
+and $\tilde p_{jw}$ the median over the whole chain that week, kept only where
+$|d_{jsw}|>10^{-6}$. There are 244,880 such cells, 0.53\% of the
+(item-week $\times$ store) grid, so the overwhelming majority of lookups return
+$d_{jsw}=0$ and fall back to the chain price. That is deliberate: imputing a store price
+from nothing would invent variation the data does not contain.
+
+\paragraph{Step 6: availability.} $\mathrm{carried}[j,s]$ is true if store $s$ sold item
+$j$ \emph{at any point} in the two years. The threshold is one sale, not three: an item a
+store ever sold was by definition available there, and a threshold of three marked
+genuine purchases as unavailable, which set the inclusive value to $-10^9$ for categories
+a household demonstrably bought from. The mask covers 57.2\% of the item $\times$ store
+grid. dunnhumby has no stock-out feed, so this is a proxy and remains one.
 
 %======================================================================
 \section{What the data says}
@@ -415,6 +492,12 @@ Q_{ict}&\sim\mathrm{Poisson}\bigl(\exp(a_{ic}+\kappa_c IV_{ict})\bigr), &
 IV_{ict}&=\log\!\!\sum_{j\in c,\ \mathrm{carried}[j,s]}\!\! e^{u_{ijt}},\\
 (q_{ijt})_{j\in c}\mid Q_{ict}&\sim\mathrm{Multinomial}\bigl(Q_{ict},\ \mathrm{softmax}_j u_{ijt}\bigr).
 \end{align}
+Here $a_{ic}$ is the category's own log-rate for that household --- the intercept, taste
+and state terms of Eq.~\ref{eq:inc} below --- and $IV_{ict}$ is the \emph{inclusive
+value}, the log-sum-exp of the utilities of the items in category $c$ that the trip's
+store carries. It summarises how attractive the category is as a whole once its items and
+their prices are known.
+
 Poisson--multinomial factorises into independent counts
 $q_{ijt}\sim\mathrm{Poisson}(\exp(a_{ic}+(\kappa_c-1)IV_{ict}+u_{ijt}))$, which makes the
 reading of $\kappa$ explicit: at $\kappa=1$ the inclusive value cancels and category
@@ -446,7 +529,10 @@ z_{ijt}=q^0_j-(\gamma^{q\top}_i\beta^q_j)\Delta\log p_{jst}+\eta^{q\top}_j x_{ij
 +w_{\text{ctx}}\,c^{c\top}_c\bar c(B)+\sum_{c'\in B\setminus c}W_{cc'} .
 \label{eq:inc}
 \end{equation}
-The last two terms are optional and are the subject of Section~\ref{sec:cooc}:
+$x_{ict}$ is the same recency basis as the item term, evaluated for the category (using
+its first stocked item as the sub-commodity reference), and $\overline{IV}_c$ is a frozen
+per-category constant defined in Section~\ref{sec:iv}. The last two terms are optional and
+are the subject of Section~\ref{sec:cooc}:
 $\bar c(B)$ is a leave-one-out mean over the other categories in the basket, and $W$ is a
 free symmetric $C\times C$ matrix of category-pair log-odds.
 
@@ -513,8 +599,8 @@ SHOPPER's \code{-nsFreq} $\ge 2$ option.
 
 $IV_{ict}$ is a log-sum-exp over a category's stocked items. Categories are padded to the
 largest (225 items) although the median has 15, so a dense evaluation spends
-most of its work on padding. We instead sample $m$ items uniformly with replacement and
-rescale:
+most of its work on padding. Write $n_c$ for the number of items of category $c$ the trip's store carries. We sample
+$m=32$ of them uniformly with replacement and rescale:
 \begin{equation}
 \widehat{IV}=\log\Bigl(\sum_{s=1}^{m}e^{u_{j_s}}\Bigr)+\log\frac{n_c}{m}.
 \end{equation}
@@ -888,8 +974,9 @@ From the softmax and the Poisson--multinomial,
 \frac{\partial\log\pi_j}{\partial\log p_j}&=-(\gamma_i^{\top}\beta_j)(1-\pi_j),
 &\kappa_c\frac{\partial IV}{\partial\log p_j}&=-\kappa_c(\gamma_i^{\top}\beta_j)\pi_j,\\
 \frac{\partial\log\mathbb E[\text{units}]}{\partial\log p_j}
-&=-(\gamma^{q\top}_i\beta^q_j)\frac{\lambda}{1+\lambda},&\lambda&=e^{z}.
+&=-(\gamma^{q\top}_i\beta^q_j)\frac{\lambda}{1+\lambda},&\lambda&=e^{z_{ijt}},
 \end{align}
+where $\lambda$ is the quantity head's Poisson rate, so $\mathbb E[\text{units}]=1+\lambda$.
 The first two are exact derivatives of the same softmax, which is why they carry
 $(1-\pi_j)$ and $\pi_j$ and why they combine to $-(\gamma^{\top}\beta)[1-\pi_j(1-\kappa_c)]$.
 On 12,724 held-out purchases: allocation $-0.991$ (83\%), incidence $-0.058$
