@@ -83,7 +83,7 @@ def build_batches(d, split, n_batches, n_neg, seed, device, ctx_model,
     out = []
     for _ in range(n_batches):
         bidx = rng.integers(0, sp["n_baskets"], size=batch_baskets)
-        bt = nb.make_batch(d, ctx_model, split, bidx, n_neg, rng, device)
+        bt = nb.make_batch(d, ctx_model, split, bidx, n_neg, rng, device, clean_neg=False)
         out.append((bidx, bt))
     return out
 

@@ -6,29 +6,29 @@
 [34] 
 [34] 1. shape -- whole distributions, compared by total variation distance
 [34]                                    real        gibbs0        gibbs4
-[34]    items per basket          8.18           9.33 (0.33)    9.35 (0.33)
-[34]    categories per basket     6.38           7.05 (0.34)    7.06 (0.34)
-[34]    units per basket         11.06          12.58 (0.32)   12.68 (0.32)
+[34]    items per basket          8.18           7.60 (0.29)    7.53 (0.29)
+[34]    categories per basket     6.38           5.75 (0.30)    5.70 (0.30)
+[34]    units per basket         11.06          10.27 (0.27)   10.25 (0.27)
 [34]    distinct items / cat      1.28           1.32 (0.06)    1.32 (0.06)
-[34]    units per line            1.35           1.35 (0.03)    1.36 (0.03)
+[34]    units per line            1.35           1.35 (0.03)    1.36 (0.04)
 [34]    (mean, and in brackets the total variation distance from the real distribution; 0 = identical, 1 = disjoint)
 [34] 
 [34] 2. per-item purchase rate across the whole catalogue
-[34]    gibbs0     pearson +0.867  spearman +0.556  real items never generated 0.2%
-[34]    gibbs4     pearson +0.862  spearman +0.563  real items never generated 0.2%
+[34]    gibbs0     pearson +0.833  spearman +0.549  real items never generated 0.2%
+[34]    gibbs4     pearson +0.831  spearman +0.565  real items never generated 0.2%
 [34] 
 [34] 3. co-occurrence lift -- the model-free version of the interaction term
-[34]    gibbs0     27,412 pairs   spearman of lift +0.034   mean lift real 3.09 vs generated 1.66
-[34]    gibbs4     27,727 pairs   spearman of lift +0.077   mean lift real 3.11 vs generated 1.74
+[34]    gibbs0     24,065 pairs   spearman of lift -0.006   mean lift real 3.19 vs generated 1.67
+[34]    gibbs4     24,077 pairs   spearman of lift +0.054   mean lift real 3.22 vs generated 1.73
 [34] 
 [34] 4. within-basket pairs sharing a held-out label (model never sees these)
 [34]    real       same sub-commodity 0.0646   same department 0.5581
-[34]    gibbs0     same sub-commodity 0.0278   same department 0.5519
-[34]    gibbs4     same sub-commodity 0.0506   same department 0.5513
+[34]    gibbs0     same sub-commodity 0.0333   same department 0.5614
+[34]    gibbs4     same sub-commodity 0.0637   same department 0.5630
 [34] 
 [34] 5. price response recovered FROM GENERATED DATA
 [34]    real held-out baskets      elasticity -0.6480  on 49,784 item-weeks
-[34]    generated, 0 Gibbs sweeps   elasticity -0.5048  on 54,861 item-weeks   (78% of real)
-[34]    generated, 4 Gibbs sweeps   elasticity -0.4817  on 53,118 item-weeks   (74% of real)
+[34]    generated, 0 Gibbs sweeps   elasticity -0.4559  on 51,522 item-weeks   (70% of real)
+[34]    generated, 4 Gibbs sweeps   elasticity -0.4038  on 49,467 item-weeks   (62% of real)
 [34] 
 [34] wrote out/generator_eval_nested_hn100.json and figures/generator_eval_nested_hn100.png

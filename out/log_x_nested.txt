@@ -6,3 +6,13 @@
 [27]   it  2000  item -1.9106  top1 0.392  qNLL 0.6660  cNLL 0.1194  kappa 0.752  breadth 1.363  price +0.483 *
 [27]   it  3000  item -1.8629  top1 0.409  qNLL 0.6632  cNLL 0.1172  kappa 0.703  breadth 1.329  price +0.612 *
 [27]   it  4000  item -1.8815  top1 0.405  qNLL 0.6633  cNLL 0.1153  kappa 0.649  breadth 1.309  price +0.679
+[27]   it  5000  item -1.8403  top1 0.416  qNLL 0.6764  cNLL 0.1123  kappa 0.602  breadth 1.297  price +0.722 *
+[27]   it  6000  item -1.8578  top1 0.415  qNLL 0.6710  cNLL 0.1095  kappa 0.593  breadth 1.290  price +0.746
+[27]   it  7000  item -1.8366  top1 0.420  qNLL 0.6501  cNLL 0.1100  kappa 0.591  breadth 1.287  price +0.766 *
+[27]   it  8000  item -1.8330  top1 0.423  qNLL 0.6537  cNLL 0.1090  kappa 0.600  breadth 1.284  price +0.775 *
+[27]   it  9000  item -1.8179  top1 0.422  qNLL 0.6613  cNLL 0.1111  kappa 0.603  breadth 1.282  price +0.779 *
+[27]   it 10000  item -1.8444  top1 0.418  qNLL 0.6542  cNLL 0.1134  kappa 0.609  breadth 1.281  price +0.785
+[27]   it 11000  item -1.8432  top1 0.418  qNLL 0.6597  cNLL 0.1125  kappa 0.611  breadth 1.280  price +0.788
+[27]   it 12000  item -1.8458  top1 0.417  qNLL 0.6737  cNLL 0.1127  kappa 0.615  breadth 1.280  price +0.789
+[27] best at 9000; TEST item -1.8861 top1 0.401 qNLL 0.6665 cNLL 0.1110
+[27] saved nested_nested.pt

@@ -394,7 +394,7 @@ class NestedModel(nn.Module):
         return sum((p ** 2).sum() for p in ps if p is not None)
 
 
-def make_batch(d, model, split, bidx, n_neg, rng, device):
+def make_batch(d, model, split, bidx, n_neg, rng, device, clean_neg=True):
     """Positives, store-aware negatives, context, prices, state, units."""
     sp = d.splits[split]
     starts, ends = sp["starts"][bidx], sp["ends"][bidx]
@@ -443,6 +443,7 @@ def make_batch(d, model, split, bidx, n_neg, rng, device):
         ctx = torch.where((n_in > 1).unsqueeze(1), ctx, torch.zeros_like(ctx))
 
     neg = rng.choice(d.J, size=(B, n_neg), p=d.neg_p).astype(np.int64)
+    negq = d.neg_p[neg].astype(np.float64)      # proposal density, per column
     # Harder negatives.  Drawn from the whole catalogue, a decoy is usually separable
     # by lambda_j + theta_i.alpha_j alone, so the softmax rarely has to ask "does this
     # item fit THIS basket" -- which may be why no interaction parameterisation moved
@@ -457,6 +458,9 @@ def make_batch(d, model, split, bidx, n_neg, rng, device):
         nv = d.cat_nvalid_np[cpos]
         pick = (rng.random((B, kk)) * nv[:, None]).astype(np.int64)
         neg[:, :kk] = d.cat_items_np[cpos[:, None], pick]
+        # these columns come from a DIFFERENT proposal -- uniform over the category's
+        # stocked items -- so they carry their own q for the logQ correction
+        negq[:, :kk] = 1.0 / np.maximum(nv[:, None], 1)
     cand = np.concatenate([item[:, None], neg], axis=1)
     M = cand.shape[1]
     day_r = np.repeat(day[:, None], M, 1)
@@ -474,13 +478,36 @@ def make_batch(d, model, split, bidx, n_neg, rng, device):
     avail = torch.ones(B, M, dtype=torch.bool, device=device)
     if model.use_store:
         avail = d.carried[ci, torch.as_tensor(store_r, device=device)].clone()
-        avail[:, 0] = True
+    # Two kinds of bad negative, both measured on this data:
+    #   1.2%  a "negative" that IS the true item -- the loss can never be achieved
+    #  17.8%  a "negative" that is another item of the SAME basket.  The conditional is
+    #         explicitly given the rest of the basket, so those items are positives; the
+    #         loss was pushing down products that are genuinely in the cart.
+    # Both are masked out of the denominator.
+    key_pos = owner.astype(np.int64) * d.J + item
+    key_neg = owner[:, None].astype(np.int64) * d.J + neg
+    bad = np.isin(key_neg, key_pos)
+    if clean_neg:
+        avail[:, 1:] &= torch.as_tensor(~bad, device=device)
+    avail[:, 0] = True
+
+    # logQ correction.  Negatives are drawn from a proposal q, not from the model, so a
+    # plain softmax over {true} u {sampled} estimates a distribution tilted by q.  Here q
+    # spans 3.5e-06 to 6.3e-03 -- 7.5 nats -- and lambda_j was absorbing it
+    # (corr(lambda_j, log q) = -0.51).  Subtracting log(K q(m)) from each sampled logit
+    # makes sum_m exp(u_m - log(K q_m)) an unbiased estimator of sum_{m != j} exp(u_m),
+    # which is the denominator the softmax is supposed to have.
+    logq = torch.zeros(B, M, device=device)
+    logq[:, 1:] = torch.log(torch.as_tensor(negq, device=device,
+                                            dtype=torch.float32).clamp_min(1e-12)
+                            * float(n_neg))
     return dict(
         user=torch.as_tensor(user, device=device), cand=ci, ctx=ctx, dlogp=dlogp,
         state=torch.as_tensor(st, device=device),
         week=torch.as_tensor(week, device=device),
         store=torch.as_tensor(store, device=device),
-        units=torch.as_tensor(units, device=device), avail=avail)
+        units=torch.as_tensor(units, device=device), avail=avail,
+        logq=logq if clean_neg else None)
 
 
 def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
@@ -512,7 +539,9 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
         for c in rows_i.tolist():
             cnt[c] = cnt.get(c, 0) + 1
         bought_sets.append(sorted(cnt))
-        for c in rng.integers(0, d.C, size=n_cat).tolist():
+        # without replacement: with it, 48% of trips duplicated a category and
+        # double-counted it in the incidence loss
+        for c in rng.choice(d.C, size=min(n_cat, d.C), replace=False).tolist():
             cats.append(c); ys.append(1.0 if c in cnt else 0.0)
             trip.append(ti); off.append(0.0)
             brd.append(float(cnt.get(c, 0)))     # distinct items, 0 when not bought
@@ -666,6 +695,8 @@ def losses(model, bt, ib, iv_center):
     out = {}
     u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                            bt["state"], bt["week"], bt["store"])
+    if bt.get("logq") is not None:
+        u = u - bt["logq"]
     u = u.masked_fill(~bt["avail"], -1e9)
     if getattr(model, "item_loss", "softmax") == "ove":
         # Titsias' one-vs-each bound, which is what SHOPPER optimises by default
@@ -727,11 +758,14 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
     sp = d.splits[split]
     nb = min(sp["n_baskets"], max_baskets)
     idx = rng.choice(sp["n_baskets"], size=nb, replace=False)
-    s_item = s_q = s_c = 0.0
-    n_i = n_q = n_c = hits = 0
+    s_item = s_q = s_c = s_b = 0.0
+    n_i = n_q = n_c = n_b = hits = 0
     for a in range(0, nb, 256):
         b = idx[a:a + 256]
-        bt = make_batch(d, model, split, b, n_neg, rng, device)
+        # clean_neg=False on purpose: evaluation keeps the ORIGINAL 21-way choice set
+        # and no logQ reweighting, because every baseline is scored on that same set.
+        # Both fixes change what the model LEARNS, not how it is measured.
+        bt = make_batch(d, model, split, b, n_neg, rng, device, clean_neg=False)
         u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                                bt["state"], bt["week"], bt["store"])
         u = u.masked_fill(~bt["avail"], -1e9)
@@ -746,8 +780,11 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
             if ib is not None:
                 Lc = losses(model, bt, ib, iv_center)
                 s_c += float(Lc["incidence"]) * ib["y"].shape[0]; n_c += ib["y"].shape[0]
+                if "breadth" in Lc:
+                    nb_ = int((ib["y"] > 0).sum())
+                    s_b += float(Lc["breadth"]) * nb_; n_b += nb_
     return (s_item / max(n_i, 1), hits / max(n_i, 1),
-            s_q / max(n_q, 1), s_c / max(n_c, 1))
+            s_q / max(n_q, 1), s_c / max(n_c, 1), s_b / max(n_b, 1))
 
 
 def main(a):
@@ -818,15 +855,18 @@ def main(a):
         loss = (L["item"] + a.w_quantity * L.get("quantity", 0.0)
                 + a.w_incidence * L.get("incidence", 0.0)
                 + a.w_breadth * L.get("breadth", 0.0)
+                # divided by a FIXED constant, not bt["cand"].shape[0]: the row count
+                # varies 1157-1797 between batches, which made the effective weight
+                # decay fluctuate by 1.55x within a single run.
                 + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price()
                    + a.l2_cat_pair * model.l2_cat_pair()
                    + a.l2_rho * model.l2_rho())
-                / bt["cand"].shape[0])
+                / a.l2_denom)
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
 
         if it % a.eval_every == 0 or it == a.iters:
-            vi, vacc, vq, vc = evaluate(model, d, "validation", a.n_neg, ev, dev,
-                                        a.iv_center, iv_cap=a.iv_cap)
+            vi, vacc, vq, vc, vb = evaluate(model, d, "validation", a.n_neg, ev, dev,
+                                            a.iv_center, iv_cap=a.iv_cap)
             kap = float(model.kappa().detach().median()) if model.use_nest else float("nan")
             brd = float(1.0 + torch.exp(model.b0.detach()).mean()) \
                 if model.use_breadth else float("nan")
@@ -835,28 +875,34 @@ def main(a):
                 if model.use_quantity else float("nan")
             hist.append({"iter": it, "val_item": vi, "val_top1": vacc,
                          "val_quantity_nll": vq, "val_incidence_nll": vc,
+                         "val_breadth_nll": vb,
                          "kappa_median": kap, "price_coef": pc,
                          "quantity_price_coef": qc, "secs": time.time() - t0})
-            score = vi - a.w_quantity * vq - a.w_incidence * vc
+            # breadth is in the selection score now.  It was trained but had no
+            # held-out number, so checkpointing was blind to the head that decides how
+            # many DIFFERENT products a category contributes -- the one that fixed
+            # generated basket size (6.94 -> 8.27 items).
+            score = vi - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
             star = ""
             if score > best:
                 best, best_it = score, it
                 torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_nested.pt"))
                 star = " *"
             log(f"  it {it:5d}  item {vi:.4f}  top1 {vacc:.3f}  qNLL {vq:.4f}  "
-                f"cNLL {vc:.4f}  kappa {kap:.3f}  breadth {brd:.3f}  "
+                f"cNLL {vc:.4f}  bNLL {vb:.4f}  kappa {kap:.3f}  breadth {brd:.3f}  "
                 f"price {pc:+.3f}{star}")
 
     model.load_state_dict(torch.load(os.path.join(OUT, f"{a.label}_nested.pt"),
                                      map_location=dev))
-    ti, tacc, tq, tc = evaluate(model, d, "test", a.n_neg,
-                                np.random.default_rng(999), dev, a.iv_center, 6000,
-                                iv_cap=a.iv_cap)
+    ti, tacc, tq, tc, tb = evaluate(model, d, "test", a.n_neg,
+                                    np.random.default_rng(999), dev, a.iv_center, 6000,
+                                    iv_cap=a.iv_cap)
     log(f"best at {best_it}; TEST item {ti:.4f} top1 {tacc:.3f} qNLL {tq:.4f} cNLL {tc:.4f}")
     with open(os.path.join(OUT, f"{a.label}_nested_history.json"), "w") as f:
         json.dump({"config": vars(a), "history": hist, "n_parameters": n_par,
                    "best_iter": best_it, "test_item": ti, "test_top1": tacc,
-                   "test_quantity_nll": tq, "test_incidence_nll": tc}, f, indent=2)
+                   "test_quantity_nll": tq, "test_incidence_nll": tc,
+                   "test_breadth_nll": tb}, f, indent=2)
     log(f"saved {a.label}_nested.pt")
 
 
@@ -884,6 +930,9 @@ if __name__ == "__main__":
     p.add_argument("--eval-every", type=int, default=1000)
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--l2", type=float, default=1e-2)
+    p.add_argument("--l2-denom", type=float, default=1500.0,
+                   help="fixed divisor for the L2 terms; was the batch row count, "
+                        "which fluctuates 1.55x and made regularisation batch-dependent")
     p.add_argument("--l2-price", type=float, default=1e-4)
     p.add_argument("--l2-cat-pair", type=float, default=1e-2,
                    help="L2 on the category-pair matrix, separated from the "

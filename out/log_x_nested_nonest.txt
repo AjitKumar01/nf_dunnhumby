@@ -12,3 +12,6 @@
 [27]   it  9000  item -1.8164  top1 0.426  qNLL 0.6839  cNLL 0.0000  kappa nan  breadth 2.000  price +0.776 *
 [27]   it 10000  item -1.8157  top1 0.424  qNLL 0.6739  cNLL 0.0000  kappa nan  breadth 2.000  price +0.779 *
 [27]   it 11000  item -1.8587  top1 0.413  qNLL 0.6559  cNLL 0.0000  kappa nan  breadth 2.000  price +0.781
+[27]   it 12000  item -1.8531  top1 0.415  qNLL 0.6767  cNLL 0.0000  kappa nan  breadth 2.000  price +0.781
+[27] best at 10000; TEST item -1.8764 top1 0.407 qNLL 0.6675 cNLL 0.0000
+[27] saved nested_nonest_nested.pt

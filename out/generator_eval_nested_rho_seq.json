@@ -12,16 +12,16 @@
         "p90": 20.0
       },
       "gibbs0": {
-        "mean": 8.740713824289406,
-        "median": 8.0,
-        "p90": 17.0,
-        "tvd_vs_real": 0.2919459115322607
+        "mean": 7.534601098191215,
+        "median": 6.0,
+        "p90": 15.0,
+        "tvd_vs_real": 0.27553954462772023
       },
       "gibbs4": {
-        "mean": 8.740713824289406,
-        "median": 8.0,
-        "p90": 17.0,
-        "tvd_vs_real": 0.2919459115322607
+        "mean": 7.534601098191215,
+        "median": 6.0,
+        "p90": 15.0,
+        "tvd_vs_real": 0.27553954462772023
       }
     },
     "categories per basket": {
@@ -31,16 +31,16 @@
         "p90": 15.0
       },
       "gibbs0": {
-        "mean": 6.589228036175711,
-        "median": 6.0,
-        "p90": 12.0,
-        "tvd_vs_real": 0.3050775522355517
+        "mean": 5.696422803617571,
+        "median": 5.0,
+        "p90": 11.0,
+        "tvd_vs_real": 0.293581488893528
       },
       "gibbs4": {
-        "mean": 6.589228036175711,
-        "median": 6.0,
-        "p90": 12.0,
-        "tvd_vs_real": 0.3050775522355517
+        "mean": 5.696422803617571,
+        "median": 5.0,
+        "p90": 11.0,
+        "tvd_vs_real": 0.293581488893528
       }
     },
     "units per basket": {
@@ -50,16 +50,16 @@
         "p90": 27.0
       },
       "gibbs0": {
-        "mean": 11.681605297157622,
-        "median": 10.0,
-        "p90": 23.0,
-        "tvd_vs_real": 0.2807116798806041
+        "mean": 10.027131782945736,
+        "median": 8.0,
+        "p90": 20.0,
+        "tvd_vs_real": 0.26192002203458636
       },
       "gibbs4": {
-        "mean": 11.681605297157622,
-        "median": 10.0,
-        "p90": 23.0,
-        "tvd_vs_real": 0.2807116798806041
+        "mean": 10.027131782945736,
+        "median": 8.0,
+        "p90": 20.0,
+        "tvd_vs_real": 0.26192002203458636
       }
     },
     "distinct items / cat": {
@@ -69,16 +69,16 @@
         "p90": 2.0
       },
       "gibbs0": {
-        "mean": 1.3265156064263919,
+        "mean": 1.32268993330451,
         "median": 1.0,
         "p90": 2.0,
-        "tvd_vs_real": 0.058798285190123194
+        "tvd_vs_real": 0.05500970975707732
       },
       "gibbs4": {
-        "mean": 1.3265156064263919,
+        "mean": 1.32268993330451,
         "median": 1.0,
         "p90": 2.0,
-        "tvd_vs_real": 0.058798285190123194
+        "tvd_vs_real": 0.05500970975707732
       }
     },
     "units per line": {
@@ -88,46 +88,46 @@
         "p90": 2.0
       },
       "gibbs0": {
-        "mean": 1.3364589588433646,
+        "mean": 1.3308112337032532,
         "median": 1.0,
         "p90": 2.0,
-        "tvd_vs_real": 0.018427662912849654
+        "tvd_vs_real": 0.013853371274390512
       },
       "gibbs4": {
-        "mean": 1.3364589588433646,
+        "mean": 1.3308112337032532,
         "median": 1.0,
         "p90": 2.0,
-        "tvd_vs_real": 0.018427662912849654
+        "tvd_vs_real": 0.013853371274390512
       }
     }
   },
   "item_marginals": {
     "gibbs0": {
-      "pearson": 0.5791110890782715,
-      "spearman": 0.4300503209685584,
-      "items_compared": 5452,
-      "share_real_items_never_generated": 0.0009540164090822362
+      "pearson": 0.5813903679759352,
+      "spearman": 0.4343188737150952,
+      "items_compared": 5453,
+      "share_real_items_never_generated": 0.00038160656363289447
     },
     "gibbs4": {
-      "pearson": 0.5791110890782715,
-      "spearman": 0.4300503209685584,
-      "items_compared": 5452,
-      "share_real_items_never_generated": 0.0009540164090822362
+      "pearson": 0.5813903679759352,
+      "spearman": 0.4343188737150952,
+      "items_compared": 5453,
+      "share_real_items_never_generated": 0.00038160656363289447
     }
   },
   "cooccurrence": {
     "top_items": 500,
     "gibbs0": {
-      "pairs_compared": 20144,
-      "spearman_of_lift": 0.009385561043191716,
-      "mean_lift_real": 3.4643544383482876,
-      "mean_lift_generated": 1.627761971127246
+      "pairs_compared": 19368,
+      "spearman_of_lift": -0.022564079758092125,
+      "mean_lift_real": 3.477393466904261,
+      "mean_lift_generated": 1.5527156033936995
     },
     "gibbs4": {
-      "pairs_compared": 20144,
-      "spearman_of_lift": 0.009385561043191716,
-      "mean_lift_real": 3.4643544383482876,
-      "mean_lift_generated": 1.627761971127246
+      "pairs_compared": 19368,
+      "spearman_of_lift": -0.022564079758092125,
+      "mean_lift_real": 3.477393466904261,
+      "mean_lift_generated": 1.5527156033936995
     }
   },
   "held_out_labels": {
@@ -136,12 +136,12 @@
       "same_dept": 0.558080598250227
     },
     "gibbs0": {
-      "same_sub": 0.03659720004807083,
-      "same_dept": 0.582827213597886
+      "same_sub": 0.04180361965263757,
+      "same_dept": 0.5815596585585371
     },
     "gibbs4": {
-      "same_sub": 0.03659720004807083,
-      "same_dept": 0.582827213597886
+      "same_sub": 0.04180361965263757,
+      "same_dept": 0.5815596585585371
     }
   },
   "price_response": {
@@ -150,14 +150,14 @@
       "item_weeks": 49784
     },
     "gibbs0": {
-      "elasticity": -0.5658336727898894,
-      "item_weeks": 55953,
-      "ratio_to_real": 0.8732611538083423
+      "elasticity": -0.5267865629164687,
+      "item_weeks": 54149,
+      "ratio_to_real": 0.8129990558444303
     },
     "gibbs4": {
-      "elasticity": -0.5658336727898894,
-      "item_weeks": 55953,
-      "ratio_to_real": 0.8732611538083423
+      "elasticity": -0.5267865629164687,
+      "item_weeks": 54149,
+      "ratio_to_real": 0.8129990558444303
     }
   }
 }

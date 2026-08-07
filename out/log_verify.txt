@@ -1,26 +1,19 @@
-[14] data: 2084 users, 560 items, 56 categories
-[14] A. analytic identities
-/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/14_verify_model.py:49: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
-Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
-  r["softmax_rows_sum_to_1_max_error"] = float((p.sum(1) - 1).abs().max())
-[14]   softmax_rows_sum_to_1_max_error: 1.192e-07
-[14]   log_prob_matches_softmax_max_error: 2.384e-07
-[14]   kl_closed_form_error: 0.000e+00
-[14]   elbo_gradient_max_abs_error: 7.516e-07
-[14]   elbo_gradient_max_relative_error: 1.817e-05
-[14] B. degenerate cases
-[14]   intercept-only model reproduces empirical within-category shares: corr 0.99385, mean |error| 0.00663
-[14]   homogeneous price coefficient, category 0: scipy MLE 0.79179 vs nf_torch 0.79254  (relative difference 0.09%)
-[14] C. parameter recovery from simulated choices
-[14]   recovery: price coefficient corr 0.406 (slope 0.552, true mean 0.312 vs fitted 0.327); choice probability corr 0.9488
-[14] C2. does recovery scale with sample size?  (a bug would not)
-[14]   recovery: price coefficient corr 0.202 (slope 0.311, true mean 0.312 vs fitted 0.397); choice probability corr 0.8348
-[14]   recovery: price coefficient corr 0.406 (slope 0.552, true mean 0.312 vs fitted 0.327); choice probability corr 0.9488
-[14]   recovery: price coefficient corr 0.506 (slope 0.709, true mean 0.312 vs fitted 0.317); choice probability corr 0.9790
-[14]    n_choices   price-coef corr   slope   choice-prob corr
-[14]       46,432             0.202   0.311   0.835
-[14]      278,592             0.406   0.552   0.949
-[14]    1,392,960             0.506   0.709   0.979
-[14] D. nesting-coefficient recovery
-[14]   nesting coefficient: true 0.700, recovered 0.570
-[14] wrote out/model_verification.json and figures/verification.png
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+  PASS  3.1  u_ijt, term by term                               +0.782413  vs  +0.782413
+  PASS  3.3  ctx_j = (sum_k alpha_k - alpha_j)/(n-1)           +0.000000  vs  +0.000000
+  PASS  3.3  E(S') - E(S) = u_m - u_j                          +0.770795  vs  +0.770795
+  PASS  3.5  L_qty = mean(exp z - k z + logGamma(k+1))         +0.392114  vs  +0.392114
+  PASS  3.4  kappa_c = log(1 + exp(kappa_raw))                 +0.663141  vs  +0.663141
+  PASS  3.5  E[Q|Q>0] = lam/p at p=0.02                        +1.010135  vs  +1.010135
+  PASS  3.5  E[Q|Q>0] = lam/p at p=0.05                        +1.025866  vs  +1.025866
+  PASS  3.5  E[Q|Q>0] = lam/p at p=0.10                        +1.053605  vs  +1.053605
+  PASS  3.5  E[Q|Q>0] = lam/p at p=0.20                        +1.115718  vs  +1.115718
+  PASS  8.4  d log pi_j / d log p_j = -(g.b)(1 - pi_j)         +1.020622  vs  +1.020622
+  PASS  8.4  d IV / d log p_j = -(g.b) pi_j                    +0.080089  vs  +0.080089
+  PASS  8.4  d log E[units]/d log p = -(gq.bq) lam/(1+lam)     -0.017566  vs  -0.017566
+  PASS  8.4  alloc + inc = -(g.b)[1 - pi(1 - kappa)]           +1.083400  vs  +1.083400
+  PASS  5.3  E[(n/m) sum_sampled exp u] = sum_j exp u_j        +1.000131  vs  +1.000000
+  PASS  5.3  E[log IV_hat] <= log of the true sum              +2.198472  <=  +2.202359
+
+all equations verified

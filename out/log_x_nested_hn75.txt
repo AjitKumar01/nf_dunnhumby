@@ -1,0 +1,18 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model nested_hn75: K=64 nest=True quantity=True context=True store=True avail_only=False -> 905,738 parameters
+[27]   froze IV reference at iteration 500: mean 1.910, 188 of 188 categories observed
+[27]   it  1000  item -2.0434  top1 0.372  qNLL 0.6840  cNLL 0.1125  kappa 0.788  breadth 1.463  price +0.194 *
+[27]   it  2000  item -1.9790  top1 0.399  qNLL 0.6644  cNLL 0.1053  kappa 0.758  breadth 1.372  price +0.456 *
+[27]   it  3000  item -1.9673  top1 0.404  qNLL 0.6794  cNLL 0.1021  kappa 0.724  breadth 1.329  price +0.592
+[27]   it  4000  item -1.9632  top1 0.407  qNLL 0.6488  cNLL 0.1069  kappa 0.701  breadth 1.307  price +0.672 *
+[27]   it  5000  item -1.9694  top1 0.404  qNLL 0.6660  cNLL 0.1039  kappa 0.688  breadth 1.300  price +0.710
+[27]   it  6000  item -1.9593  top1 0.410  qNLL 0.6639  cNLL 0.1038  kappa 0.684  breadth 1.291  price +0.732
+[27]   it  7000  item -1.9678  top1 0.406  qNLL 0.6496  cNLL 0.1039  kappa 0.680  breadth 1.287  price +0.746
+[27]   it  8000  item -1.9830  top1 0.407  qNLL 0.6405  cNLL 0.1030  kappa 0.682  breadth 1.284  price +0.757
+[27]   it  9000  item -1.9629  top1 0.409  qNLL 0.6624  cNLL 0.1024  kappa 0.688  breadth 1.282  price +0.760
+[27]   it 10000  item -1.9527  top1 0.411  qNLL 0.6685  cNLL 0.1053  kappa 0.691  breadth 1.281  price +0.762
+[27]   it 11000  item -1.9509  top1 0.413  qNLL 0.6535  cNLL 0.1044  kappa 0.695  breadth 1.282  price +0.763 *
+[27]   it 12000  item -1.9408  top1 0.418  qNLL 0.6538  cNLL 0.0999  kappa 0.693  breadth 1.282  price +0.765 *
+[27] best at 12000; TEST item -1.9765 top1 0.400 qNLL 0.6627 cNLL 0.1073
+[27] saved nested_hn75_nested.pt

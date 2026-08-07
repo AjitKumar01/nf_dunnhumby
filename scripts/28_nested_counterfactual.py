@@ -210,7 +210,10 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             ok = msk.sum(1) > 0
             # same frozen per-category reference the model trained against
             iv = torch.where(ok, iv - m.iv_ref[ct], torch.zeros_like(iv))
-            cst = d.state(user, blk_np[:, 0], day)
+            # cat_state, not state: 27 trains the incidence head on the category's own
+            # recency, so generating with the old first-item proxy is a train/generate
+            # mismatch.  It cost 14% of generated basket size when they disagreed.
+            cst = d.cat_state(user, cats[:, k], day)
             lin = (m.c0[ct] + (m.c_user[torch.as_tensor(user, device=dev)] * m.c_cat[ct]).sum(-1)
                    + (m.c_state[ct] * torch.as_tensor(cst, device=dev)).sum(-1)
                    + m.kappa()[ct] * iv)
@@ -356,7 +359,7 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
         iv = torch.logsumexp(u, dim=1)
         ok = msk.sum(1) > 0
         iv = torch.where(ok, iv - m.iv_ref, torch.zeros_like(iv))
-        cst = d.state(np.full(d.C, user), blk[:, 0].cpu().numpy(), np.full(d.C, day))
+        cst = d.cat_state(np.full(d.C, user), np.arange(d.C), np.full(d.C, day))
         allc = torch.arange(d.C, device=dev)
         lin = (m.c0 + (m.c_user[user].unsqueeze(0) * m.c_cat).sum(-1)
                + (m.c_state * torch.as_tensor(cst, device=dev)).sum(-1)
