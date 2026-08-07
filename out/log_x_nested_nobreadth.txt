@@ -2,3 +2,17 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27] model nested_nobreadth: K=64 nest=True quantity=True context=True store=True avail_only=False -> 867,950 parameters
 [27]   froze IV reference at iteration 500: mean 2.241, 188 of 188 categories observed
+[27]   it  1000  item -2.5145 (cor -6.6091)  top1 0.308  qNLL 0.6850  cNLL 0.1196  bNLL 0.0000  kappa 0.766  breadth nan  price +0.272 *
+[27]   it  2000  item -2.5318 (cor -6.4484)  top1 0.343  qNLL 0.6582  cNLL 0.1214  bNLL 0.0000  kappa 0.668  breadth nan  price +0.619 *
+[27]   it  3000  item -2.5346 (cor -6.4180)  top1 0.359  qNLL 0.6555  cNLL 0.1200  bNLL 0.0000  kappa 0.541  breadth nan  price +0.808 *
+[27]   it  4000  item -2.5424 (cor -6.3776)  top1 0.363  qNLL 0.6591  cNLL 0.1134  bNLL 0.0000  kappa 0.434  breadth nan  price +0.933 *
+[27]   it  5000  item -2.4900 (cor -6.3299)  top1 0.374  qNLL 0.6623  cNLL 0.1127  bNLL 0.0000  kappa 0.375  breadth nan  price +1.007 *
+[27]   it  6000  item -2.5047 (cor -6.3143)  top1 0.375  qNLL 0.6595  cNLL 0.1139  bNLL 0.0000  kappa 0.340  breadth nan  price +1.058 *
+[27]   it  7000  item -2.5091 (cor -6.3238)  top1 0.375  qNLL 0.6591  cNLL 0.1137  bNLL 0.0000  kappa 0.335  breadth nan  price +1.090
+[27]   it  8000  item -2.4902 (cor -6.3346)  top1 0.372  qNLL 0.6775  cNLL 0.1164  bNLL 0.0000  kappa 0.332  breadth nan  price +1.115
+[27]   it  9000  item -2.4842 (cor -6.2890)  top1 0.382  qNLL 0.7067  cNLL 0.1133  bNLL 0.0000  kappa 0.331  breadth nan  price +1.126
+[27]   it 10000  item -2.4782 (cor -6.2738)  top1 0.386  qNLL 0.6622  cNLL 0.1096  bNLL 0.0000  kappa 0.334  breadth nan  price +1.135 *
+[27]   it 11000  item -2.5017 (cor -6.3319)  top1 0.374  qNLL 0.6697  cNLL 0.1119  bNLL 0.0000  kappa 0.334  breadth nan  price +1.141
+[27]   it 12000  item -2.4934 (cor -6.2702)  top1 0.384  qNLL 0.6550  cNLL 0.1125  bNLL 0.0000  kappa 0.335  breadth nan  price +1.145 *
+[27] best at 12000; TEST item -2.5689 (cor -6.3742) top1 0.368 qNLL 0.6649 cNLL 0.1124 bNLL 0.0000
+[27] saved nested_nobreadth_nested.pt

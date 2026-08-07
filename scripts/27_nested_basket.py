@@ -695,7 +695,7 @@ def losses(model, bt, ib, iv_center):
     out = {}
     u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                            bt["state"], bt["week"], bt["store"])
-    if bt.get("logq") is not None:
+    if bt.get("logq") is not None and getattr(model, "use_logq", True):
         u = u - bt["logq"]
     u = u.masked_fill(~bt["avail"], -1e9)
     if getattr(model, "item_loss", "softmax") == "ove":
@@ -753,6 +753,82 @@ def losses(model, bt, ib, iv_center):
 
 
 @torch.no_grad()
+def exact_item_loglik(model, d, split, bidx, device, chunk=128,
+                      temps=(0.6, 0.8, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0)):
+    """log P(true item) normalised over the WHOLE catalogue -- no negative sampling.
+
+    The catalogue is 5,455 items, so this sum is affordable and there is no reason to
+    select checkpoints on a sampled surrogate.  Measured against the K=20 logQ-corrected
+    estimator this repository used before, that surrogate was optimistic by 2.0 to 7.2
+    nats and its bias correlated with the damage it did at r = -0.87: the importance
+    weights 1/q span five orders of magnitude, so the sampled denominator has enormous
+    variance and its logarithm is badly biased upward.
+    """
+    sp = d.splits[split]
+    rows, owner = [], []
+    for bi, i in enumerate(bidx):
+        r = np.arange(sp["starts"][i], sp["ends"][i])
+        rows.extend(r.tolist()); owner.extend([bi] * len(r))
+    rows = np.asarray(rows); owner = np.asarray(owner)
+    user, item = sp["user"][rows], sp["item"][rows]
+    day, week = sp["day"][rows], sp["week"][rows]
+    store, rw = sp["store"][rows], sp["raw_week"][rows]
+    B, J = len(rows), d.J
+
+    A = model.alpha.detach()
+    ctx = torch.zeros(B, model.K, device=device)
+    for bi in range(len(bidx)):
+        r = np.flatnonzero(owner == bi)
+        if len(r) > 1:
+            its = item[r]
+            tot = A[torch.as_tensor(its, device=device)].sum(0)
+            for q_, rr_ in enumerate(r):
+                ctx[rr_] = (tot - A[its[q_]]) / (len(its) - 1)
+
+    allj = torch.arange(J, device=device)
+    U, AV, TRU = [], [], []
+    for s in range(0, B, chunk):
+        e = min(s + chunk, B); n = e - s
+        cand = allj.unsqueeze(0).expand(n, J)
+        cnp = cand.cpu().numpy()
+        day_r = np.repeat(day[s:e, None], J, 1)
+        user_r = np.repeat(user[s:e, None], J, 1)
+        store_r = np.repeat(store[s:e, None], J, 1)
+        rw_r = np.repeat(rw[s:e, None], J, 1)
+        st = torch.as_tensor(d.state(user_r.ravel(), cnp.ravel(), day_r.ravel()).reshape(
+            n, J, N_STATE_FEATURES), device=device)
+        dl = d.log_price_dev[cand, torch.as_tensor(day_r, device=device)]
+        if model.use_store and model.use_store_price:
+            dl = dl + d.store_dev(cnp.ravel(), store_r.ravel(), rw_r.ravel()).reshape(n, J)
+        u = model.item_utility(torch.as_tensor(user[s:e], device=device), cand, ctx[s:e],
+                               dl, st, torch.as_tensor(week[s:e], device=device),
+                               torch.as_tensor(store[s:e], device=device))
+        av = torch.ones(n, J, dtype=torch.bool, device=device)
+        if model.use_store:
+            av = d.carried[cand, torch.as_tensor(store_r, device=device)].clone()
+        tru = torch.as_tensor(item[s:e], device=device)
+        ar = torch.arange(n, device=device)
+        av[ar, tru] = True
+        U.append(u.masked_fill(~av, -1e9)); AV.append(av); TRU.append(tru)
+    U = torch.cat(U); TRU = torch.cat(TRU); ar = torch.arange(len(TRU), device=device)
+
+    # One temperature, fitted here on validation.  Without it this score measures the
+    # SCALE of the utilities as much as their content: subtracting log(K q) from the
+    # negatives but not the positive forces training to open a wider gap, and the model
+    # comes out with sd(u) = 2.15 against 1.24 without the correction.  Uncalibrated that
+    # reads as -1.39 nats of damage; calibrated it is +0.16 nats of gain.  Selecting on
+    # the uncalibrated number would just pick whichever run happened to be least
+    # over-confident.
+    best_ll, best_T = -1e30, 1.0
+    for T in temps:
+        ll = float(torch.log_softmax(U / T, dim=1)[ar, TRU].mean())
+        if ll > best_ll:
+            best_ll, best_T = ll, T
+    hits = int((U.argmax(1) == TRU).sum())
+    return best_ll, hits / max(B, 1), best_T
+
+
+@torch.no_grad()
 def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
              iv_cap=32):
     sp = d.splits[split]
@@ -778,6 +854,13 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
         # undertrained checkpoint (measured: it chose iteration 1000 of 12000 while top-1,
         # qNLL, cNLL and bNLL were all still improving).  This corrected number estimates
         # the full-catalogue log P(j) and is what model selection uses.
+        # CAVEAT: make_batch draws negatives using THIS model's --neg-in-cat fraction,
+        # so a model trained with in-category negatives is evaluated against a different
+        # proposal than a plain one.  Both `item` and `cor` are therefore comparable
+        # ACROSS ITERATIONS of one run -- which is all model selection needs -- but NOT
+        # across models with different --neg-in-cat.  (That was already true of `item`
+        # before this change.)  For any cross-model claim use 38_exact_likelihood.py,
+        # which sums over all 5,455 items and has no proposal at all.
         uc = (u - bt["logq"]).masked_fill(~bt["avail"], -1e9)
         s_cor += float(torch.log_softmax(uc, dim=1)[:, 0].sum())
         L = losses(model, bt, None, iv_center)
@@ -814,6 +897,13 @@ def main(a):
                         use_cat_pair=a.cat_pair, untie_rho=a.untie_rho,
                         prefix_context=a.prefix_context,
                         neg_in_cat=a.neg_in_cat, item_loss=a.item_loss).to(dev)
+    model.use_logq = not a.no_logq
+    # A FIXED validation subsample, so the selection score is comparable across
+    # iterations and across models rather than moving with the draw.
+    sel_bidx = (np.random.default_rng(12345).choice(
+        d.splits["validation"]["n_baskets"],
+        size=min(a.select_baskets, d.splits["validation"]["n_baskets"]),
+        replace=False) if a.select_baskets > 0 else None)
     n_par = sum(p.numel() for p in model.parameters())
     log(f"model {a.label}: K={a.K} nest={not a.no_nest} quantity={not a.no_quantity} "
         f"context={not a.no_context} store={not a.no_store} "
@@ -876,6 +966,10 @@ def main(a):
         if it % a.eval_every == 0 or it == a.iters:
             vi, vacc, vq, vc, vb, vcor = evaluate(model, d, "validation", a.n_neg, ev,
                                                   dev, a.iv_center, iv_cap=a.iv_cap)
+            if sel_bidx is not None:
+                vex, vextop1, vT = exact_item_loglik(model, d, "validation", sel_bidx, dev)
+            else:
+                vex, vextop1, vT = vcor, vacc, 1.0
             kap = float(model.kappa().detach().median()) if model.use_nest else float("nan")
             brd = float(1.0 + torch.exp(model.b0.detach()).mean()) \
                 if model.use_breadth else float("nan")
@@ -885,19 +979,25 @@ def main(a):
             hist.append({"iter": it, "val_item": vi, "val_top1": vacc,
                          "val_quantity_nll": vq, "val_incidence_nll": vc,
                          "val_breadth_nll": vb, "val_item_corrected": vcor,
+                         "val_item_exact": vex, "val_exact_top1": vextop1,
+                         "val_temperature": vT,
                          "kappa_median": kap, "price_coef": pc,
                          "quantity_price_coef": qc, "secs": time.time() - t0})
             # breadth is in the selection score now.  It was trained but had no
             # held-out number, so checkpointing was blind to the head that decides how
             # many DIFFERENT products a category contributes -- the one that fixed
             # generated basket size (6.94 -> 8.27 items).
-            score = vcor - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
+            # selection on the EXACT catalogue-wide likelihood.  Both sampled variants
+            # were tried and both are proposal-dependent: the raw one rewards
+            # log p - log q, the K=20 logQ-corrected one is optimistic by 2-7 nats.
+            score = vex - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
             star = ""
             if score > best:
                 best, best_it = score, it
                 torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_nested.pt"))
                 star = " *"
-            log(f"  it {it:5d}  item {vi:.4f} (cor {vcor:.4f})  top1 {vacc:.3f}  qNLL {vq:.4f}  "
+            log(f"  it {it:5d}  exact {vex:.4f} (T {vT:.2f} top1 {vextop1:.3f})  item {vi:.4f}  "
+                f"top1 {vacc:.3f}  qNLL {vq:.4f}  "
                 f"cNLL {vc:.4f}  bNLL {vb:.4f}  kappa {kap:.3f}  breadth {brd:.3f}  "
                 f"price {pc:+.3f}{star}")
 
@@ -906,13 +1006,22 @@ def main(a):
     ti, tacc, tq, tc, tb, tcor = evaluate(model, d, "test", a.n_neg,
                                     np.random.default_rng(999), dev, a.iv_center, 6000,
                                     iv_cap=a.iv_cap)
-    log(f"best at {best_it}; TEST item {ti:.4f} (cor {tcor:.4f}) top1 {tacc:.3f} "
-        f"qNLL {tq:.4f} cNLL {tc:.4f} bNLL {tb:.4f}")
+    # T is fitted on VALIDATION and then applied to test -- never tuned on test
+    _, _, T_star = exact_item_loglik(model, d, "validation", sel_bidx, dev) \
+        if sel_bidx is not None else (0, 0, 1.0)
+    tex, textop1, _ = exact_item_loglik(
+        model, d, "test", np.random.default_rng(999).choice(
+            d.splits["test"]["n_baskets"], size=min(800, d.splits["test"]["n_baskets"]),
+            replace=False), dev, temps=(T_star,))
+    log(f"best at {best_it}; TEST exact {tex:.4f} (T {T_star:.2f} top1 {textop1:.3f})  item {ti:.4f} "
+        f"top1 {tacc:.3f} qNLL {tq:.4f} cNLL {tc:.4f} bNLL {tb:.4f}")
     with open(os.path.join(OUT, f"{a.label}_nested_history.json"), "w") as f:
         json.dump({"config": vars(a), "history": hist, "n_parameters": n_par,
                    "best_iter": best_it, "test_item": ti, "test_top1": tacc,
                    "test_quantity_nll": tq, "test_incidence_nll": tc,
-                   "test_breadth_nll": tb, "test_item_corrected": tcor}, f, indent=2)
+                   "test_breadth_nll": tb, "test_item_corrected": tcor,
+                   "test_item_exact": tex, "test_exact_top1": textop1,
+                   "temperature": T_star}, f, indent=2)
     log(f"saved {a.label}_nested.pt")
 
 
@@ -940,6 +1049,11 @@ if __name__ == "__main__":
     p.add_argument("--eval-every", type=int, default=1000)
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--l2", type=float, default=1e-2)
+    p.add_argument("--no-logq", action="store_true",
+                   help="disable the logQ correction on sampled negatives")
+    p.add_argument("--select-baskets", type=int, default=300,
+                   help="validation baskets used for the EXACT full-catalogue "
+                        "selection score; 0 falls back to the sampled surrogate")
     p.add_argument("--l2-denom", type=float, default=1500.0,
                    help="fixed divisor for the L2 terms; was the batch row count, "
                         "which fluctuates 1.55x and made regularisation batch-dependent")

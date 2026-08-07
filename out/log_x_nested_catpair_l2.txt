@@ -2,17 +2,17 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27] model nested_catpair_l2: K=64 nest=True quantity=True context=True store=True avail_only=False -> 905,737 parameters
 [27]   froze IV reference at iteration 500: mean 2.227, 188 of 188 categories observed
-[27]   it  1000  item -2.6712  top1 0.337  qNLL 0.6850  cNLL 0.1123  bNLL 0.6341  kappa 0.780  breadth 1.454  price +0.250 *
-[27]   it  2000  item -2.7145  top1 0.364  qNLL 0.6582  cNLL 0.1150  bNLL 0.6259  kappa 0.704  breadth 1.362  price +0.609
-[27]   it  3000  item -2.7668  top1 0.370  qNLL 0.6555  cNLL 0.1142  bNLL 0.6067  kappa 0.582  breadth 1.330  price +0.813
-[27]   it  4000  item -2.8061  top1 0.373  qNLL 0.6591  cNLL 0.1079  bNLL 0.5768  kappa 0.475  breadth 1.309  price +0.954
-[27]   it  5000  item -2.7832  top1 0.390  qNLL 0.6623  cNLL 0.1068  bNLL 0.5712  kappa 0.411  breadth 1.297  price +1.042
-[27]   it  6000  item -2.7979  top1 0.388  qNLL 0.6595  cNLL 0.1088  bNLL 0.5703  kappa 0.380  breadth 1.288  price +1.104
-[27]   it  7000  item -2.8016  top1 0.390  qNLL 0.6591  cNLL 0.1075  bNLL 0.5993  kappa 0.372  breadth 1.284  price +1.142
-[27]   it  8000  item -2.8266  top1 0.386  qNLL 0.6775  cNLL 0.1108  bNLL 0.6044  kappa 0.371  breadth 1.282  price +1.173
-[27]   it  9000  item -2.8340  top1 0.392  qNLL 0.7067  cNLL 0.1074  bNLL 0.6007  kappa 0.371  breadth 1.280  price +1.187
-[27]   it 10000  item -2.8810  top1 0.393  qNLL 0.6622  cNLL 0.1041  bNLL 0.6283  kappa 0.374  breadth 1.279  price +1.198
-[27]   it 11000  item -2.8861  top1 0.387  qNLL 0.6697  cNLL 0.1064  bNLL 0.5971  kappa 0.376  breadth 1.279  price +1.206
-[27]   it 12000  item -2.8962  top1 0.395  qNLL 0.6550  cNLL 0.1070  bNLL 0.5880  kappa 0.377  breadth 1.279  price +1.210
-[27] best at 1000; TEST item -2.6762 top1 0.332 qNLL 0.6826 cNLL 0.1153
+[27]   it  1000  item -2.6712 (cor -6.6287)  top1 0.337  qNLL 0.6850  cNLL 0.1123  bNLL 0.6341  kappa 0.780  breadth 1.454  price +0.250 *
+[27]   it  2000  item -2.7145 (cor -6.5164)  top1 0.364  qNLL 0.6582  cNLL 0.1150  bNLL 0.6259  kappa 0.704  breadth 1.362  price +0.609 *
+[27]   it  3000  item -2.7668 (cor -6.5251)  top1 0.370  qNLL 0.6555  cNLL 0.1142  bNLL 0.6067  kappa 0.582  breadth 1.330  price +0.813 *
+[27]   it  4000  item -2.8061 (cor -6.5323)  top1 0.373  qNLL 0.6591  cNLL 0.1079  bNLL 0.5768  kappa 0.475  breadth 1.309  price +0.954 *
+[27]   it  5000  item -2.7832 (cor -6.4975)  top1 0.390  qNLL 0.6623  cNLL 0.1068  bNLL 0.5712  kappa 0.411  breadth 1.297  price +1.042 *
+[27]   it  6000  item -2.7979 (cor -6.4803)  top1 0.388  qNLL 0.6595  cNLL 0.1088  bNLL 0.5703  kappa 0.380  breadth 1.288  price +1.104 *
+[27]   it  7000  item -2.8016 (cor -6.4834)  top1 0.390  qNLL 0.6591  cNLL 0.1075  bNLL 0.5993  kappa 0.372  breadth 1.284  price +1.142
+[27]   it  8000  item -2.8266 (cor -6.5373)  top1 0.386  qNLL 0.6775  cNLL 0.1108  bNLL 0.6044  kappa 0.371  breadth 1.282  price +1.173
+[27]   it  9000  item -2.8340 (cor -6.4895)  top1 0.392  qNLL 0.7067  cNLL 0.1074  bNLL 0.6007  kappa 0.371  breadth 1.280  price +1.187
+[27]   it 10000  item -2.8810 (cor -6.5520)  top1 0.393  qNLL 0.6622  cNLL 0.1041  bNLL 0.6283  kappa 0.374  breadth 1.279  price +1.198
+[27]   it 11000  item -2.8861 (cor -6.5698)  top1 0.387  qNLL 0.6697  cNLL 0.1064  bNLL 0.5971  kappa 0.376  breadth 1.279  price +1.206
+[27]   it 12000  item -2.8962 (cor -6.5384)  top1 0.395  qNLL 0.6550  cNLL 0.1070  bNLL 0.5880  kappa 0.377  breadth 1.279  price +1.210
+[27] best at 6000; TEST item -2.8755 (cor -6.5693) top1 0.377 qNLL 0.6619 cNLL 0.1071 bNLL 0.5878
 [27] saved nested_catpair_l2_nested.pt

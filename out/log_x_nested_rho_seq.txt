@@ -1,3 +1,18 @@
 [27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27] model nested_rho_seq: K=64 nest=True quantity=True context=True store=True avail_only=False -> 1,254,858 parameters
+[27]   froze IV reference at iteration 500: mean 2.087, 188 of 188 categories observed
+[27]   it  1000  item -2.5705 (cor -6.7031)  top1 0.295  qNLL 0.6852  cNLL 0.1124  bNLL 0.6576  kappa 0.762  breadth 1.455  price +0.315 *
+[27]   it  2000  item -2.5454 (cor -6.5015)  top1 0.341  qNLL 0.6698  cNLL 0.1134  bNLL 0.6004  kappa 0.677  breadth 1.375  price +0.652 *
+[27]   it  3000  item -2.5475 (cor -6.4887)  top1 0.350  qNLL 0.6703  cNLL 0.1076  bNLL 0.5816  kappa 0.571  breadth 1.331  price +0.820 *
+[27]   it  4000  item -2.5514 (cor -6.4146)  top1 0.361  qNLL 0.6768  cNLL 0.1065  bNLL 0.6208  kappa 0.496  breadth 1.311  price +0.936 *
+[27]   it  5000  item -2.5604 (cor -6.4552)  top1 0.354  qNLL 0.6632  cNLL 0.1004  bNLL 0.6264  kappa 0.454  breadth 1.298  price +1.005
+[27]   it  6000  item -2.5895 (cor -6.4651)  top1 0.357  qNLL 0.6576  cNLL 0.1052  bNLL 0.5973  kappa 0.428  breadth 1.290  price +1.055
+[27]   it  7000  item -2.5726 (cor -6.4682)  top1 0.357  qNLL 0.6491  cNLL 0.1004  bNLL 0.6462  kappa 0.415  breadth 1.287  price +1.089
+[27]   it  8000  item -2.5290 (cor -6.3818)  top1 0.368  qNLL 0.6552  cNLL 0.1024  bNLL 0.6245  kappa 0.411  breadth 1.281  price +1.107 *
+[27]   it  9000  item -2.5788 (cor -6.4522)  top1 0.359  qNLL 0.6715  cNLL 0.1035  bNLL 0.5887  kappa 0.411  breadth 1.279  price +1.122
+[27]   it 10000  item -2.5359 (cor -6.3562)  top1 0.375  qNLL 0.6485  cNLL 0.0989  bNLL 0.5870  kappa 0.410  breadth 1.279  price +1.128 *
+[27]   it 11000  item -2.5658 (cor -6.4064)  top1 0.368  qNLL 0.6814  cNLL 0.1081  bNLL 0.5979  kappa 0.413  breadth 1.278  price +1.131
+[27]   it 12000  item -2.5445 (cor -6.3911)  top1 0.367  qNLL 0.6653  cNLL 0.1012  bNLL 0.6071  kappa 0.412  breadth 1.278  price +1.134
+[27] best at 10000; TEST item -2.6350 (cor -6.4817) top1 0.354 qNLL 0.6723 cNLL 0.1037 bNLL 0.5876
+[27] saved nested_rho_seq_nested.pt

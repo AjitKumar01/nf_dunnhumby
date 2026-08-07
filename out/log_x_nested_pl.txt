@@ -3,3 +3,17 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27] model nested_pl: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,392 parameters
 [27]   froze IV reference at iteration 500: mean 2.236, 188 of 188 categories observed
+[27]   it  1000  item -2.5686 (cor -6.6686)  top1 0.297  qNLL 0.6935  cNLL 0.1198  bNLL 0.6339  kappa 0.766  breadth 1.454  price +0.000 *
+[27]   it  2000  item -2.6025 (cor -6.5368)  top1 0.330  qNLL 0.6711  cNLL 0.1216  bNLL 0.6263  kappa 0.675  breadth 1.362  price +0.000 *
+[27]   it  3000  item -2.6123 (cor -6.5167)  top1 0.342  qNLL 0.6698  cNLL 0.1202  bNLL 0.6066  kappa 0.555  breadth 1.331  price +0.000 *
+[27]   it  4000  item -2.6231 (cor -6.4791)  top1 0.346  qNLL 0.6758  cNLL 0.1138  bNLL 0.5774  kappa 0.447  breadth 1.310  price +0.000 *
+[27]   it  5000  item -2.5724 (cor -6.4388)  top1 0.356  qNLL 0.6806  cNLL 0.1134  bNLL 0.5734  kappa 0.386  breadth 1.298  price +0.000 *
+[27]   it  6000  item -2.5926 (cor -6.4293)  top1 0.356  qNLL 0.6764  cNLL 0.1138  bNLL 0.5713  kappa 0.352  breadth 1.289  price +0.000 *
+[27]   it  7000  item -2.5956 (cor -6.4371)  top1 0.358  qNLL 0.6786  cNLL 0.1141  bNLL 0.6001  kappa 0.343  breadth 1.285  price +0.000
+[27]   it  8000  item -2.5849 (cor -6.4608)  top1 0.354  qNLL 0.6889  cNLL 0.1166  bNLL 0.6039  kappa 0.342  breadth 1.283  price +0.000
+[27]   it  9000  item -2.5756 (cor -6.4173)  top1 0.362  qNLL 0.7236  cNLL 0.1135  bNLL 0.6008  kappa 0.340  breadth 1.281  price +0.000
+[27]   it 10000  item -2.5587 (cor -6.3837)  top1 0.368  qNLL 0.6802  cNLL 0.1096  bNLL 0.6295  kappa 0.344  breadth 1.281  price +0.000
+[27]   it 11000  item -2.5837 (cor -6.4447)  top1 0.354  qNLL 0.6958  cNLL 0.1121  bNLL 0.5964  kappa 0.345  breadth 1.280  price +0.000
+[27]   it 12000  item -2.5791 (cor -6.3832)  top1 0.367  qNLL 0.6689  cNLL 0.1127  bNLL 0.5890  kappa 0.344  breadth 1.280  price +0.000 *
+[27] best at 12000; TEST item -2.6227 (cor -6.4573) top1 0.354 qNLL 0.6883 cNLL 0.1125 bNLL 0.5853
+[27] saved nested_pl_nested.pt

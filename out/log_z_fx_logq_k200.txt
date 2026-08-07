@@ -1,0 +1,14 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model fx_logq_k200: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,392 parameters
+[27]   froze IV reference at iteration 500: mean 2.159, 188 of 188 categories observed
+[27]   it  1000  exact -6.8415 (top1 0.056)  item -4.9434  top1 0.085  qNLL 0.6853  cNLL 0.1148  bNLL 0.6284  kappa 0.781  breadth 1.456  price +0.288 *
+[27]   it  2000  exact -6.8633 (top1 0.057)  item -4.9494  top1 0.093  qNLL 0.6745  cNLL 0.1235  bNLL 0.6105  kappa 0.735  breadth 1.370  price +0.560
+[27]   it  3000  exact -6.8474 (top1 0.055)  item -4.8981  top1 0.101  qNLL 0.6553  cNLL 0.1129  bNLL 0.6092  kappa 0.666  breadth 1.335  price +0.680 *
+[27]   it  4000  exact -6.8632 (top1 0.057)  item -4.9210  top1 0.101  qNLL 0.6615  cNLL 0.1166  bNLL 0.6054  kappa 0.610  breadth 1.315  price +0.746
+[27]   it  5000  exact -6.8417 (top1 0.056)  item -4.8372  top1 0.103  qNLL 0.6501  cNLL 0.1131  bNLL 0.6302  kappa 0.564  breadth 1.303  price +0.782
+[27]   it  6000  exact -6.8414 (top1 0.057)  item -4.8838  top1 0.103  qNLL 0.6653  cNLL 0.1133  bNLL 0.6226  kappa 0.543  breadth 1.299  price +0.801
+[27]   it  7000  exact -6.8338 (top1 0.054)  item -4.8929  top1 0.102  qNLL 0.6645  cNLL 0.1116  bNLL 0.6054  kappa 0.536  breadth 1.296  price +0.809 *
+[27]   it  8000  exact -6.8300 (top1 0.055)  item -4.8664  top1 0.107  qNLL 0.6769  cNLL 0.1107  bNLL 0.6317  kappa 0.533  breadth 1.295  price +0.812
+[27] best at 7000; TEST exact -7.1091 (top1 0.039)  item -4.8908 top1 0.108 qNLL 0.6613 cNLL 0.1159 bNLL 0.5987
+[27] saved fx_logq_k200_nested.pt

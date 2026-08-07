@@ -57,20 +57,41 @@ def log(m):
 
 
 def load(label, d, dev):
+    """Rebuild a checkpoint's architecture from its saved config.
+
+    Every flag that changes the model must be passed here.  Seven were not, and the
+    failure was silent for the one that matters: a model trained with --no-context loaded
+    with use_context=True, so every downstream evaluation of the context ablation fed it
+    a basket-interaction term it had never been trained to use.  Three other ablations
+    (--no-state, --no-breadth, --avail-only) crashed on a state_dict key mismatch, which
+    is why they have no generator_eval artefact.
+    """
     cfg = json.load(open(os.path.join(OUT, f"{label}_nested_history.json")))["config"]
     m = nb.NestedModel(d, K=cfg["K"], Kp=cfg["Kp"], Kt=cfg["Kt"], Ks=cfg["Ks"],
                        seed=cfg["seed"], use_nest=not cfg["no_nest"],
                        use_quantity=not cfg["no_quantity"],
                        use_store=not cfg["no_store"],
+                       use_store_price=not (cfg["no_store_price"] or cfg["avail_only"]),
+                       avail_only=cfg["avail_only"],
+                       use_state=not cfg["no_state"],
+                       use_breadth=not cfg["no_breadth"],
+                       use_context=not cfg["no_context"],
                        ctx_agg=cfg.get("ctx_agg", "mean"),
                        learn_ctx_scale=cfg.get("learn_ctx_scale", False),
                        use_cat_context=cfg.get("cat_context", False),
                        use_cat_pair=cfg.get("cat_pair", False),
                        untie_rho=cfg.get("untie_rho", False),
-                       prefix_context=cfg.get("prefix_context", False)).to(dev)
+                       prefix_context=cfg.get("prefix_context", False),
+                       neg_in_cat=cfg.get("neg_in_cat", 0.0),
+                       item_loss=cfg.get("item_loss", "softmax")).to(dev)
     m.load_state_dict(torch.load(os.path.join(OUT, f"{label}_nested.pt"),
                                  map_location=dev))
     m.eval()
+    # Temperature fitted on validation during training.  Generation samples from
+    # softmax(u), which is scale-sensitive: an uncalibrated model at sd(u)=2.15 instead
+    # of 1.24 produces a far too peaked choice distribution.
+    m.temperature = float(json.load(open(
+        os.path.join(OUT, f"{label}_nested_history.json"))).get("temperature", 1.0))
     return m, cfg
 
 
