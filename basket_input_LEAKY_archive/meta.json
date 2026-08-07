@@ -1,0 +1,28 @@
+{
+  "n_users": 2066,
+  "n_items": 5455,
+  "n_subs": 758,
+  "n_days": 712,
+  "n_baskets": 199345,
+  "n_rows": 1566063,
+  "min_lines": 100,
+  "min_trips": 20,
+  "max_trips": 300,
+  "val_from_week": 83,
+  "test_from_week": 91,
+  "day_stride": 1024,
+  "split_rows": {
+    "train": 1228695,
+    "test": 202703,
+    "validation": 134665
+  },
+  "n_commodities": 188,
+  "n_stores": 115,
+  "max_units": 12,
+  "share_rows_units_gt1": 0.22326177171671893,
+  "share_units_in_multi_rows": 0.4264394405193453,
+  "store_price_cells": 244880,
+  "assortment_share": 0.5723508548200693,
+  "price_obs_share": 0.24710527399870236,
+  "median_repurchase_gap_days": 28.0
+}

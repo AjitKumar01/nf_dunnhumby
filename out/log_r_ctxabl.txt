@@ -1,0 +1,21 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[35] 33,438 held-out purchase rows in 4,000 baskets, 20 negatives each, drawn once and reused
+[35]   nested           ||ctx|| train 0.890, scale 1.00; k=1:2.31x  k=2:1.74x  k=4:1.37x  k=8:1.15x
+[35]     raw             -2.0093  -2.0540  -1.9573  -1.9064  -1.8847   full -1.8756
+[35]     zero if k<3     -2.0093  -2.0093  -2.0093  -1.9064  -1.8847   full -1.8756
+[35]     norm-matched    -2.0093  -1.9666  -1.9450  -1.9218  -1.9027   full -1.8756
+/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/35_context_ablation.py:130: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
+  scale = float(m.ctx_scale) if getattr(m, "ctx_scale", None) is not None else 1.0
+[35]   nested_both      ||ctx|| train 0.631, scale 5.55; k=1:2.42x  k=2:1.81x  k=4:1.40x  k=8:1.16x
+[35]     raw             -2.1120  -2.8972  -2.3451  -2.0673  -1.9341   full -1.8645
+[35]     zero if k<3     -2.1120  -2.1120  -2.1120  -2.0673  -1.9341   full -1.8645
+[35]     norm-matched    -2.1120  -2.1388  -2.0502  -1.9752  -1.9105   full -1.8645
+[35]   nested_hn75      ||ctx|| train 0.587, scale 4.83; k=1:2.48x  k=2:1.84x  k=4:1.42x  k=8:1.17x
+[35]     raw             -2.2162  -2.6913  -2.3373  -2.1634  -2.0740   full -2.0344
+[35]     zero if k<3     -2.2162  -2.2162  -2.2162  -2.1634  -2.0740   full -2.0344
+[35]     norm-matched    -2.2162  -2.2105  -2.1583  -2.1120  -2.0657   full -2.0344
+[35]   household repeat   loglik -2.5230 (needs no basket)
+[35] 
+[35] wrote out/context_ablation.json and figures/context_ablation.png

@@ -45,7 +45,7 @@ nb = importlib.import_module("27_nested_basket")
 cf = importlib.import_module("28_nested_counterfactual")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-IN = os.path.join(HERE, "..", "basket_input")
+IN = os.path.join(HERE, "..", os.environ.get("NF_BASKET_INPUT", "basket_input"))
 OUT = os.path.join(HERE, "..", "out")
 FIG = os.path.join(HERE, "..", "figures")
 PAL = {"blue": "#2d6cdf", "grey": "#9aa5b1", "red": "#d1495b", "green": "#2a9d8f"}

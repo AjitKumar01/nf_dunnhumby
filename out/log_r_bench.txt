@@ -1,0 +1,18 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[31] tuned on validation: w_pop = 0.05 (val log-lik -2.6442)
+[31] tuned on validation: w_repeat = 1.0 (val log-lik -2.2563)
+[31] scoring 24 batches, 51,167 held-out purchases, 20 negatives each -- identical candidate sets for every model
+[31] building item-item co-occurrence from training baskets ...
+[31]   8,423,494 nonzero item pairs
+[31] 
+[31] model                    log-lik   top-1   vs popularity
+[31] cooccurrence             -2.9799   0.094   -0.3543
+[31] household_plus_cooc      -2.9784   0.197   -0.3528
+[31] popularity               -2.6256   0.107   +0.0000
+[31] random                   -2.6232   0.089   +0.0024
+[31] household_repeat         -2.2605   0.299   +0.3652
+[31] nested_noctx             -2.0080   0.365   +0.6176
+[31] nested                   -1.8967   0.396   +0.7289
+[31] 
+[31] wrote out/benchmark.json and figures/benchmark.png

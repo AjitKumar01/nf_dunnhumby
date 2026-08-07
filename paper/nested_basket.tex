@@ -404,147 +404,392 @@ the quantities Section~\ref{sec:gen} holds the generator to.
 \section{The model}
 \label{sec:model}
 
-Household $i$, day $t$, week-of-year $w$, store $s$, item $j$, category
-$c=\mathrm{cat}(j)$, basket $S$.
+A trip is one household $i$ shopping at store $s$ on day $t$, in week-of-year $w$. The
+model answers four questions about that trip, in this order:
 
-\subsection{Item utility}
+\begin{enumerate}
+\item For each of the $C$ categories --- does the household buy from it at all?
+\item For a category it buys from --- how many \emph{different} products does it take?
+\item Which products?
+\item How many units of each?
+\end{enumerate}
 
-All four likelihood terms are built on one quantity, which we introduce a piece at a
-time.
+Section~\ref{sec:util} builds one quantity that all four answers share.
+Section~\ref{sec:heads} gives the four answers. Section~\ref{sec:nest} explains the one
+term that ties question 1 to questions 2--4, and what its coefficient means.
+Section~\ref{sec:inter} covers the term that lets items in a basket influence each other.
+Section~\ref{sec:joint} multiplies the four answers into the probability of a whole basket
+and says how the training objective differs from it.
 
-\paragraph{Popularity and taste.} $\lambda_j$ is a per-item intercept.
-$\theta_i^{\top}\alpha_j$ is a household taste vector against an item attribute vector,
-the factorisation Section~\ref{sec:hh} justifies.
+\subsection{The shared quantity: how appealing item \texorpdfstring{$j$}{j} is}
+\label{sec:util}
 
-\paragraph{Price.} $-(\gamma_i^{\top}\beta_j)\,\Delta\log p_{jst}$. The coefficient is a
-low-rank bilinear form, giving every household its own sensitivity and every item its own
-loading at $(N+J)K_p$ parameters instead of $NJ$ --- which Section~\ref{sec:hh} shows is
-necessary, since a free per-pair sensitivity would be estimated from almost no price
-variation. The minus sign means a \emph{positive} $\gamma_i^{\top}\beta_j$ is a
-downward-sloping demand curve.
-
-\paragraph{Memory.} $\eta_j^{\top}x_{ijt}$ is the only term carrying history. Let
-$\tau_{ijt}$ be days since household $i$ last bought item $j$'s \emph{sub-commodity};
-then
+Everything rests on one number per (household, item, trip), which we call the item's
+utility:
 \begin{equation}
-x_{ijt}=\bigl[\ \mathbb{1}\{\text{no previous purchase}\},\quad
-e^{-\tau/7},\quad e^{-\tau/g_{\mathrm{sub}(j)}},\quad \log(1+\tau)/\log 100\ \bigr]^{\top},
-\end{equation}
-with the last three zero when there is no previous purchase. $g_{\mathrm{sub}}$ is that
-sub-commodity's median repurchase gap, clipped to $[3,180]$ days, so ``a long time''
-means the right number of days for milk and for shampoo.
-
-\paragraph{Season and store.} $\mu_j^{\top}\delta_w$ gives correlated week effects, which
-control the main confounder of price \cite{nf}. $\zeta_j^{\top}\xi_s$ is a low-rank
-store--item affinity.
-
-\paragraph{Interaction.} $\rho_j^{\top}\bar\alpha_j(S)$, discussed in
-Section~\ref{sec:inter}. Putting it together,
-\begin{equation}
-u_{ijt}=\lambda_j+\theta_i^{\top}\alpha_j+\rho_j^{\top}\bar\alpha_j(S)
--(\gamma_i^{\top}\beta_j)\Delta\log p_{jst}+\eta_j^{\top}x_{ijt}
-+\mu_j^{\top}\delta_w+\zeta_j^{\top}\xi_s .
+\begin{aligned}
+u_{ijt}=\;&\underbrace{\lambda_j}_{\text{popular?}}
+\;+\;\underbrace{\theta_i^{\top}\alpha_j}_{\text{their kind of thing?}}
+\;+\;\underbrace{\rho_j^{\top}\bar\alpha_j(S)}_{\text{fits the cart?}}
+\;-\;\underbrace{(\gamma_i^{\top}\beta_j)\,\Delta\log p_{jst}}_{\text{expensive today?}}\\[4pt]
+&+\;\underbrace{\eta_j^{\top}x_{ijt}}_{\text{due a repurchase?}}
+\;+\;\underbrace{\mu_j^{\top}\delta_w}_{\text{in season?}}
+\;+\;\underbrace{\zeta_j^{\top}\xi_s}_{\text{this store's kind of thing?}}
+\end{aligned}
 \label{eq:util}
 \end{equation}
 
-\subsection{The basket interaction}
-\label{sec:inter}
+Each term is a dot product of two learned vectors, which is a compact way of writing a
+large table of interactions with few numbers. $\theta_i^{\top}\alpha_j$ is an example:
+rather than storing one taste value for every household--item pair ($N\times J$ numbers),
+each household gets a vector $\theta_i$, each item a vector $\alpha_j$, and their dot
+product supplies the pair. The same device gives every household its own price
+sensitivity $\gamma_i^{\top}\beta_j$ instead of one shared slope.
 
-For item $j$ in a basket of $n$ items,
+\paragraph{The price input.} $\Delta\log p_{jst}$ is how far today's price sits from that
+item's own normal price, in logs (Section~\ref{sec:pricebuild}). It enters with a minus
+sign, so a \emph{positive} $\gamma_i^{\top}\beta_j$ means the household buys less when the
+price is above normal.
+
+\paragraph{The memory input.} $x_{ijt}$ describes how long it has been since this
+household last bought something of this kind. Let $\tau$ be the days since household $i$
+last bought item $j$'s sub-commodity; then
 \begin{equation}
-\bar\alpha_j(S)=\frac{1}{n-1}\Bigl(\sum_{k\in S}\alpha_k-\alpha_j\Bigr),
-\qquad \bar\alpha_j(S):=\mathbf 0 \text{ when } n=1,
+x_{ijt}=\bigl[\ \mathbb 1\{\text{never before}\},\quad e^{-\tau/7},\quad
+e^{-\tau/g_{\mathrm{sub}(j)}},\quad \log(1+\tau)/\log 100\ \bigr]^{\top},
 \end{equation}
-so the term contributes $\frac{1}{n-1}\sum_{k\ne j}\rho_j^{\top}\alpha_k$: the average
-affinity between $j$ and each other item in the basket. The data carries no within-receipt
-order, so $S$ is a \emph{set} and the context is over the whole basket, not a prefix.
+with the last three set to zero if there is no earlier purchase. The three decays let the
+model express ``bought it yesterday'', ``about due'', and ``long gone'' separately, and
+$g_{\mathrm{sub}(j)}$ is that sub-commodity's median repurchase gap so that ``due'' means
+a week for milk and months for shampoo.
 
-Two parameterisations are studied. \textbf{Tied} ($\rho_j=\alpha_j$) makes the
-interaction $\alpha_j^{\top}\alpha_k$: symmetric, and large exactly when two items are
-alike. This forces co-purchase structure into $\alpha$, which is what makes the embedding
-recover product categories (Section~\ref{sec:embed}). \textbf{Untied} follows SHOPPER
-\cite{shopper}: the effect of $k$ on $j$ is $\rho_j^{\top}\alpha_k$, need not equal
-$\rho_k^{\top}\alpha_j$, and may be negative, so complements and substitutes are both
-representable. Section~\ref{sec:rho} reports the comparison; the tied form is the default.
+\subsection{The four answers}
+\label{sec:heads}
 
-\paragraph{The joint the tied form implies.} Write $b_j$ for everything in
-Eq.~\ref{eq:util} not involving other basket items, and define, for baskets of size $n$,
+Write $\mathcal{C}_s(c)$ for the items of category $c$ that store $s$ carries. All four
+answers are read off $u_{ijt}$.
+
+\paragraph{1. Is category $c$ bought?} A coin flip whose bias depends on the household,
+the season of its last purchase, and how good the category looks today:
 \begin{equation}
-E(S)=\sum_{j\in S}b_j+\frac{1}{n-1}\sum_{\{j,k\}\subset S}\alpha_j^{\top}\alpha_k .
-\label{eq:energy}
-\end{equation}
-Swapping $j$ for $m$ holds $|S|=n$, so the $1/(n-1)$ is identical on both sides and
-\begin{equation}
-E(S')-E(S)=(b_m-b_j)+\alpha_m^{\top}\bar\alpha_j(S)-\alpha_j^{\top}\bar\alpha_j(S)=u_m-u_j,
-\label{eq:swap}
-\end{equation}
-which is exactly the difference the choice softmax scores. \textbf{The item head's
-conditionals are therefore the single-slot conditionals of $P(S)\propto e^{E(S)}$ at
-fixed basket size}, so Gibbs sampling over a draft basket converges to it. This is what
-justifies the sampler in Section~\ref{sec:sampling}, and it is verified numerically in
-Section~\ref{sec:verify}.
-
-\subsection{The nest}
-
-Category volume and item allocation are a Poisson--multinomial:
-\begin{align}
-Q_{ict}&\sim\mathrm{Poisson}\bigl(\exp(a_{ic}+\kappa_c IV_{ict})\bigr), &
-IV_{ict}&=\log\!\!\sum_{j\in c,\ \mathrm{carried}[j,s]}\!\! e^{u_{ijt}},\\
-(q_{ijt})_{j\in c}\mid Q_{ict}&\sim\mathrm{Multinomial}\bigl(Q_{ict},\ \mathrm{softmax}_j u_{ijt}\bigr).
-\end{align}
-Here $a_{ic}$ is the category's own log-rate for that household --- the intercept, taste
-and state terms of Eq.~\ref{eq:inc} below --- and $IV_{ict}$ is the \emph{inclusive
-value}, the log-sum-exp of the utilities of the items in category $c$ that the trip's
-store carries. It summarises how attractive the category is as a whole once its items and
-their prices are known.
-
-Poisson--multinomial factorises into independent counts
-$q_{ijt}\sim\mathrm{Poisson}(\exp(a_{ic}+(\kappa_c-1)IV_{ict}+u_{ijt}))$, which makes the
-reading of $\kappa$ explicit: at $\kappa=1$ the inclusive value cancels and category
-volume is whatever the items sum to (the IIA case); at $\kappa=0$ category volume is
-fixed and a price cut only moves share; above 1 the category expands more than
-proportionally. We set $\kappa_c=\mathrm{softplus}(\kappa^{\mathrm{raw}}_c)$ initialised
-at exactly $1.0$, so the data must move it in either direction.
-
-\subsection{Full specification: four likelihood terms}
-
-\paragraph{Item (allocation).} A softmax over the true item and $K$ sampled negatives,
-with items the store does not carry masked out:
-\begin{equation}
-\mathcal L_{\text{item}}=-\frac{1}{|R|}\sum_{r\in R}\log
-\frac{e^{u_{j_r}}}{\sum_{m\in C_r}\mathbb 1\{\mathrm{avail}_m\}e^{u_m}} .
-\end{equation}
-
-\paragraph{Quantity.} With its \emph{own} price coefficient, so the two margins are not
-forced to share one elasticity:
-\begin{equation}
-z_{ijt}=q^0_j-(\gamma^{q\top}_i\beta^q_j)\Delta\log p_{jst}+\eta^{q\top}_j x_{ijt},
-\qquad \text{units}-1\sim\mathrm{Poisson}(e^{z}).
-\end{equation}
-
-\paragraph{Incidence.} Bernoulli per (trip, category), on
-\begin{equation}
-\mathrm{logit}_{ict}=c^0_c+c^{u\top}_i c^c_c+c^{s\top}_c x_{ict}
-+\kappa_c\bigl(IV_{ict}-\overline{IV}_c\bigr)
-+w_{\text{ctx}}\,c^{c\top}_c\bar c(B)+\sum_{c'\in B\setminus c}W_{cc'} .
+y_{ct}\sim\mathrm{Bernoulli}\bigl(\sigma(\eta_{ict})\bigr),\qquad
+\eta_{ict}=\underbrace{c^0_c+c^{u\top}_i c^c_c+c^{s\top}_c x_{ict}}_{\text{household and timing}}
++\underbrace{\kappa_c\bigl(IV_{ict}-\overline{IV}_c\bigr)}_{\text{how good the items are}} ,
 \label{eq:inc}
 \end{equation}
-$x_{ict}$ is the same recency basis as the item term, evaluated for the category (using
-its first stocked item as the sub-commodity reference), and $\overline{IV}_c$ is a frozen
-per-category constant defined in Section~\ref{sec:iv}. The last two terms are optional and
-are the subject of Section~\ref{sec:cooc}:
-$\bar c(B)$ is a leave-one-out mean over the other categories in the basket, and $W$ is a
-free symmetric $C\times C$ matrix of category-pair log-odds.
+with $\sigma(x)=1/(1+e^{-x})$ turning the score into a probability. Term by term:
 
-\paragraph{Breadth.} Given the category is bought, how many \emph{distinct} items:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+symbol & shape & what it is \\
+\midrule
+$y_{ct}$ & scalar $\in\{0,1\}$ & 1 if the household buys anything from category $c$ on this trip \\
+$c^0_c$ & one per category & how often $c$ is bought at all: bread often, motor oil rarely \\
+$c^u_i$ & $K$ per household & what kinds of category this household leans toward \\
+$c^c_c$ & $K$ per category & where category $c$ sits among those kinds \\
+$c^{u\top}_i c^c_c$ & scalar & their match: this household's appetite for this category \\
+$x_{ict}$ & $4$ numbers & the recency basis of Section~\ref{sec:util}, for this category \\
+$c^s_c$ & $4$ per category & how strongly recency matters for this category \\
+$\kappa_c$ & one per category & how much the items' appeal feeds into buying the category \\
+$IV_{ict}$ & scalar & how good the category's items look today (Section~\ref{sec:nest}) \\
+$\overline{IV}_c$ & one per category & a constant subtracted from $IV$, fixed once during \\
+ & & fitting (Section~\ref{sec:iv}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+So the first three terms answer ``would this household buy this category on a normal
+day?'' and the fourth adjusts for what the category is worth \emph{today}, given its
+prices and what the store has.
+
+\paragraph{What $x_{ict}$ actually contains, and why it is wrong.} The recency basis of
+Section~\ref{sec:util} is defined per \emph{sub-commodity}. A category contains several,
+so a category-level recency has to be constructed somehow. The code does this
+(\code{27\_nested\_basket.py:425}):
+
+\begin{enumerate}
+\item take the item in category $c$ with the lowest \code{item\_id}, which is the lowest
+\code{PRODUCT\_ID} --- an arbitrary ordering with no meaning;
+\item read off that one item's sub-commodity;
+\item set $\tau$ = days since household $i$ last bought \emph{anything in that
+sub-commodity};
+\item return $x_{ict}=\bigl[\mathbb 1\{\text{never}\},\ e^{-\tau/7},\
+e^{-\tau/g_{\mathrm{sub}}},\ \log(1+\tau)/\log 100\bigr]^{\top}$.
+\end{enumerate}
+
+So it is not a category-level quantity at all. It is the recency of one arbitrarily chosen
+sub-commodity, standing in for the category. Concretely:
+
+\begin{center}
+\small\begin{tabular}{lrrlr}
+\toprule
+category & items & subs & sub-commodity actually used & \% of items \\
+\midrule
+BAKED BREAD/BUNS/ROLLS & 141 & 14 & HOT DOG BUNS & \textbf{8.5}\% \\
+BAG SNACKS & 153 & 12 & PRETZELS & 12.4\% \\
+CHEESE & 176 & 11 & NATURAL CHEESE CHUNKS & 19.9\% \\
+FRZN MEAT/MEAT DINNERS & 201 & 7 & PREMIUM ENTREES & 21.9\% \\
+SOFT DRINKS & 225 & 14 & 2 LITER BOTTLE, CARBONATED & 30.7\% \\
+YOGURT & 148 & 2 & YOGURT NOT MULTI-PACKS & 76.4\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For bread, the model's answer to ``is this household due to buy bread?'' is ``have they
+recently bought hot dog buns?''. Across all 188 categories the median chosen
+sub-commodity covers 50\% of its category's items, and in 21\% of categories it
+covers under 20\%.
+
+This is a defect, not a modelling choice, and we record it as one (Section~\ref{sec:disc}).
+Its effect is bounded by what the term is worth: $c^{s\top}_c x_{ict}$ sits inside the
+incidence score alongside the household and inclusive-value terms, and the state ablation
+in Section~\ref{sec:ablate} bounds the whole recency mechanism --- item-level and
+category-level together --- at 0.071 nats. A correct version would use the days since
+the household last bought \emph{any} item in the category, which is a change to the data
+build rather than the model; we have not made it, so every number in this paper uses the
+arbitrary-sub-commodity version.
+
+\paragraph{2. How many different products, given it is bought?}
 \begin{equation}
-z^b_{ic}=b^0_c+b^u_i-b^p_c\overline{\Delta\log p}_{ct},
-\qquad (\text{distinct items})-1\sim\mathrm{Poisson}(e^{z^b}).
+k_{ct}-1\sim\mathrm{Poisson}\bigl(e^{z^b_{ict}}\bigr),\qquad
+z^b_{ict}=b^0_c+b^u_i-b^p_c\,\overline{\Delta\log p}_{ct},
+\label{eq:brd}
 \end{equation}
-This term is necessary, not decorative. Deriving a count from $P(\text{buy})$ alone
-assumes $Q\sim\mathrm{Poisson}(\lambda)$ with $1-e^{-\lambda}=p$, giving
-$\mathbb E[Q\mid Q>0]=\lambda/p\in[1.01,1.12]$ for realistic incidence rates, against a
-real 1.284.
+Subtracting 1 and adding it back means $k\ge1$: a bought category contains at least one
+product, and the Poisson only models how many \emph{extra} ones.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+symbol & shape & what it is \\
+\midrule
+$k_{ct}$ & integer $\ge1$ & how many different products are taken from category $c$ \\
+$b^0_c$ & one per category & the typical breadth of this category --- one yoghurt or four \\
+$b^u_i$ & one per household & whether this household buys broadly or narrowly, overall \\
+$b^p_c$ & one per category & how much a category-wide promotion widens the selection \\
+$\overline{\Delta\log p}_{ct}$ & scalar & average price deviation over the category's stocked items \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The minus sign on $b^p_c$ means a positive $b^p_c$ widens the basket when prices fall.
+
+\paragraph{3. Which products?} The $k_{ct}$ products are drawn, without replacement, in
+proportion to $e^{u}$ among the items the store carries --- so an item twice as appealing
+is twice as likely, and an item the store does not stock cannot be chosen at all:
+\begin{equation}
+P(j)=\frac{e^{u_{ijt}}}{\sum_{j'\in\mathcal{C}_s(c)}e^{u_{ij't}}},\qquad j\in\mathcal{C}_s(c).
+\label{eq:alloc}
+\end{equation}
+
+\paragraph{4. How many units of each chosen product?}
+\begin{equation}
+q_{jt}-1\sim\mathrm{Poisson}\bigl(e^{z_{ijt}}\bigr),\qquad
+z_{ijt}=q^0_j-(\gamma^{q\top}_i\beta^q_j)\,\Delta\log p_{jst}+\eta^{q\top}_j x_{ijt},
+\label{eq:qty}
+\end{equation}
+Again $q\ge1$: a chosen product is bought at least once, and the Poisson models the
+extras.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+symbol & shape & what it is \\
+\midrule
+$q_{jt}$ & integer $\ge1$ & units of product $j$ \\
+$q^0_j$ & one per item & how many people usually take: one ketchup, six yoghurts \\
+$\gamma^q_i$ & $K_p$ per household & willingness to stock up when something is cheap \\
+$\beta^q_j$ & $K_p$ per item & how stockpile-able this item is \\
+$\eta^q_j$ & $4$ per item & how time since last purchase changes the amount \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Note the price coefficient here, $\gamma^{q\top}_i\beta^q_j$, is \emph{separate} from the
+one in Eq.~\ref{eq:util}. That is deliberate: the data says
+whether a household buys an item and how much of it respond to price at different rates
+(Section~\ref{sec:elast}), and sharing one coefficient would assume away the difference.
+
+\subsection{The term that ties them together, and what \texorpdfstring{$\kappa$}{kappa} means}
+\label{sec:nest}
+
+The four answers would be independent were it not for one term in Eq.~\ref{eq:inc}. The
+\emph{inclusive value}
+\begin{equation}
+IV_{ict}=\log\!\!\sum_{j\in\mathcal{C}_s(c)}\!\! e^{u_{ijt}}
+\label{eq:iv}
+\end{equation}
+collapses a whole category into one number: how appealing its items are, right now, at
+this store, at today's prices. If everything in the category goes on offer, every
+$u_{ijt}$ rises and so does $IV$. The coefficient $\kappa_c$ decides how much of that
+reaches the decision to buy the category at all.
+
+This is the model's answer to the retailer's question. A price cut on one item raises
+$IV$ a little; $\kappa_c$ says whether that turns into new category buyers or merely
+reshuffles Eq.~\ref{eq:alloc}:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+$\kappa_c=0$ & incidence ignores the items completely. A price cut moves share inside the
+category \\ & and nothing else --- pure cannibalisation. \\
+$\kappa_c=1$ & the reference point (see below): the category grows exactly as much as its
+items \\ & gained, and no more. \\
+$\kappa_c>1$ & the category grows more than its items gained --- the promotion pulls in
+trips. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Why $\kappa=1$ is the reference point.} Suppose instead of a coin flip we
+modelled the total units a household takes from category $c$ as a count
+$Q\sim\mathrm{Poisson}(e^{a_{ic}+\kappa_c IV_{ict}})$, split across the category's items in
+proportion to $e^{u}$. A Poisson total split by fixed proportions gives independent
+Poisson counts per item, with rates $e^{a_{ic}+\kappa_c IV}\cdot e^{u_{ijt}-IV}$, because
+the proportion for item $j$ is exactly $e^{u_{ijt}-IV}$ by Eq.~\ref{eq:iv}. That is
+\begin{equation}
+q_{ijt}\sim\mathrm{Poisson}\bigl(e^{\,a_{ic}+(\kappa_c-1)IV_{ict}+u_{ijt}}\bigr),
+\label{eq:kappa1}
+\end{equation}
+and at $\kappa_c=1$ the inclusive value disappears: each item's rate depends only on its
+own $u$, so the category's total is whatever its items happen to add up to. That is the
+sense in which $\kappa=1$ means ``no expansion'', and it is why we parameterise
+$\kappa_c=\mathrm{softplus}(\kappa^{\mathrm{raw}}_c)$ starting at exactly $1.0$: the data
+must push it off the neutral point in one direction or the other.
+
+Eq.~\ref{eq:kappa1} is a device for reading $\kappa$, not a second model. The fitted
+model is Eqs.~\ref{eq:inc}--\ref{eq:qty}, in which the inclusive value appears once, in
+the incidence term.
+
+\subsection{Letting items in a cart influence each other}
+\label{sec:inter}
+
+The remaining term in Eq.~\ref{eq:util} is $\rho_j^{\top}\bar\alpha_j(S)$, where $S$ is
+the set of items in the basket. For item $j$ in a basket of $n$ items, the context is
+\begin{equation}
+\bar\alpha_j(S)=\frac{1}{n-1}\Bigl(\sum_{k\in S}\alpha_k-\alpha_j\Bigr),
+\qquad \bar\alpha_j(S):=\mathbf 0 \text{ when } n=1.
+\label{eq:ctx}
+\end{equation}
+
+\paragraph{Why this is an average over the other items.} Item $j$ is itself in the basket,
+so $\sum_{k\in S}\alpha_k$ already includes $\alpha_j$; subtracting it leaves the sum over
+everything else,
+\begin{equation}
+\sum_{k\in S}\alpha_k-\alpha_j=\sum_{k\in S,\,k\neq j}\alpha_k ,
+\qquad\text{so}\qquad
+\bar\alpha_j(S)=\frac{1}{n-1}\sum_{k\in S,\,k\neq j}\alpha_k .
+\end{equation}
+$S$ has $n$ items and one of them is $j$, so there are $n-1$ others; dividing by $n-1$
+makes this their average. When $n=1$ there are no others, $n-1=0$, and the term is set to
+zero.
+
+\paragraph{Why the interaction is an average of pairwise affinities.} A dot product is
+linear, so the constant comes out and $\rho_j^{\top}$ goes inside the sum:
+\begin{equation}
+\rho_j^{\top}\bar\alpha_j(S)=\frac{1}{n-1}\sum_{k\in S,\,k\neq j}\rho_j^{\top}\alpha_k .
+\label{eq:pairwise}
+\end{equation}
+Each $\rho_j^{\top}\alpha_k$ is one number saying how much having $k$ in the cart helps or
+hurts $j$: positive means they go together, negative means they compete. The term is the
+average of those over everything else in the cart. For a cart $\{j,k,l,m\}$ it is
+$\tfrac13(\rho_j^{\top}\alpha_k+\rho_j^{\top}\alpha_l+\rho_j^{\top}\alpha_m)$.
+
+Eq.~\ref{eq:ctx} is what the code computes, because the basket sum is accumulated once and
+each item's context follows from one subtraction. The data records no order within a
+receipt, so $S$ is a set: the context is the whole cart, never a prefix.
+
+\paragraph{Tied or untied.} Setting $\rho_j=\alpha_j$ makes the interaction
+$\alpha_j^{\top}\alpha_k$, which is symmetric and largest when two items are \emph{alike}.
+That forces co-purchase structure into $\alpha$, which is what makes the embedding recover
+product categories (Section~\ref{sec:embed}), but it cannot say that two \emph{different}
+items belong together. Leaving $\rho$ free allows that, and allows negatives for items
+that compete. Section~\ref{sec:rho} measures which is better; the tied form is the
+default.
+
+\paragraph{What distribution over baskets this implies.} Write $b_j$ for every part of
+Eq.~\ref{eq:util} that does not involve other basket items. For baskets of a fixed size
+$n$, define a score for the whole basket,
+\begin{equation}
+E(S)=\sum_{j\in S}b_j+\frac{1}{n-1}\sum_{\{j,k\}\subset S}\alpha_j^{\top}\alpha_k ,
+\label{eq:energy}
+\end{equation}
+where $\{j,k\}\subset S$ runs over each unordered pair once, and let higher-scoring
+baskets be more likely, $P(S)\propto e^{E(S)}$. Now swap one item: replace $j\in S$ by
+some $m\notin S$, giving $S'$. The size does not change, so the constant $\tfrac1{n-1}$ is
+the same on both sides. Every item other than $j$ and $m$ contributes the same $b$ to both
+and cancels; every pair not involving $j$ or $m$ likewise cancels. What is left is the
+pairs $j$ had with the rest, removed, and the pairs $m$ gains with that same rest:
+\begin{equation}
+E(S')-E(S)=(b_m-b_j)+\alpha_m^{\top}\bar\alpha_j(S)-\alpha_j^{\top}\bar\alpha_j(S)=u_m-u_j .
+\label{eq:swap}
+\end{equation}
+That is exactly the difference Eq.~\ref{eq:alloc} scores when choosing between $m$ and
+$j$. So the model's answer to ``what goes in this slot, given the rest of the cart'' is
+the conditional of $P(S)\propto e^{E(S)}$ at fixed basket size --- which is what makes the
+Gibbs sampler of Section~\ref{sec:sampling} legitimate, and is checked numerically in
+Section~\ref{sec:verify}.
+
+\subsection{The probability of a whole basket}
+\label{sec:joint}
+
+Multiplying the four answers together gives what the model says about a trip. Write
+\begin{equation}
+\mathcal{B}=\bigl(\;\underbrace{y_1..y_C}_{\text{which categories}},\;
+\underbrace{(k_c)}_{\text{how many products each}},\;
+\underbrace{(J_c)}_{\text{which products}},\;
+\underbrace{(q_j)}_{\text{how many units each}}\;\bigr)
+\end{equation}
+for a basket, where $J_c$ is the set of $k_c$ products taken from category $c$. Prices,
+the store, the day and the household are given, never generated. Then
+\begin{equation}
+P(\mathcal{B})=
+\prod_{c=1}^{C}\underbrace{\sigma(\eta_{ict})^{y_c}\bigl(1-\sigma(\eta_{ict})\bigr)^{1-y_c}}_{\text{Eq.~\ref{eq:inc}: bought or not}}
+\;\cdot\!\!\prod_{c:\,y_c=1}\!\!\Bigl[\;
+\underbrace{P(k_c)}_{\text{Eq.~\ref{eq:brd}}}\;
+\underbrace{P(J_c\mid k_c)}_{\text{Eq.~\ref{eq:alloc}}}\;
+\prod_{j\in J_c}\underbrace{P(q_j)}_{\text{Eq.~\ref{eq:qty}}}\Bigr].
+\label{eq:joint}
+\end{equation}
+Every category contributes a coin-flip factor whether bought or not; a bought category
+contributes three more. Reading Eq.~\ref{eq:joint} left to right is exactly the sampler of
+Section~\ref{sec:sampling}, stage by stage.
+
+\subsection{What is fitted, and the three ways it differs from Eq.~\ref{eq:joint}}
+\label{sec:fitgap}
+
+Training does not maximise $\log P(\mathcal{B})$. It minimises a weighted sum of four
+losses (Section~\ref{sec:obj}), and three differences are worth naming because they change
+what the reported numbers mean.
+
+\emph{(i) The choice term is conditional on the rest of the cart.} Eq.~\ref{eq:alloc}
+draws $k_c$ products with no reference to the other categories. Training instead scores
+each purchased row against the whole rest of the basket, through $\bar\alpha_j(S)$, and so
+maximises $\sum_j\log P(j\mid\mathcal{B}\setminus j)$. Eq.~\ref{eq:swap} shows those
+conditionals belong to a genuine distribution, which is what licenses the sampler; but
+they are not the factor $P(J_c\mid k_c)$ in Eq.~\ref{eq:joint}.
+
+\emph{(ii) The two choice sets differ.} Eq.~\ref{eq:alloc} normalises over the category's
+stocked items. Training normalises over the true item plus negatives drawn from the
+\emph{whole catalogue}, while generation draws within a category
+(\code{27\_nested\_basket.py:423} against
+\code{28\_nested\_counterfactual.py:436}). The term is therefore fitted as a
+catalogue-wide choice and used as a within-category one.
+Section~\ref{sec:negfix} finds that drawing negatives from the true item's own category
+improves generated co-occurrence sharply. Closing this gap is one plausible reason; we
+have not separated it from the other.
+
+\emph{(iii) The terms are separately averaged and weighted.} Each loss is a mean over its
+own sample --- purchase rows, sampled categories, bought categories --- then multiplied by
+$w_q,w_c,w_b$. Eq.~\ref{eq:joint} implies particular relative weights; the objective does
+not reproduce them.
+
+\paragraph{Consequence.} The model has a well-defined distribution over baskets,
+Eq.~\ref{eq:joint}, and Section~\ref{sec:gen} tests it by sampling from it and comparing
+against real baskets. It has no tractable likelihood for a whole basket: no number in this
+paper is $\log P(\mathcal{B})$ on held-out data. Every likelihood reported is the
+conditional in (i).
 
 %======================================================================
 \section{Inference}
@@ -555,6 +800,7 @@ gives the objective, the three sampling schemes it depends on, and the computati
 cost. Code: \code{scripts/27\_nested\_basket.py}.
 
 \subsection{Objective}
+\label{sec:obj}
 
 \begin{equation}
 \mathcal L=\mathcal L_{\text{item}}+w_q\mathcal L_{\text{qty}}
@@ -767,6 +1013,7 @@ derivatives of Section~\ref{sec:decomp}; and both claims about the sampled inclu
 value in Section~\ref{sec:iv}.
 
 \subsection{Ablations}
+\label{sec:ablate}
 
 \begin{center}
 \begin{tabular}{lrrr}
@@ -1217,9 +1464,18 @@ Section~\ref{sec:eda} measures an implied $-2.83$ in the cut week against $-0.79
 ordinary variation. Display and feature are not observed, so one coefficient averages two
 regimes.
 \item \textbf{Basket-size distributions are wrong in shape} even where means agree.
-\item \textbf{There is no held-out joint likelihood}, because the partition function over
-size-$n$ baskets is intractable. The reported item log-likelihood is conditional and is
-not a substitute.
+\item \textbf{There is no held-out joint likelihood.} The model has a well-defined
+generative distribution over baskets (Eq.~\ref{eq:joint}) but no tractable likelihood for
+one: the item stage is fitted as a conditional, its softmax is normalised over a
+different set than the generative one, and the four terms are weighted rather than
+multiplied. Every likelihood in this paper is the \emph{conditional} of
+Section~\ref{sec:joint}, never $\log P(\mathcal{B})$. Generation, evaluated in
+Section~\ref{sec:gen}, is the only test of the joint.
+
+\item \textbf{The item head is trained on one choice set and used on another.} Negatives
+come from the whole catalogue; generation draws within a category
+(Section~\ref{sec:joint}). Section~\ref{sec:negfix} shows that closing this gap improves
+co-occurrence sharply, but we did not separate that explanation from the one we gave.
 \item \textbf{$\kappa$ is weakly identified}, having moved with the incidence sampler
 rather than the data before settling.
 \item \textbf{Partial baskets need a correction at serving time.} The interaction

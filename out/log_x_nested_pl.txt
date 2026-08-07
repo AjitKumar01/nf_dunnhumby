@@ -1,0 +1,9 @@
+[27] PLACEBO: price panel scrambled with 'permute'
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model nested_pl: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,392 parameters
+[27]   froze IV reference at iteration 500: mean 2.270, 188 of 188 categories observed
+[27]   it  1000  item -1.9992  top1 0.358  qNLL 0.6935  cNLL 0.1177  kappa 0.782  breadth 1.458  price +0.000 *
+[27]   it  2000  item -1.9600  top1 0.375  qNLL 0.6820  cNLL 0.1197  kappa 0.751  breadth 1.363  price +0.000 *
+[27]   it  3000  item -1.9143  top1 0.392  qNLL 0.6870  cNLL 0.1174  kappa 0.707  breadth 1.329  price +0.000 *
+[27]   it  4000  item -1.9353  top1 0.388  qNLL 0.6799  cNLL 0.1156  kappa 0.655  breadth 1.309  price +0.000

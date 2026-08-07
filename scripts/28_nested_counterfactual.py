@@ -44,7 +44,7 @@ import torch
 nb = importlib.import_module("27_nested_basket")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-IN = os.path.join(HERE, "..", "basket_input")
+IN = os.path.join(HERE, "..", os.environ.get("NF_BASKET_INPUT", "basket_input"))
 OUT = os.path.join(HERE, "..", "out")
 FIG = os.path.join(HERE, "..", "figures")
 

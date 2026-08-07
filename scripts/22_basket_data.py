@@ -65,6 +65,9 @@ def log(m):
 
 
 def main(a):
+    global OUT
+    if a.outdir:
+        OUT = os.path.join(HERE, "..", a.outdir)
     os.makedirs(OUT, exist_ok=True)
     tx = pd.read_parquet(os.path.join(DATA, "tx.parquet"),
                          columns=["household_key", "DAY", "WEEK_NO", "PRODUCT_ID",
@@ -77,11 +80,31 @@ def main(a):
     log(f"raw: {len(tx):,} lines, {tx.PRODUCT_ID.nunique():,} products, "
         f"{tx.BASKET_ID.nunique():,} baskets")
 
+    # ---------------------------------------------------- the split boundary, first
+    # The week boundaries have to be known BEFORE any filter is applied, because with
+    # --train-only-features the filters themselves must be computed from training weeks
+    # alone.  Deciding which items and households exist using the full two years is a
+    # sample-selection leak: an item kept because it sold well in the test period is an
+    # item the model would never have known to model.
+    wmax0 = int(tx.WEEK_NO.max())
+    test_from0 = wmax0 - a.test_weeks + 1
+    val_from0 = test_from0 - a.val_weeks
+    # The item/household filters are a SAMPLE-DEFINITION choice, not a prediction-time
+    # leak: whether an item is in the catalogue tells the model nothing about which item
+    # a basket contained.  It is separated from --train-only-features so the effect of
+    # fixing the real leak can be measured without also changing the task.  The dropped
+    # items are not thin -- median 86 training lines against a threshold of 100 -- so
+    # including them makes the task HARDER, not easier.
+    tx_sel = tx[tx.WEEK_NO < val_from0] if a.train_only_filters else tx
+    if a.train_only_filters:
+        log(f"TRAIN-ONLY SELECTION: filters computed on weeks < {val_from0} "
+            f"({len(tx_sel):,} of {len(tx):,} lines)")
+
     # ------------------------------------------------------------- item universe
     # The only filter that survives: an item needs enough purchases for its own
     # embedding to mean anything.  Nothing is dropped for violating unit demand,
     # for co-moving prices, or for seasonality.
-    freq = tx.groupby("PRODUCT_ID").size()
+    freq = tx_sel.groupby("PRODUCT_ID").size()
     keep = freq[freq >= a.min_lines].index
     tx = tx[tx.PRODUCT_ID.isin(set(keep))].copy()
     log(f"kept {len(keep):,} items with >={a.min_lines} lines -> {len(tx):,} lines "
@@ -91,7 +114,8 @@ def main(a):
     # Households need enough trips for a taste vector to be estimable.  This is the
     # paper's own 20-300 trip rule, kept because it is about statistical support
     # rather than about the model's structure.
-    trips_per_hh = tx.groupby("household_key").DAY.nunique()
+    trips_per_hh = (tx_sel[tx_sel.PRODUCT_ID.isin(set(keep))]
+                    .groupby("household_key").DAY.nunique())
     hh_keep = trips_per_hh[(trips_per_hh >= a.min_trips) & (trips_per_hh <= a.max_trips)].index
     tx = tx[tx.household_key.isin(set(hh_keep))].copy()
     log(f"kept {len(hh_keep):,} households with {a.min_trips}-{a.max_trips} trips "
@@ -167,10 +191,38 @@ def main(a):
         f"appears in training ({bad.sum() / max((bk.split != 'train').sum(), 1):.2%} of held out)")
     bk = bk[~bad].reset_index(drop=True)
 
+    # Everything below this line is a FEATURE derived from the data.  With
+    # --train-only-features every one of them is computed from training weeks alone,
+    # because a feature built from the whole panel leaks held-out information into the
+    # inputs the model sees at training time.  See NESTED_MODEL.md 11.
+    # WHAT MUST BE TRAIN-ONLY, AND WHAT MUST NOT.
+    #
+    # A feature is a leak only if it could not have been known at the moment of the
+    # decision it helps predict.  That splits three ways and conflating them is easy:
+    #
+    #   contemporaneous  the posted price on day t, and a store's price that week.  A
+    #                    shopper standing at the shelf in week 95 sees the week-95 tag.
+    #                    Restricting these to training weeks does not remove a leak, it
+    #                    DELETES THE EXPERIMENT: held-out prices then carry forward from
+    #                    week 82 and the test period has no price variation at all.
+    #   past lookups     "days since this household last bought this sub-commodity".
+    #                    searchsorted is strictly-before, so all events are safe to use.
+    #   time-aggregates  the within-item mean that centres the price, the per-
+    #                    sub-commodity median repurchase gap, and "this store ever sold
+    #                    this item".  These summarise a span that includes the future.
+    #                    THESE are the leaks, and only these are restricted below.
+    tx_feat = tx
+    tx_agg = tx[tx.WEEK_NO < val_from] if a.train_only_features else tx
+    if a.train_only_features:
+        log(f"TRAIN-ONLY AGGREGATES: centring, repurchase gaps and availability from "
+            f"{len(tx_agg):,} of {len(tx):,} lines (weeks < {val_from}); "
+            f"prices and store deviations stay contemporaneous")
+
     # ------------------------------------------------------------- price panel
     # Daily log price per item, carried forward from the last observed day and back
     # for the start of the panel.  Held at the chain level, as elsewhere in the repo.
-    pd_day = (tx.groupby(["item_id", "DAY"]).unit_price.median().rename("p").reset_index())
+    pd_day = (tx_feat.groupby(["item_id", "DAY"]).unit_price.median()
+              .rename("p").reset_index())
     grid = pd.MultiIndex.from_product([np.arange(J), np.arange(D)],
                                       names=["item_id", "DAY"]).to_frame(index=False)
     pg = grid.merge(pd_day, on=["item_id", "DAY"], how="left").sort_values(["item_id", "DAY"])
@@ -178,13 +230,27 @@ def main(a):
     pg["p"] = pg.groupby("item_id").p.bfill()
     obs_share = float(pd_day.shape[0] / (J * D))
     price = pg.p.to_numpy(dtype=np.float32).reshape(J, D)
-    # An item with no price anywhere cannot happen (it has >=100 purchases), but be
-    # explicit rather than propagating a NaN into a log.
+    # With --train-only-features an item that never sold during the training weeks has
+    # no observed price at all.  Those items are unusable by construction -- the split
+    # already drops held-out rows whose item never appears in training -- so fill them
+    # with the catalogue median and record how many.
+    holes = ~np.isfinite(price).all(axis=1)
+    if holes.any():
+        med = float(np.nanmedian(price[~holes]))
+        price[holes] = med
+        log(f"  {int(holes.sum())} of {J} items never priced in the feature window; "
+            f"filled at the catalogue median {med:.2f} (their held-out rows are dropped)")
     assert np.isfinite(price).all(), "price grid has holes"
     log_price = np.log(np.clip(price, 1e-3, None)).astype(np.float32)
     # Centre per item: the level is absorbed by the item's own intercept, and what
     # identifies price response is deviation from that item's normal price.
-    log_price_dev = (log_price - log_price.mean(axis=1, keepdims=True)).astype(np.float32)
+    # Centre on the TRAINING days only when asked.  Using all D days makes the centring
+    # constant depend on held-out prices; it is a per-item shift, but it is still a
+    # number the model could not have known at training time.
+    cut = int(bk[bk.split == "train"].DAY.max()) + 1 if a.train_only_features else D
+    log_price_dev = (log_price - log_price[:, :cut].mean(axis=1, keepdims=True)
+                     ).astype(np.float32)
+    log(f"  centred on days 0..{cut - 1} of {D}")
     log(f"price panel: {J} x {D}, {obs_share:.1%} of item-days directly observed, "
         f"sd of within-item log price {log_price_dev.std():.4f}")
 
@@ -206,10 +272,13 @@ def main(a):
     #    availability is proxied by "this store sold this item at some point in a
     #    window around this week", which is the standard proxy and is a proxy.
     tx["store_id"] = tx.BASKET_ID.map(store_of_basket).map(sid).astype(np.int32)
+    # store_id is assigned here, after tx_feat was first taken, so re-slice it
+    tx_feat = tx
+    tx_agg = tx[tx.WEEK_NO < val_from] if a.train_only_features else tx
     n_stores = len(stores)
-    sp = (tx.groupby(["item_id", "store_id", "WEEK_NO"])
+    sp = (tx_feat.groupby(["item_id", "store_id", "WEEK_NO"])
           .unit_price.median().rename("p_store").reset_index())
-    cp = (tx.groupby(["item_id", "WEEK_NO"])
+    cp = (tx_feat.groupby(["item_id", "WEEK_NO"])
           .unit_price.median().rename("p_chain").reset_index())
     sp = sp.merge(cp, on=["item_id", "WEEK_NO"])
     eps = 1e-3
@@ -220,7 +289,7 @@ def main(a):
         f"median |dev| {sp.dev.abs().median():.4f} in logs")
 
     # availability: item x store, plus the first and last week each store sold it
-    av = (tx.groupby(["item_id", "store_id"])
+    av = (tx_agg.groupby(["item_id", "store_id"])
           .WEEK_NO.agg(["min", "max", "size"]).reset_index())
     av = av[av["size"] >= a.min_store_lines]
     carried = np.zeros((J, n_stores), dtype=bool)
@@ -233,6 +302,13 @@ def main(a):
     # For every (household, sub-commodity) pair, the sorted days on which that
     # household bought that sub-commodity.  Encoded as one globally sorted key array
     # so a batch query is a single searchsorted (see the module docstring).
+    # NOT tx_feat.  The state lookup is strictly-before -- searchsorted finds the last
+    # purchase with day < t -- so using every purchase event is correct even for a test
+    # row: a household's week-90 purchase is genuinely in the past when predicting week
+    # 95.  Restricting these keys to training weeks would delete real history and make
+    # the feature worse for no gain.  What must be train-only is the AGGREGATE below,
+    # sub_gap, because a median over the whole panel is a number computed from the
+    # future.
     ev = tx[["user_id", "sub_id", "DAY"]].drop_duplicates()
     ev = ev.sort_values(["user_id", "sub_id", "DAY"]).reset_index(drop=True)
     ev["group"] = ev.user_id.astype(np.int64) * S + ev.sub_id
@@ -249,7 +325,8 @@ def main(a):
     # Median repurchase gap per sub-commodity: the natural time scale for that
     # sub-commodity, used to normalise recency so "a long time" means the right
     # number of days for milk and for shampoo.
-    g = ev.copy()
+    g = (ev[ev.DAY <= bk[bk.split == "train"].DAY.max()].copy()
+         if a.train_only_features else ev.copy())
     g["prev"] = g.groupby(["user_id", "sub_id"]).DAY.shift()
     gaps = (g.DAY - g.prev).dropna()
     gap_by_sub = (g.assign(gap=g.DAY - g.prev).dropna(subset=["gap"])
@@ -259,6 +336,32 @@ def main(a):
     sub_gap = np.clip(sub_gap, 3.0, 180.0)
     log(f"  repurchase gap: overall median {gaps.median():.0f} days; per sub-commodity "
         f"median ranges {sub_gap.min():.0f}-{sub_gap.max():.0f}")
+
+    # ------------------------------------------------ category-level recency
+    # The incidence head needs "how long since this household bought anything from
+    # category c".  Until now it borrowed the sub-commodity state of whichever item in
+    # the category happened to have the lowest PRODUCT_ID -- an arbitrary pick that
+    # covered a median of 50% of its category's items and under 20% in a fifth of them
+    # (for BAKED BREAD/BUNS/ROLLS it asked about HOT DOG BUNS).  Built properly here,
+    # with the same sorted-key trick one level up.
+    tx["cat_id"] = tx.item_id.map(items.set_index("item_id").cat_id).astype(np.int32)
+    evc = tx[["user_id", "cat_id", "DAY"]].drop_duplicates()
+    evc = evc.sort_values(["user_id", "cat_id", "DAY"]).reset_index(drop=True)
+    C = int(items.cat_id.max()) + 1
+    evc["group"] = evc.user_id.astype(np.int64) * C + evc.cat_id
+    cat_keys = (evc.group.to_numpy() * DAY_STRIDE + evc.DAY.to_numpy()).astype(np.int64)
+    assert (np.diff(cat_keys) > 0).all(), "category state keys must be strictly increasing"
+    gc = (evc[evc.DAY <= bk[bk.split == "train"].DAY.max()].copy()
+          if a.train_only_features else evc.copy())
+    gc["prev"] = gc.groupby(["user_id", "cat_id"]).DAY.shift()
+    gaps_c = (gc.assign(g=gc.DAY - gc.prev).dropna(subset=["g"])
+              .groupby("cat_id").g.median())
+    cat_gap = np.full(C, float((gc.DAY - gc.prev).dropna().median()), dtype=np.float32)
+    cat_gap[gaps_c.index.to_numpy()] = gaps_c.to_numpy()
+    cat_gap = np.clip(cat_gap, 3.0, 180.0)
+    log(f"category state: {len(evc):,} (household, category, day) events across "
+        f"{evc.group.nunique():,} (household, category) pairs; "
+        f"gap median {np.median(cat_gap):.0f} days, range {cat_gap.min():.0f}-{cat_gap.max():.0f}")
 
     # ------------------------------------------------------------------ write
     bk.to_parquet(os.path.join(OUT, "baskets.parquet"), index=False)
@@ -271,7 +374,9 @@ def main(a):
              carried=carried, n_stores=np.int32(n_stores))
     np.savez(os.path.join(OUT, "state.npz"),
              keys=keys, gstart_keys=gstart_keys, gstart_vals=gstart_vals,
-             sub_gap=sub_gap, item_sub=items.sub_id.to_numpy().astype(np.int32))
+             sub_gap=sub_gap, item_sub=items.sub_id.to_numpy().astype(np.int32),
+             cat_keys=cat_keys, cat_gap=cat_gap,
+             item_cat=items.cat_id.to_numpy().astype(np.int32))
     meta = {
         "n_users": int(N), "n_items": int(J), "n_subs": int(S), "n_days": int(D),
         "n_baskets": int(bk.BASKET_ID.nunique()),
@@ -292,7 +397,7 @@ def main(a):
     }
     with open(os.path.join(OUT, "meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
-    log(f"wrote basket_input/ -> {len(bk):,} rows, {J:,} items, {N:,} households, "
+    log(f"wrote {os.path.basename(OUT)}/ -> {len(bk):,} rows, {J:,} items, {N:,} households, "
         f"{S:,} sub-commodities")
 
 
@@ -307,6 +412,20 @@ if __name__ == "__main__":
     p.add_argument("--max-units", type=int, default=12,
                    help="cap on units per (basket, item); dunnhumby's QUANTITY is "
                         "unreliable for weighed goods and the tail is bulk lines")
+    p.add_argument("--allow-leakage", dest="train_only_features", action="store_false",
+                   help="DANGEROUS.  Derive features and the item/household filters from "
+                        "the whole panel, as earlier versions did.  That leaks held-out "
+                        "data into the inputs and into which items exist at all: one "
+                        "item in four qualified only on its held-out-period sales. "
+                        "Kept solely to reproduce the old numbers.")
+    p.add_argument("--train-only-filters", action="store_true",
+                   help="also apply the item and household filters using training weeks "
+                        "only.  This is a sample-definition choice rather than a leak "
+                        "fix: it answers 'what could have been built at the split' but "
+                        "changes the catalogue, so nothing stays comparable.")
+    p.set_defaults(train_only_features=True)
+    p.add_argument("--outdir", default=None,
+                   help="write somewhere other than basket_input/")
     p.add_argument("--min-store-lines", type=int, default=1,
                    help="sales needed before a store counts as carrying an item; 1 "
                         "because an item a store sold was by definition available "

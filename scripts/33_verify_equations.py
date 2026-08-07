@@ -103,22 +103,33 @@ def main(label="nested"):
             return m.item_utility(torch.tensor([i]), blk, torch.zeros(1, m.K), dp_, st,
                                   torch.tensor([10]), torch.tensor([3]))
 
-        pos, eps = 0, 1e-4
+        # Derivatives are checked by AUTOGRAD, not finite differences.  The utilities
+        # are float32, so differencing two nearly equal log-sum-exps and dividing by a
+        # small step loses most of the precision -- at eps = 1e-5 the difference
+        # underflows to exactly zero.  Autograd gives the derivative the code actually
+        # implements, with no step size to tune.
+        pos = 0
         a_p = float(m.gamma[i] @ m.beta[blk[0, pos]])
+        dpg = dp.clone().requires_grad_(True)
+        with torch.enable_grad():
+            u_ = util(dpg)
+            lp = torch.log_softmax(u_, 1)[0, pos]
+            g1 = torch.autograd.grad(lp, dpg, retain_graph=True)[0][0, pos]
+            iv_ = torch.logsumexp(u_, 1)[0]
+            g2 = torch.autograd.grad(iv_, dpg)[0][0, pos]
         pi = float(torch.softmax(util(dp), 1)[0, pos])
-        dp2 = dp.clone()
-        dp2[0, pos] += eps
-        pi2 = float(torch.softmax(util(dp2), 1)[0, pos])
         check("8.4  d log pi_j / d log p_j = -(g.b)(1 - pi_j)", -a_p * (1 - pi),
-              (np.log(pi2) - np.log(pi)) / eps, 1e-3)
-        iv1, iv2 = float(torch.logsumexp(util(dp), 1)), float(torch.logsumexp(util(dp2), 1))
-        check("8.4  d IV / d log p_j = -(g.b) pi_j", -a_p * pi, (iv2 - iv1) / eps, 1e-3)
+              float(g1), 1e-4)
+        check("8.4  d IV / d log p_j = -(g.b) pi_j", -a_p * pi, float(g2), 1e-4)
         aq = float(m.q_gamma[i] @ m.q_beta[blk[0, pos]])
         zz = float(m.q0[blk[0, pos]])
         lam = np.exp(zz)
+        dq = torch.zeros(1, dtype=torch.float64, requires_grad=True)
+        with torch.enable_grad():
+            le = torch.log(1 + torch.exp(torch.tensor(zz, dtype=torch.float64) - aq * dq[0]))
+            g3 = torch.autograd.grad(le, dq)[0][0]
         check("8.4  d log E[units]/d log p = -(gq.bq) lam/(1+lam)",
-              -aq * lam / (1 + lam),
-              (np.log(1 + np.exp(zz - aq * eps)) - np.log(1 + lam)) / eps, 1e-3)
+              -aq * lam / (1 + lam), float(g3), 1e-6)
         kap = float(m.kappa()[cat])
         check("8.4  alloc + inc = -(g.b)[1 - pi(1 - kappa)]",
               -a_p * (1 - pi) - kap * a_p * pi, -a_p * (1 - pi * (1 - kap)))

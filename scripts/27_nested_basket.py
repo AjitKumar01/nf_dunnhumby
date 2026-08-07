@@ -70,7 +70,7 @@ import torch
 import torch.nn as nn
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-IN = os.path.join(HERE, "..", "basket_input")
+IN = os.path.join(HERE, "..", os.environ.get("NF_BASKET_INPUT", "basket_input"))
 OUT = os.path.join(HERE, "..", "out")
 
 N_STATE_FEATURES = 4
@@ -107,6 +107,7 @@ class NestedData:
         z = np.load(os.path.join(indir, "state.npz"))
         self.keys = z["keys"]; self.sub_gap = z["sub_gap"].astype(np.float32)
         self.item_sub = z["item_sub"].astype(np.int64)
+        self.cat_keys = z["cat_keys"]; self.cat_gap = z["cat_gap"].astype(np.float32)
 
         # --- stores: sparse price deviations, dense availability
         sz = np.load(os.path.join(indir, "store_price.npz"))
@@ -175,6 +176,27 @@ class NestedData:
             out[torch.as_tensor(np.flatnonzero(hit), device=self.device)] = \
                 self.sp_dev[torch.as_tensor(idx[hit], device=self.device)]
         return out
+
+    def cat_state(self, user, cat, day):
+        """Days since this household last bought ANYTHING from this category.
+
+        Same construction as `state`, one level up: strictly-before lookup on a sorted
+        key array, so nothing after `day` can enter.  Replaces the old proxy, which read
+        the sub-commodity of whichever item in the category had the lowest PRODUCT_ID.
+        """
+        group = user.astype(np.int64) * self.C + cat
+        key = group * self.stride + day
+        idx = np.searchsorted(self.cat_keys, key, side="left")
+        prev = np.clip(idx - 1, 0, len(self.cat_keys) - 1)
+        prev_key = self.cat_keys[prev]
+        same = (idx - 1 >= 0) & ((prev_key // self.stride) == group)
+        since = np.where(same, day - (prev_key % self.stride), 0).astype(np.float32)
+        gap = self.cat_gap[cat]
+        return np.stack([
+            (~same).astype(np.float32),
+            np.where(same, np.exp(-since / 7.0), 0.0),
+            np.where(same, np.exp(-since / gap), 0.0),
+            np.where(same, np.log1p(since) / np.log(100.0), 0.0)], axis=1).astype(np.float32)
 
     def state(self, user, item, day):
         sub = self.item_sub[item]
@@ -551,7 +573,7 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     # what it is: not on offer.  Centring happens in losses(), against the frozen
     # per-category reference, so training and generation share one constant.
     iv = torch.where(any_stocked, iv, torch.zeros_like(iv))
-    cst = d.state(user, blk_np[:, 0], day)
+    cst = d.cat_state(user, cats, day)
     # mean price deviation across the category's stocked items, for the breadth head
     pdev = (dlogp * (msk > 0).float()).sum(1) / (msk > 0).float().sum(1).clamp_min(1)
     # leave-one-out mean of the category embedding over the OTHER categories this

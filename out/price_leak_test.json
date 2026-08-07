@@ -1,0 +1,40 @@
+{
+  "rows": 25454,
+  "single_line_share": 0.4174196589926927,
+  "strata": {
+    "support = 1": {
+      "n": 10625,
+      "household repeat": -2.385255813598633,
+      "nested": -1.8901329040527344,
+      "nested_noctx": -2.0009937286376953
+    },
+    "2-4": {
+      "n": 9470,
+      "household repeat": -2.303919553756714,
+      "nested": -1.8989570140838623,
+      "nested_noctx": -1.9975954294204712
+    },
+    "5-19": {
+      "n": 4331,
+      "household repeat": -1.859526515007019,
+      "nested": -1.8083081245422363,
+      "nested_noctx": -1.8336948156356812
+    },
+    "20+": {
+      "n": 1028,
+      "household repeat": -1.1501740217208862,
+      "nested": -1.7372922897338867,
+      "nested_noctx": -1.8196033239364624
+    }
+  },
+  "matched_decoys": {
+    "household repeat": -2.518043041229248,
+    "nested": -2.0692436695098877,
+    "nested_noctx": -2.210982084274292
+  },
+  "ordinary_decoys": {
+    "household repeat": -2.2156612873077393,
+    "nested": -1.8733206987380981,
+    "nested_noctx": -1.963937759399414
+  }
+}

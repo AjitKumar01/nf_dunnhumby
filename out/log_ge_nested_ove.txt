@@ -1,0 +1,34 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[34] 24,768 held-out trips; generating with the SAME household, day, week and store
+[34]   generating with 0 Gibbs sweeps ...
+[34]   generating with 4 Gibbs sweeps ...
+[34] 
+[34] 1. shape -- whole distributions, compared by total variation distance
+[34]                                    real        gibbs0        gibbs4
+[34]    items per basket          8.18           8.81 (0.32)    8.81 (0.32)
+[34]    categories per basket     6.38           6.66 (0.33)    6.66 (0.33)
+[34]    units per basket         11.06          11.61 (0.30)   11.69 (0.30)
+[34]    distinct items / cat      1.28           1.32 (0.06)    1.32 (0.06)
+[34]    units per line            1.35           1.32 (0.01)    1.33 (0.01)
+[34]    (mean, and in brackets the total variation distance from the real distribution; 0 = identical, 1 = disjoint)
+[34] 
+[34] 2. per-item purchase rate across the whole catalogue
+[34]    gibbs0     pearson +0.613  spearman +0.354  real items never generated 0.1%
+[34]    gibbs4     pearson +0.551  spearman +0.450  real items never generated 0.0%
+[34] 
+[34] 3. co-occurrence lift -- the model-free version of the interaction term
+[34]    gibbs0     20,091 pairs   spearman of lift -0.098   mean lift real 3.42 vs generated 1.42
+[34]    gibbs4     20,073 pairs   spearman of lift +0.005   mean lift real 3.48 vs generated 1.64
+[34] 
+[34] 4. within-basket pairs sharing a held-out label (model never sees these)
+[34]    real       same sub-commodity 0.0646   same department 0.5581
+[34]    gibbs0     same sub-commodity 0.0233   same department 0.5810
+[34]    gibbs4     same sub-commodity 0.0588   same department 0.5796
+[34] 
+[34] 5. price response recovered FROM GENERATED DATA
+[34]    real held-out baskets      elasticity -0.6480  on 49,784 item-weeks
+[34]    generated, 0 Gibbs sweeps   elasticity -0.5083  on 57,226 item-weeks   (78% of real)
+[34]    generated, 4 Gibbs sweeps   elasticity -0.5328  on 56,053 item-weeks   (82% of real)
+[34] 
+[34] wrote out/generator_eval_nested_ove.json and figures/generator_eval_nested_ove.png

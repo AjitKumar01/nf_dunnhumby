@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.11.18)  7 AUG 2026 09:55
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.11.18)  7 AUG 2026 18:15
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -492,6 +492,10 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 
 [14]
 
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+
 [15]
 
 [16]
@@ -504,44 +508,53 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 
 [20]
 
-[21] (./nested_basket.aux)
+[21]
+
+[22]
+
+[23]
+
+[24]
+
+[25] (./nested_basket.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
  ***********
 Package rerunfilecheck Info: File `nested_basket.out' has not changed.
-(rerunfilecheck)             Checksum: CC67CBB716D42A171660FBBC899D9376;8288.
+(rerunfilecheck)             Checksum: 91116440FBA0856982D36542D712DDE3;9328.
  ) 
 Here is how much of TeX's memory you used:
- 11340 strings out of 474662
- 173527 string characters out of 5751108
- 590805 words of memory out of 5000000
- 34103 multiletter control sequences out of 15000+600000
+ 11381 strings out of 474662
+ 173963 string characters out of 5751108
+ 592924 words of memory out of 5000000
+ 34122 multiletter control sequences out of 15000+600000
  570373 words of font info for 81 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
- 75i,12n,79p,484b,506s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,15n,79p,484b,566s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx1
 0.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfonts/cm/c
 mbx12.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfonts/
 cm/cmex10.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/amsfo
 nts/cm/cmmi10.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/public/a
-msfonts/cm/cmmi6.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/publi
-c/amsfonts/cm/cmmi8.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/pu
-blic/amsfonts/cm/cmr10.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1
-/public/amsfonts/cm/cmr12.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/ty
-pe1/public/amsfonts/cm/cmr17.pfb></usr/local/texlive/2025basic/texmf-dist/fonts
-/type1/public/amsfonts/cm/cmr6.pfb></usr/local/texlive/2025basic/texmf-dist/fon
-ts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/texlive/2025basic/texmf-dist/f
-onts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2025basic/texmf-di
-st/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/local/texlive/2025basic/texmf
--dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive/2025basic/te
-xmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive/2025basi
-c/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/2025
-basic/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on nested_basket.pdf (21 pages, 317714 bytes).
+msfonts/cm/cmmi12.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/publ
+ic/amsfonts/cm/cmmi6.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type1/p
+ublic/amsfonts/cm/cmmi8.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmr10.pfb></usr/local/texlive/2025basic/texmf-dist/fonts/t
+ype1/public/amsfonts/cm/cmr12.pfb></usr/local/texlive/2025basic/texmf-dist/font
+s/type1/public/amsfonts/cm/cmr17.pfb></usr/local/texlive/2025basic/texmf-dist/f
+onts/type1/public/amsfonts/cm/cmr6.pfb></usr/local/texlive/2025basic/texmf-dist
+/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/texlive/2025basic/texmf-di
+st/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2025basic/texm
+f-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/local/texlive/2025basic/t
+exmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive/2025basi
+c/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive/2025
+basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/
+2025basic/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
+Output written on nested_basket.pdf (25 pages, 348180 bytes).
 PDF statistics:
- 585 PDF objects out of 1000 (max. 8388607)
- 522 compressed objects within 6 object streams
- 148 named destinations out of 1000 (max. 500000)
- 345 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 687 PDF objects out of 1000 (max. 8388607)
+ 605 compressed objects within 7 object streams
+ 170 named destinations out of 1000 (max. 500000)
+ 361 words of extra memory for PDF output out of 10000 (max. 10000000)
 
