@@ -1,0 +1,3 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model nested_rho: K=64 nest=True quantity=True context=True store=True avail_only=False -> 1,254,858 parameters

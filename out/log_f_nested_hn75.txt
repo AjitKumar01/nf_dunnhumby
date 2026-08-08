@@ -1,0 +1,5 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model nested_hn75: K=64 nest=True quantity=True context=True store=True avail_only=False -> 905,738 parameters
+[27]   froze IV reference at iteration 500: mean 1.835, 188 of 188 categories observed
+[27]   it  1000  exact -6.7987 (T 1.50 top1 0.051)  item -4.6643  top1 0.123  qNLL 0.6844  cNLL 0.1077  bNLL 0.6016  kappa 0.779  breadth 1.459  price +0.282 *

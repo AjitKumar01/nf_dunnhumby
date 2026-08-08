@@ -134,9 +134,19 @@ class NestedData:
             ci[c, :len(js)] = js; cm[c, :len(js)] = 1.0
         self.cat_items = torch.as_tensor(ci, device=device)
         self.cat_mask = torch.as_tensor(cm, device=device)
-        self.cat_items_np = ci                       # for in-category negatives
+        self.cat_mask_np = cm
+        self.cat_items_np = ci
         self.cat_nvalid_np = cm.sum(1).astype(np.int64)
         self.item_cat_np = it_cat
+        # Position of each item WITHIN its category block, so a purchase row can be
+        # scored as a categorical draw over that block: target index = item_pos[j].
+        # This is what makes the exact within-category softmax addressable.
+        ip = np.zeros(self.J, dtype=np.int64)
+        for c in range(self.C):
+            js = np.flatnonzero(it_cat == c)
+            ip[js] = np.arange(len(js))
+        self.item_pos_np = ip
+        self.item_pos = torch.as_tensor(ip, device=device)
 
         bk = bk.sort_values(["split", "BASKET_ID", "item_id"]).reset_index(drop=True)
         self.splits = {}
@@ -394,7 +404,7 @@ class NestedModel(nn.Module):
         return sum((p ** 2).sum() for p in ps if p is not None)
 
 
-def make_batch(d, model, split, bidx, n_neg, rng, device, clean_neg=True):
+def make_batch(d, model, split, bidx, rng, device):
     """Positives, store-aware negatives, context, prices, state, units."""
     sp = d.splits[split]
     starts, ends = sp["starts"][bidx], sp["ends"][bidx]
@@ -407,7 +417,10 @@ def make_batch(d, model, split, bidx, n_neg, rng, device, clean_neg=True):
 
     owner = np.repeat(np.arange(len(bidx)), lens)
     ow = torch.as_tensor(owner, device=device)
-    a_all = model.alpha.detach()[item]
+    # No detach: alpha_j receives gradient both as the scored product and through
+    # every other position's context, which is what the pseudo-likelihood of Eq. 20
+    # differentiates.
+    a_all = model.alpha[item]
     sums = torch.zeros(len(bidx), model.K, device=device, dtype=a_all.dtype)
     sums.index_add_(0, ow, a_all)
     n_in = torch.as_tensor(lens, device=device, dtype=a_all.dtype)[ow]
@@ -442,27 +455,16 @@ def make_batch(d, model, split, bidx, n_neg, rng, device, clean_neg=True):
             ctx = ctx / (n_in - 1).clamp_min(1).unsqueeze(1)
         ctx = torch.where((n_in > 1).unsqueeze(1), ctx, torch.zeros_like(ctx))
 
-    neg = rng.choice(d.J, size=(B, n_neg), p=d.neg_p).astype(np.int64)
-    negq = d.neg_p[neg].astype(np.float64)      # proposal density, per column
-    # Harder negatives.  Drawn from the whole catalogue, a decoy is usually separable
-    # by lambda_j + theta_i.alpha_j alone, so the softmax rarely has to ask "does this
-    # item fit THIS basket" -- which may be why no interaction parameterisation moved
-    # the per-pair co-occurrence rank correlation off zero (NESTED_MODEL.md 8.6f).
-    # Replacing a fraction with items from the TRUE item's own category removes
-    # popularity and broad taste as discriminators and leaves the basket context as
-    # the signal that can separate them.
-    frac = getattr(model, "neg_in_cat", 0.0)
-    if frac > 0:
-        kk = max(1, int(round(n_neg * frac)))
-        cpos = d.item_cat_np[item]
-        nv = d.cat_nvalid_np[cpos]
-        pick = (rng.random((B, kk)) * nv[:, None]).astype(np.int64)
-        neg[:, :kk] = d.cat_items_np[cpos[:, None], pick]
-        # these columns come from a DIFFERENT proposal -- uniform over the category's
-        # stocked items -- so they carry their own q for the logQ correction
-        negq[:, :kk] = 1.0 / np.maximum(nv[:, None], 1)
-    cand = np.concatenate([item[:, None], neg], axis=1)
+    # ---- candidates: the category's stocked products, exactly (Eq. 15 of the spec)
+    #
+    # The conditional the model defines normalises over A_-j = C_s(c(j)) \ (S \ {j}) --
+    # one category, median 15 products, at most 225.  That sum is affordable exactly, so
+    # there is no proposal distribution, no logQ correction, and no metric that depends
+    # on how decoys were drawn.  The block is dense-padded to 225 and masked.
+    cats_r = d.item_cat_np[item]
+    cand = d.cat_items_np[cats_r]                       # [B, Mx]
     M = cand.shape[1]
+    target = d.item_pos_np[item]                        # index of the true product
     day_r = np.repeat(day[:, None], M, 1)
     user_r = np.repeat(user[:, None], M, 1)
     store_r = np.repeat(store[:, None], M, 1)
@@ -478,36 +480,24 @@ def make_batch(d, model, split, bidx, n_neg, rng, device, clean_neg=True):
     avail = torch.ones(B, M, dtype=torch.bool, device=device)
     if model.use_store:
         avail = d.carried[ci, torch.as_tensor(store_r, device=device)].clone()
-    # Two kinds of bad negative, both measured on this data:
-    #   1.2%  a "negative" that IS the true item -- the loss can never be achieved
-    #  17.8%  a "negative" that is another item of the SAME basket.  The conditional is
-    #         explicitly given the rest of the basket, so those items are positives; the
-    #         loss was pushing down products that are genuinely in the cart.
-    # Both are masked out of the denominator.
+    # Exclude the basket's OTHER products of this category: Eq. 3 admits sets, so a
+    # position's candidates are its category minus whatever occupies the others.  The
+    # padding slots are excluded by the category mask.
+    avail = avail & (torch.as_tensor(d.cat_mask_np[cats_r], device=device) > 0)
     key_pos = owner.astype(np.int64) * d.J + item
-    key_neg = owner[:, None].astype(np.int64) * d.J + neg
-    bad = np.isin(key_neg, key_pos)
-    if clean_neg:
-        avail[:, 1:] &= torch.as_tensor(~bad, device=device)
-    avail[:, 0] = True
+    key_cand = owner[:, None].astype(np.int64) * d.J + cand
+    avail &= torch.as_tensor(~np.isin(key_cand, key_pos), device=device)
+    ar = torch.arange(B, device=device)
+    tgt = torch.as_tensor(target, device=device)
+    avail[ar, tgt] = True                      # the chosen product is always admissible
 
-    # logQ correction.  Negatives are drawn from a proposal q, not from the model, so a
-    # plain softmax over {true} u {sampled} estimates a distribution tilted by q.  Here q
-    # spans 3.5e-06 to 6.3e-03 -- 7.5 nats -- and lambda_j was absorbing it
-    # (corr(lambda_j, log q) = -0.51).  Subtracting log(K q(m)) from each sampled logit
-    # makes sum_m exp(u_m - log(K q_m)) an unbiased estimator of sum_{m != j} exp(u_m),
-    # which is the denominator the softmax is supposed to have.
-    logq = torch.zeros(B, M, device=device)
-    logq[:, 1:] = torch.log(torch.as_tensor(negq, device=device,
-                                            dtype=torch.float32).clamp_min(1e-12)
-                            * float(n_neg))
     return dict(
         user=torch.as_tensor(user, device=device), cand=ci, ctx=ctx, dlogp=dlogp,
         state=torch.as_tensor(st, device=device),
         week=torch.as_tensor(week, device=device),
         store=torch.as_tensor(store, device=device),
-        units=torch.as_tensor(units, device=device), avail=avail,
-        logq=logq)
+        lens=lens, owner=ow, target=tgt,
+        units=torch.as_tensor(units, device=device), avail=avail)
 
 
 def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
@@ -637,6 +627,11 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
                 offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
                 breadth=torch.as_tensor(np.asarray(brd, dtype=np.float32), device=device),
                 pdev=pdev,
+                # products this store stocks in the category -- the truncation point
+                # for the breadth count (spec Eq. 10)
+                nmax=d.carried[d.cat_items[ct], torch.as_tensor(
+                    store, device=device).unsqueeze(1)].float().mul(
+                    d.cat_mask[ct]).sum(1),
                 y=torch.as_tensor(np.asarray(ys, dtype=np.float32), device=device))
 
 
@@ -695,27 +690,13 @@ def losses(model, bt, ib, iv_center):
     out = {}
     u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                            bt["state"], bt["week"], bt["store"])
-    if bt.get("logq") is not None and getattr(model, "use_logq", True):
-        u = u - bt["logq"]
     u = u.masked_fill(~bt["avail"], -1e9)
-    if getattr(model, "item_loss", "softmax") == "ove":
-        # Titsias' one-vs-each bound, which is what SHOPPER optimises by default
-        # (`-likelihood 1` in shopper-src): log softmax_i >= sum_{i'} log sigmoid(u_i - u_i').
-        #
-        # This is a different LEARNING SIGNAL, not a different model.  In a sampled
-        # softmax the normaliser is shared, so once lambda_j + theta_i.alpha_j
-        # separates the decoys the probability saturates and every negative's gradient
-        # goes to zero together -- the loss stops asking anything of the interaction
-        # term.  One-vs-each makes the true item beat each negative INDIVIDUALLY, and
-        # the gradient on a negative is 1 - sigmoid(u_i - u_i'), which stays large for
-        # any competitor that is not yet clearly beaten.  That is the pressure the
-        # interaction needs and never got.
-        d_ = u[:, :1] - u[:, 1:]
-        ok = bt["avail"][:, 1:]
-        lse = torch.nn.functional.logsigmoid(d_)
-        out["item"] = -(lse * ok).sum(1).div(ok.sum(1).clamp_min(1)).mean()
-    else:
-        out["item"] = -torch.log_softmax(u, dim=1)[:, 0].mean()
+    # Eq. 20 of the spec: the pseudo-likelihood is a sum of exact one-position
+    # conditionals, each a softmax over that position's admissible products.  The target
+    # is the true product's index inside its category block, not slot 0.  One-vs-each
+    # (SHOPPER's bound) is gone with the sampling it existed to compensate for.
+    out["item"] = nn.functional.cross_entropy(u, bt["target"])
+    out["item_top1"] = (u.argmax(1) == bt["target"]).float().mean().detach()
 
     if model.use_quantity:
         # units - 1 ~ Poisson(exp(z)), with its own price coefficient so the quantity
@@ -738,7 +719,13 @@ def losses(model, bt, ib, iv_center):
         if model.cat_ctx_scale is not None and "cat_ctx" in ib:
             lin = lin + model.cat_ctx_scale * (
                 model.c_cat[ib["cat"]] * ib["cat_ctx"]).sum(-1)
-        out["incidence"] = nn.functional.binary_cross_entropy_with_logits(lin, ib["y"])
+        # Complementary log-log, not logit: P(y=1) = 1 - exp(-exp(eta)).  This is the
+        # link the Poisson category-count construction implies, and it is the only link
+        # under which kappa = 1 is exactly the neutral point (spec Eq. 9, Eq. 18).
+        #   -log P(y=1) = -log(-expm1(-exp(eta)))      -log P(y=0) = exp(eta)
+        r = torch.exp(lin.clamp(-12.0, 4.0))
+        nll1 = -torch.log(-torch.expm1(-r) + 1e-12)
+        out["incidence"] = (ib["y"] * nll1 + (1.0 - ib["y"]) * r).mean()
 
         if model.use_breadth:
             # breadth - 1 ~ Poisson, on the categories actually bought
@@ -748,126 +735,49 @@ def losses(model, bt, ib, iv_center):
                       + model.b_user[ib["user"][pos]]
                       - model.b_price[ib["cat"][pos]] * ib["pdev"][pos]).clamp(-6.0, 3.0)
                 kb = (ib["breadth"][pos] - 1.0).clamp_min(0)
-                out["breadth"] = (torch.exp(zb) - kb * zb + torch.lgamma(kb + 1)).mean()
+                # Shifted Poisson TRUNCATED at the store's stock: k_c cannot exceed the
+                # number of products the store carries in c.  Without the normaliser the
+                # density does not sum to one on its support, and the process can emit
+                # k_c > N_c, for which S(K) is empty (spec Eq. 10).
+                lam = torch.exp(zb)
+                nll = lam - kb * zb + torch.lgamma(kb + 1)
+                nmax = ib["nmax"][pos].clamp_min(1.0)
+                rr = torch.arange(int(nmax.max().item()), device=zb.device).float()
+                lp = (-lam.unsqueeze(1) + rr * zb.unsqueeze(1)
+                      - torch.lgamma(rr + 1).unsqueeze(0))
+                inside = (rr.unsqueeze(0) < nmax.unsqueeze(1))
+                logZ = torch.logsumexp(lp.masked_fill(~inside, -1e9), dim=1)
+                out["breadth"] = (nll + logZ).mean()
     return out
 
 
 @torch.no_grad()
-def exact_item_loglik(model, d, split, bidx, device, chunk=128,
-                      temps=(0.6, 0.8, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0)):
-    """log P(true item) normalised over the WHOLE catalogue -- no negative sampling.
+def evaluate(model, d, split, rng, device, iv_center, max_baskets=3000, iv_cap=32):
+    """Held-out scores for all four factors.
 
-    The catalogue is 5,455 items, so this sum is affordable and there is no reason to
-    select checkpoints on a sampled surrogate.  Measured against the K=20 logQ-corrected
-    estimator this repository used before, that surrogate was optimistic by 2.0 to 7.2
-    nats and its bias correlated with the damage it did at r = -0.87: the importance
-    weights 1/q span five orders of magnitude, so the sampled denominator has enormous
-    variance and its logarithm is badly biased upward.
+    The item score is now an exact conditional likelihood: it normalises over the
+    category's admissible products, so it depends on no sampling scheme and is directly
+    comparable across model variants.
     """
-    sp = d.splits[split]
-    rows, owner = [], []
-    for bi, i in enumerate(bidx):
-        r = np.arange(sp["starts"][i], sp["ends"][i])
-        rows.extend(r.tolist()); owner.extend([bi] * len(r))
-    rows = np.asarray(rows); owner = np.asarray(owner)
-    user, item = sp["user"][rows], sp["item"][rows]
-    day, week = sp["day"][rows], sp["week"][rows]
-    store, rw = sp["store"][rows], sp["raw_week"][rows]
-    B, J = len(rows), d.J
-
-    A = model.alpha.detach()
-    ctx = torch.zeros(B, model.K, device=device)
-    for bi in range(len(bidx)):
-        r = np.flatnonzero(owner == bi)
-        if len(r) > 1:
-            its = item[r]
-            tot = A[torch.as_tensor(its, device=device)].sum(0)
-            for q_, rr_ in enumerate(r):
-                ctx[rr_] = (tot - A[its[q_]]) / (len(its) - 1)
-
-    allj = torch.arange(J, device=device)
-    U, AV, TRU = [], [], []
-    for s in range(0, B, chunk):
-        e = min(s + chunk, B); n = e - s
-        cand = allj.unsqueeze(0).expand(n, J)
-        cnp = cand.cpu().numpy()
-        day_r = np.repeat(day[s:e, None], J, 1)
-        user_r = np.repeat(user[s:e, None], J, 1)
-        store_r = np.repeat(store[s:e, None], J, 1)
-        rw_r = np.repeat(rw[s:e, None], J, 1)
-        st = torch.as_tensor(d.state(user_r.ravel(), cnp.ravel(), day_r.ravel()).reshape(
-            n, J, N_STATE_FEATURES), device=device)
-        dl = d.log_price_dev[cand, torch.as_tensor(day_r, device=device)]
-        if model.use_store and model.use_store_price:
-            dl = dl + d.store_dev(cnp.ravel(), store_r.ravel(), rw_r.ravel()).reshape(n, J)
-        u = model.item_utility(torch.as_tensor(user[s:e], device=device), cand, ctx[s:e],
-                               dl, st, torch.as_tensor(week[s:e], device=device),
-                               torch.as_tensor(store[s:e], device=device))
-        av = torch.ones(n, J, dtype=torch.bool, device=device)
-        if model.use_store:
-            av = d.carried[cand, torch.as_tensor(store_r, device=device)].clone()
-        tru = torch.as_tensor(item[s:e], device=device)
-        ar = torch.arange(n, device=device)
-        av[ar, tru] = True
-        U.append(u.masked_fill(~av, -1e9)); AV.append(av); TRU.append(tru)
-    U = torch.cat(U); TRU = torch.cat(TRU); ar = torch.arange(len(TRU), device=device)
-
-    # One temperature, fitted here on validation.  Without it this score measures the
-    # SCALE of the utilities as much as their content: subtracting log(K q) from the
-    # negatives but not the positive forces training to open a wider gap, and the model
-    # comes out with sd(u) = 2.15 against 1.24 without the correction.  Uncalibrated that
-    # reads as -1.39 nats of damage; calibrated it is +0.16 nats of gain.  Selecting on
-    # the uncalibrated number would just pick whichever run happened to be least
-    # over-confident.
-    best_ll, best_T = -1e30, 1.0
-    for T in temps:
-        ll = float(torch.log_softmax(U / T, dim=1)[ar, TRU].mean())
-        if ll > best_ll:
-            best_ll, best_T = ll, T
-    hits = int((U.argmax(1) == TRU).sum())
-    return best_ll, hits / max(B, 1), best_T
-
-
-@torch.no_grad()
-def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
-             iv_cap=32):
     sp = d.splits[split]
     nb = min(sp["n_baskets"], max_baskets)
     idx = rng.choice(sp["n_baskets"], size=nb, replace=False)
-    s_item = s_cor = s_q = s_c = s_b = 0.0
+    s_item = s_q = s_c = s_b = 0.0
     n_i = n_q = n_c = n_b = hits = 0
-    for a in range(0, nb, 256):
-        b = idx[a:a + 256]
-        # clean_neg=False on purpose: evaluation keeps the ORIGINAL 21-way choice set
-        # and no logQ reweighting, because every baseline is scored on that same set.
-        # Both fixes change what the model LEARNS, not how it is measured.
-        bt = make_batch(d, model, split, b, n_neg, rng, device, clean_neg=False)
+    for a_ in range(0, nb, 256):
+        b_ = idx[a_:a_ + 256]
+        bt = make_batch(d, model, split, b_, rng, device)
         u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                                bt["state"], bt["week"], bt["store"])
         u = u.masked_fill(~bt["avail"], -1e9)
-        lp = torch.log_softmax(u, dim=1)[:, 0]
+        lp = torch.log_softmax(u, dim=1).gather(1, bt["target"].unsqueeze(1)).squeeze(1)
         s_item += float(lp.sum()); n_i += lp.shape[0]
-        hits += int((u.argmax(1) == 0).sum())
-        # The SAME candidate set, but with the proposal divided out.  Without this the
-        # metric's optimal scorer is log p - log q, not log p, so a model that learns the
-        # true choice probability looks WORSE on it -- and selection then picks an
-        # undertrained checkpoint (measured: it chose iteration 1000 of 12000 while top-1,
-        # qNLL, cNLL and bNLL were all still improving).  This corrected number estimates
-        # the full-catalogue log P(j) and is what model selection uses.
-        # CAVEAT: make_batch draws negatives using THIS model's --neg-in-cat fraction,
-        # so a model trained with in-category negatives is evaluated against a different
-        # proposal than a plain one.  Both `item` and `cor` are therefore comparable
-        # ACROSS ITERATIONS of one run -- which is all model selection needs -- but NOT
-        # across models with different --neg-in-cat.  (That was already true of `item`
-        # before this change.)  For any cross-model claim use 38_exact_likelihood.py,
-        # which sums over all 5,455 items and has no proposal at all.
-        uc = (u - bt["logq"]).masked_fill(~bt["avail"], -1e9)
-        s_cor += float(torch.log_softmax(uc, dim=1)[:, 0].sum())
+        hits += int((u.argmax(1) == bt["target"]).sum())
         L = losses(model, bt, None, iv_center)
         if "quantity" in L:
             s_q += float(L["quantity"]) * lp.shape[0]; n_q += lp.shape[0]
         if model.use_nest:
-            ib = incidence_batch(d, model, split, b, 16, rng, device, iv_cap)
+            ib = incidence_batch(d, model, split, b_, 16, rng, device, iv_cap)
             if ib is not None:
                 Lc = losses(model, bt, ib, iv_center)
                 s_c += float(Lc["incidence"]) * ib["y"].shape[0]; n_c += ib["y"].shape[0]
@@ -875,8 +785,7 @@ def evaluate(model, d, split, n_neg, rng, device, iv_center, max_baskets=3000,
                     nb_ = int((ib["y"] > 0).sum())
                     s_b += float(Lc["breadth"]) * nb_; n_b += nb_
     return (s_item / max(n_i, 1), hits / max(n_i, 1),
-            s_q / max(n_q, 1), s_c / max(n_c, 1), s_b / max(n_b, 1),
-            s_cor / max(n_i, 1))
+            s_q / max(n_q, 1), s_c / max(n_c, 1), s_b / max(n_b, 1))
 
 
 def main(a):
@@ -919,7 +828,7 @@ def main(a):
     t0 = time.time()
     for it in range(1, a.iters + 1):
         bidx = rng.integers(0, sp["n_baskets"], size=a.batch_baskets)
-        bt = make_batch(d, model, "train", bidx, a.n_neg, rng, dev)
+        bt = make_batch(d, model, "train", bidx, rng, dev)
         ib = incidence_batch(d, model, "train", bidx, a.n_cat, rng, dev, a.iv_cap) \
             if model.use_nest else None
         # Freeze the per-category IV reference once the utilities have settled.  Any
@@ -964,12 +873,8 @@ def main(a):
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
 
         if it % a.eval_every == 0 or it == a.iters:
-            vi, vacc, vq, vc, vb, vcor = evaluate(model, d, "validation", a.n_neg, ev,
-                                                  dev, a.iv_center, iv_cap=a.iv_cap)
-            if sel_bidx is not None:
-                vex, vextop1, vT = exact_item_loglik(model, d, "validation", sel_bidx, dev)
-            else:
-                vex, vextop1, vT = vcor, vacc, 1.0
+            vi, vacc, vq, vc, vb = evaluate(model, d, "validation", ev, dev,
+                                            a.iv_center, iv_cap=a.iv_cap)
             kap = float(model.kappa().detach().median()) if model.use_nest else float("nan")
             brd = float(1.0 + torch.exp(model.b0.detach()).mean()) \
                 if model.use_breadth else float("nan")
@@ -978,9 +883,7 @@ def main(a):
                 if model.use_quantity else float("nan")
             hist.append({"iter": it, "val_item": vi, "val_top1": vacc,
                          "val_quantity_nll": vq, "val_incidence_nll": vc,
-                         "val_breadth_nll": vb, "val_item_corrected": vcor,
-                         "val_item_exact": vex, "val_exact_top1": vextop1,
-                         "val_temperature": vT,
+                         "val_breadth_nll": vb,
                          "kappa_median": kap, "price_coef": pc,
                          "quantity_price_coef": qc, "secs": time.time() - t0})
             # breadth is in the selection score now.  It was trained but had no
@@ -990,38 +893,29 @@ def main(a):
             # selection on the EXACT catalogue-wide likelihood.  Both sampled variants
             # were tried and both are proposal-dependent: the raw one rewards
             # log p - log q, the K=20 logQ-corrected one is optimistic by 2-7 nats.
-            score = vex - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
+            # Every term is an exact held-out score now, so selection needs no
+            # surrogate and no calibration.
+            score = vi - a.w_quantity * vq - a.w_incidence * vc - a.w_breadth * vb
             star = ""
             if score > best:
                 best, best_it = score, it
                 torch.save(model.state_dict(), os.path.join(OUT, f"{a.label}_nested.pt"))
                 star = " *"
-            log(f"  it {it:5d}  exact {vex:.4f} (T {vT:.2f} top1 {vextop1:.3f})  item {vi:.4f}  "
-                f"top1 {vacc:.3f}  qNLL {vq:.4f}  "
+            log(f"  it {it:5d}  item {vi:.4f}  top1 {vacc:.3f}  qNLL {vq:.4f}  "
                 f"cNLL {vc:.4f}  bNLL {vb:.4f}  kappa {kap:.3f}  breadth {brd:.3f}  "
                 f"price {pc:+.3f}{star}")
 
     model.load_state_dict(torch.load(os.path.join(OUT, f"{a.label}_nested.pt"),
                                      map_location=dev))
-    ti, tacc, tq, tc, tb, tcor = evaluate(model, d, "test", a.n_neg,
-                                    np.random.default_rng(999), dev, a.iv_center, 6000,
-                                    iv_cap=a.iv_cap)
-    # T is fitted on VALIDATION and then applied to test -- never tuned on test
-    _, _, T_star = exact_item_loglik(model, d, "validation", sel_bidx, dev) \
-        if sel_bidx is not None else (0, 0, 1.0)
-    tex, textop1, _ = exact_item_loglik(
-        model, d, "test", np.random.default_rng(999).choice(
-            d.splits["test"]["n_baskets"], size=min(800, d.splits["test"]["n_baskets"]),
-            replace=False), dev, temps=(T_star,))
-    log(f"best at {best_it}; TEST exact {tex:.4f} (T {T_star:.2f} top1 {textop1:.3f})  item {ti:.4f} "
-        f"top1 {tacc:.3f} qNLL {tq:.4f} cNLL {tc:.4f} bNLL {tb:.4f}")
+    ti, tacc, tq, tc, tb = evaluate(model, d, "test", np.random.default_rng(999), dev,
+                                    a.iv_center, 6000, iv_cap=a.iv_cap)
+    log(f"best at {best_it}; TEST item {ti:.4f} top1 {tacc:.3f} qNLL {tq:.4f} "
+        f"cNLL {tc:.4f} bNLL {tb:.4f}")
     with open(os.path.join(OUT, f"{a.label}_nested_history.json"), "w") as f:
         json.dump({"config": vars(a), "history": hist, "n_parameters": n_par,
                    "best_iter": best_it, "test_item": ti, "test_top1": tacc,
                    "test_quantity_nll": tq, "test_incidence_nll": tc,
-                   "test_breadth_nll": tb, "test_item_corrected": tcor,
-                   "test_item_exact": tex, "test_exact_top1": textop1,
-                   "temperature": T_star}, f, indent=2)
+                   "test_breadth_nll": tb}, f, indent=2)
     log(f"saved {a.label}_nested.pt")
 
 

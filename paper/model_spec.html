@@ -1,0 +1,844 @@
+<title>Nested Basket Model — Specification</title>
+<style>
+  :root{
+    --paper:#fafbfc; --ink:#12171d; --muted:#5c6773; --rule:#dde3e9;
+    --accent:#1a5276; --key:#1c6b56; --warn:#8a5a1a;
+    --band:#f2f5f8; --keyband:#f1f7f5; --warnband:#faf6ef;
+    --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --math:"Cambria Math","STIX Two Math","Latin Modern Math","Times New Roman",Times,serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--paper:#0e1216; --ink:#e6ecf2; --muted:#93a1b0; --rule:#232c35;
+          --accent:#6ba8d8; --key:#58bfa0; --warn:#d0a15c;
+          --band:#151b22; --keyband:#111a18; --warnband:#1a1610;}
+  }
+  :root[data-theme="dark"]{--paper:#0e1216; --ink:#e6ecf2; --muted:#93a1b0; --rule:#232c35;
+    --accent:#6ba8d8; --key:#58bfa0; --warn:#d0a15c;
+    --band:#151b22; --keyband:#111a18; --warnband:#1a1610;}
+  :root[data-theme="light"]{--paper:#fafbfc; --ink:#12171d; --muted:#5c6773; --rule:#dde3e9;
+    --accent:#1a5276; --key:#1c6b56; --warn:#8a5a1a;
+    --band:#f2f5f8; --keyband:#f1f7f5; --warnband:#faf6ef;}
+
+  body{background:var(--paper); color:var(--ink); font-family:var(--body);
+       font-size:16.5px; line-height:1.6; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:52rem; margin:0 auto; padding:3.5rem 1.5rem 7rem;
+        display:flex; flex-direction:column; gap:1rem;}
+  p{margin:0; max-width:66ch;}
+  .lede{font-size:1.06rem; color:var(--muted); max-width:64ch;}
+  .eyebrow{font-size:.7rem; letter-spacing:.16em; text-transform:uppercase;
+           color:var(--accent); font-weight:700; margin:0;}
+  h1{font-size:2rem; line-height:1.18; margin:.3rem 0 0; font-weight:600;
+     letter-spacing:-.012em; max-width:24ch;}
+  .part{margin:2.8rem 0 0; padding:.75rem 0 .75rem 1rem; border-left:4px solid var(--key);
+        background:var(--keyband); display:flex; flex-direction:column; gap:.15rem;}
+  .part .pn{font-size:.68rem; letter-spacing:.18em; text-transform:uppercase;
+            color:var(--key); font-weight:700;}
+  .part .pt{font-size:1.15rem; font-weight:600;}
+  h2{font-size:1.14rem; margin:1.8rem 0 0; font-weight:600;
+     padding-top:.9rem; border-top:1px solid var(--rule);}
+  h2 .num{color:var(--accent); font-variant-numeric:tabular-nums; margin-right:.5rem;}
+  h3{font-size:.98rem; margin:1.15rem 0 0; font-weight:600;}
+  h3 .num{color:var(--muted); font-variant-numeric:tabular-nums; margin-right:.4rem;
+          font-weight:500;}
+
+  var,.v{font-style:italic; font-family:var(--math); font-size:1.06em;}
+  code{font-family:var(--mono); font-size:.84em; color:var(--accent);
+       background:var(--band); padding:.08em .34em; border-radius:2px;}
+
+  .eq{display:grid; grid-template-columns:1fr auto; align-items:center; gap:1rem;
+      background:var(--band); border-left:2px solid var(--accent);
+      padding:1.2rem; margin:.5rem 0; overflow-x:auto;}
+  .eq > .body{text-align:center; font-family:var(--math); font-size:1.26rem;
+              line-height:2.25; min-width:0; letter-spacing:.006em;}
+  .eq .tag{font-size:.76rem; color:var(--accent); font-variant-numeric:tabular-nums;
+           white-space:nowrap;}
+  .eq.key{border-left-width:4px; border-left-color:var(--key); background:var(--keyband);}
+  .eq.key .tag{color:var(--key); font-weight:700;}
+  .eq.hero > .body{font-size:1.36rem;}
+  .eq sub,.eq sup{font-size:.68em; line-height:0;}
+  .eq sub{bottom:-.28em; position:relative;}
+  .eq sup{top:-.42em; position:relative;}
+  p sub,p sup,li sub,li sup,td sub,td sup{font-size:.72em;}
+
+  .frac{display:inline-flex; flex-direction:column; vertical-align:-.62em;
+        text-align:center; margin:0 .3em; font-size:.86em; line-height:1.32;}
+  .frac > span:first-child{padding:0 .4em .1em;}
+  .frac > span:last-child{border-top:1px solid currentColor; padding:.1em .4em 0;}
+
+  .step{display:grid; grid-template-columns:auto 1fr; gap:.2rem 1rem;
+        align-items:baseline; margin:.25rem 0;}
+  .step .n{font-family:var(--math); font-size:1.45rem; color:var(--accent);
+           font-weight:600; line-height:1;}
+  .step .t{display:flex; flex-direction:column; gap:.45rem;}
+
+  .flag{border-left:2px solid var(--warn); background:var(--warnband);
+        padding:.7rem 0 .7rem 1rem; display:flex; flex-direction:column; gap:.5rem;}
+  .flag .label{font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+               font-weight:700; color:var(--warn); margin:0;}
+  .lemma{border-left:2px solid var(--key); padding:.1rem 0 .1rem 1rem;
+         display:flex; flex-direction:column; gap:.5rem;}
+  .lemma .label{font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+                font-weight:700; color:var(--key); margin:0;}
+
+  .scroll{overflow-x:auto; margin:.3rem 0;}
+  table{border-collapse:collapse; font-size:.88rem; min-width:100%;
+        font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.42rem .8rem .42rem 0;
+        border-bottom:1px solid var(--rule); vertical-align:top;}
+  th{font-size:.69rem; letter-spacing:.09em; text-transform:uppercase;
+     color:var(--muted); font-weight:700; border-bottom:1px solid var(--ink);}
+  td.sym{font-family:var(--math); font-style:italic; font-size:1.05rem;
+         white-space:nowrap; padding-right:1.2rem;}
+  td.shape{font-family:var(--mono); font-size:.79rem; white-space:nowrap; color:var(--muted);}
+
+  ol,ul{margin:0; padding-left:1.3rem; display:flex; flex-direction:column;
+        gap:.4rem; max-width:66ch;}
+  li::marker{color:var(--accent);}
+  .note{font-size:.88rem; color:var(--muted); max-width:64ch;}
+  strong{font-weight:600;}
+  a{color:var(--accent);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Specification</p>
+  <h1>The nested basket model</h1>
+  <p class="lede">Part I gives the random variables and the systematic terms that index them.
+  Part II defines the distribution. Part III proves the three properties Part II relies on.
+  Part IV is estimation, identification and inference. Assumptions that are imposed rather
+  than derived are marked <strong style="color:var(--warn)">in amber</strong> wherever they
+  occur.</p>
+
+  <!-- ================================ PART I -->
+  <div class="part"><span class="pn">Part I</span><span class="pt">Variables and terms</span></div>
+
+  <h2 id="s1"><span class="num">1</span>What is given</h2>
+
+  <p>Everything is conditional on an observed trip descriptor:</p>
+
+  <div class="eq"><div class="body">
+    𝒢 = ( i, &nbsp; s, &nbsp; t, &nbsp; w, &nbsp; {Δlog p<sub>jst</sub>}<sub>j=1..J</sub> )
+  </div><div class="tag">(1)</div></div>
+
+  <p>household <var>i</var> (N = 2,066), store <var>s</var> (115), day <var>t</var> (D = 712),
+  week-of-year <var>w</var> (52), one price deviation per product. Fixed index sets: J = 5,455
+  products, C = 188 categories, c(j) the category of product <var>j</var>, and
+  𝒞<sub>s</sub>(c) the products of category <var>c</var> stocked by store <var>s</var>
+  (median 15, max 225). Construction of Δlog p and 𝒞<sub>s</sub>(c) is Appendix B.</p>
+
+  <h2 id="s2"><span class="num">2</span>What is random</h2>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Variable</th><th>Support</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="sym">y<sub>c</sub></td><td>{0,1}, c = 1…C</td><td>1 if the trip buys anything from category c</td></tr>
+      <tr><td class="sym">k<sub>c</sub></td><td>{1,…,|𝒞<sub>s</sub>(c)|}, where y<sub>c</sub> = 1</td><td>distinct products taken from category c</td></tr>
+      <tr><td class="sym">S</td><td>𝒮(𝒦), Eq. 3</td><td>the products bought</td></tr>
+      <tr><td class="sym">q<sub>j</sub></td><td>{1,2,…}, j ∈ S</td><td>units of product j</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="eq"><div class="body">
+    ℬ = ( y<sub>1..C</sub>, &nbsp; {k<sub>c</sub>}<sub>c : y<sub>c</sub>=1</sub>,
+    &nbsp; S, &nbsp; {q<sub>j</sub>}<sub>j ∈ S</sub> ),
+    &nbsp;&nbsp;
+    𝒦 = {(c, k<sub>c</sub>) : y<sub>c</sub> = 1},
+    &nbsp;&nbsp;
+    n = ∑<sub>(c,k<sub>c</sub>)∈𝒦</sub> k<sub>c</sub>
+  </div><div class="tag">(2)</div></div>
+
+  <div class="eq"><div class="body">
+    𝒮(𝒦) = { S ⊆ ⋃<sub>c</sub>𝒞<sub>s</sub>(c) :
+    |S ∩ 𝒞<sub>s</sub>(c)| = k<sub>c</sub> ∀(c,k<sub>c</sub>) ∈ 𝒦,
+    &nbsp; S ∩ 𝒞<sub>s</sub>(c) = ∅ ∀c : y<sub>c</sub> = 0 }
+  </div><div class="tag">(3)</div></div>
+
+  <p>Elements of S are distinct products; multiplicity is carried by q, not by S.</p>
+
+  <h2 id="s3"><span class="num">3</span>Systematic terms</h2>
+
+  <p>Functions of 𝒢 and the parameters. Every symbol is used for exactly one thing; Appendix A
+  is the full table.</p>
+
+  <p><strong>3.1 Product appeal, no basket.</strong></p>
+  <div class="eq"><div class="body">
+    b<sub>ijt</sub> = λ<sub>j</sub> + θ<sub>i</sub><sup>⊤</sup>α<sub>j</sub>
+    − (γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub>) Δlog p<sub>jst</sub>
+    + ψ<sub>j</sub><sup>⊤</sup>x<sub>ijt</sub> + μ<sub>j</sub><sup>⊤</sup>δ<sub>w</sub>
+    + ζ<sub>j</sub><sup>⊤</sup>ξ<sub>s</sub>
+  </div><div class="tag">(4)</div></div>
+
+  <p><strong>3.2 Product appeal in a position.</strong> A <em>position</em> of a basket S is
+  identified by its occupant: write −<var>j</var> for the position held by <var>j</var>, and
+  A<sub>−j</sub> for its admissible products. For any candidate <var>m</var>:</p>
+  <div class="eq"><div class="body">
+    A<sub>−j</sub> = 𝒞<sub>s</sub>(c(j)) \ (S \ {j}),
+    &nbsp;&nbsp;&nbsp;
+    ᾱ<sub>−j</sub> = <span class="frac"><span>1</span><span>n−1</span></span>
+    ∑<sub>k∈S, k≠j</sub> α<sub>k</sub>,
+    &nbsp;&nbsp;&nbsp;
+    u<sup>−j</sup><sub>m</sub> = b<sub>imt</sub> + α<sub>m</sub><sup>⊤</sup>ᾱ<sub>−j</sub>
+  </div><div class="tag">(5)</div></div>
+
+  <p>Superscript = position, subscript = candidate. Every candidate for a position is scored
+  against the same ᾱ<sub>−j</sub>, since the other n−1 occupants are fixed. Note
+  <var>j</var> ∈ A<sub>−j</sub>. For n = 1 set ᾱ<sub>−j</sub> = <strong>0</strong>.</p>
+
+  <p><strong>3.3 Category appeal.</strong></p>
+  <div class="eq"><div class="body">
+    IV<sub>ict</sub> = log ∑<sub>j∈𝒞<sub>s</sub>(c)</sub> e<sup>b<sub>ijt</sub></sup>,
+    &nbsp;&nbsp;&nbsp;
+    η<sub>ict</sub> = c<sup>0</sup><sub>c</sub>
+    + c<sup>u⊤</sup><sub>i</sub>c<sup>c</sup><sub>c</sub>
+    + c<sup>s⊤</sup><sub>c</sub>x<sub>ict</sub>
+    + κ<sub>c</sub>( IV<sub>ict</sub> − <span style="text-decoration:overline">IV</span><sub>c</sub> )
+  </div><div class="tag">(6)</div></div>
+
+  <p>IV is built from <var>b</var>, not <var>u</var>: it is evaluated before any product
+  exists. <span style="text-decoration:overline">IV</span><sub>c</sub> is a fixed constant
+  (§17.3). κ<sub>c</sub> = softplus(κ<sup>raw</sup><sub>c</sub>) ∈ (0, ∞).</p>
+
+  <p><strong>3.4 Count rates.</strong></p>
+  <div class="eq"><div class="body">
+    Λ<sup>brd</sup><sub>ic</sub> = exp( c<sup>b</sup><sub>c</sub> + h<sub>i</sub>
+    − c<sup>p</sup><sub>c</sub> <span style="text-decoration:overline">Δlog p</span><sub>ct</sub> ),
+    &nbsp;&nbsp;
+    Λ<sup>qty</sup><sub>ij</sub> = exp( a<sub>j</sub>
+    − (γ<sup>q⊤</sup><sub>i</sub>β<sup>q</sup><sub>j</sub>) Δlog p<sub>jst</sub>
+    + ψ<sup>q⊤</sup><sub>j</sub>x<sub>ijt</sub> )
+  </div><div class="tag">(7)</div></div>
+
+  <p class="note">x<sub>ijt</sub>, x<sub>ict</sub> are four-vectors of purchase recency
+  (Appendix B.3). <span style="text-decoration:overline">Δlog p</span><sub>ct</sub> is the mean
+  of Δlog p over 𝒞<sub>s</sub>(c).</p>
+
+  <!-- ================================ PART II -->
+  <div class="part"><span class="pn">Part II</span><span class="pt">The distribution</span></div>
+
+  <h2 id="s4"><span class="num">4</span>The joint</h2>
+
+  <div class="eq key hero"><div class="body">
+    P(ℬ | 𝒢, n ≥ 1) =
+    <span class="frac">
+      <span>∏<sub>c</sub> P(y<sub>c</sub>) · ∏<sub>c:y<sub>c</sub>=1</sub> P(k<sub>c</sub>)
+      · P(S | 𝒦) · ∏<sub>j∈S</sub> P(q<sub>j</sub>)</span>
+      <span>1 − ∏<sub>c</sub> P(y<sub>c</sub> = 0)</span></span>
+  </div><div class="tag">(8)</div></div>
+
+  <p>A trip enters the data only because something was bought, so the model must condition on
+  n ≥ 1. The unconditional product assigns
+  ∏<sub>c</sub>P(y<sub>c</sub>=0) = exp(−∑<sub>c</sub>e<sup>η<sub>ict</sub></sup>) &gt; 0 to the
+  empty basket, which is never observed; the denominator removes it. Omitting this
+  renormalisation misplaces mass into the intercepts c<sup>0</sup><sub>c</sub>, which are the
+  same parameters κ is estimated alongside.</p>
+
+  <h2 id="s5"><span class="num">5</span>Category entry</h2>
+
+  <p>Each category draws an independent shock from the minimum-form Gumbel, with
+  CDF F(x) = 1 − exp(−e<sup>x</sup>), and is entered when the shock falls below its appeal:</p>
+
+  <div class="eq"><div class="body">
+    ε<sub>c</sub> ~ Gumbel<sub>min</sub>(0,1),
+    &nbsp;&nbsp;
+    y<sub>c</sub> = 1{ ε<sub>c</sub> ≤ η<sub>ict</sub> }
+    &nbsp;&nbsp;⟹&nbsp;&nbsp;
+    P(y<sub>c</sub> = 1) = 1 − exp(−e<sup>η<sub>ict</sub></sup>)
+  </div><div class="tag">(9)</div></div>
+
+  <p>A complementary log-log link. §13 shows it is also what a latent Poisson category count
+  gives, and that the two routes agree.</p>
+
+  <h2 id="s6"><span class="num">6</span>Breadth</h2>
+
+  <p>Let N<sub>c</sub> = |𝒞<sub>s</sub>(c)|. The count of <em>additional</em> products beyond
+  the first is Poisson, truncated so that k<sub>c</sub> cannot exceed the store's stock:</p>
+
+  <div class="eq"><div class="body">
+    P(k<sub>c</sub> = r | y<sub>c</sub>=1) =
+    <span class="frac">
+      <span>e<sup>−Λ<sup>brd</sup><sub>ic</sub></sup> (Λ<sup>brd</sup><sub>ic</sub>)<sup>r−1</sup> / (r−1)!</span>
+      <span>∑<sub>r′=1</sub><sup>N<sub>c</sub></sup>
+        e<sup>−Λ<sup>brd</sup><sub>ic</sub></sup> (Λ<sup>brd</sup><sub>ic</sub>)<sup>r′−1</sup> / (r′−1)!</span></span>,
+    &nbsp;&nbsp; r = 1, …, N<sub>c</sub>
+  </div><div class="tag">(10)</div></div>
+
+  <div class="flag">
+    <p class="label">Imposed, not derived — and it carries a store index</p>
+    <p>Nothing in the utility structure implies a Poisson count; this is a modelling choice
+    (§14). The truncation is <em>not</em> cosmetic: the denominator depends on N<sub>c</sub>,
+    which varies by store, while Λ<sup>brd</sup><sub>ic</sub> carries no store index. So
+    Eq. 10 is store-dependent through a channel the systematic term does not model. Dropping
+    the denominator instead leaves a density that does not sum to one on the stated support,
+    and admits k<sub>c</sub> &gt; N<sub>c</sub>, for which 𝒮(𝒦) = ∅ and Eq. 12 is 0/0.</p>
+  </div>
+
+  <h2 id="s7"><span class="num">7</span>Which products</h2>
+
+  <p>Given 𝒦, the product set is drawn from a Gibbs measure on 𝒮(𝒦). This is the
+  <strong>definition</strong> of the factor; §10 derives its conditionals and §11 shows no
+  other distribution has them.</p>
+
+  <div class="eq key"><div class="body">
+    E(S) = ∑<sub>j∈S</sub> b<sub>ijt</sub>
+    + <span class="frac"><span>1</span><span>n−1</span></span>
+    ∑<sub>{j,k}⊂S</sub> α<sub>j</sub><sup>⊤</sup>α<sub>k</sub>
+    &nbsp;&nbsp;(n ≥ 2),
+    &nbsp;&nbsp;&nbsp; E(S) = b<sub>ijt</sub> &nbsp;(n = 1)
+  </div><div class="tag">(11)</div></div>
+
+  <div class="eq key"><div class="body">
+    P(S | 𝒦) = <span class="frac">
+      <span>exp E(S)</span>
+      <span>∑<sub>S′∈𝒮(𝒦)</sub> exp E(S′)</span></span>,
+    &nbsp;&nbsp; S ∈ 𝒮(𝒦)
+  </div><div class="tag">(12)</div></div>
+
+  <p>Eq. 11 states the n = 1 case explicitly rather than leaving 1/(n−1) multiplying an empty
+  sum. 𝒮(𝒦) is finite and non-empty whenever k<sub>c</sub> ≤ N<sub>c</sub> for all c, which
+  Eq. 10 guarantees, so Eq. 12 is a well-defined distribution. Unlike the other three factors
+  it does not decompose over products.</p>
+
+  <h2 id="s8"><span class="num">8</span>Units</h2>
+
+  <div class="eq"><div class="body">
+    P(q<sub>j</sub> = ν | S) =
+    e<sup>−Λ<sup>qty</sup><sub>ij</sub></sup>
+    (Λ<sup>qty</sup><sub>ij</sub>)<sup>ν−1</sup> / (ν−1)!,
+    &nbsp;&nbsp; ν = 1, 2, …
+  </div><div class="tag">(13)</div></div>
+
+  <p>Independent across j ∈ S. Imposed, not derived (§14).</p>
+
+  <!-- ================================ PART III -->
+  <div class="part"><span class="pn">Part III</span><span class="pt">Properties of Eq. 12</span></div>
+
+  <h2 id="s9"><span class="num">9</span>Swap connectedness</h2>
+
+  <div class="lemma">
+    <p class="label">Lemma 1</p>
+    <p>Call S′ a <em>swap</em> of S if S′ = (S \ {j}) ∪ {m} for some j ∈ S and
+    m ∈ 𝒞<sub>s</sub>(c(j)) \ S. Every swap of S ∈ 𝒮(𝒦) is in 𝒮(𝒦), and any two members of
+    𝒮(𝒦) are joined by a finite chain of swaps.</p>
+  </div>
+
+  <p><em>Proof.</em> A swap replaces one product of category c(j) by another of the same
+  category, so every |S ∩ 𝒞<sub>s</sub>(c)| is unchanged and S′ ∈ 𝒮(𝒦). For connectedness take
+  S, T ∈ 𝒮(𝒦). Categories partition the products, so consider each c separately: S and T each
+  hold exactly k<sub>c</sub> products of 𝒞<sub>s</sub>(c). Enumerate
+  S ∩ 𝒞<sub>s</sub>(c) \ T and T ∩ 𝒞<sub>s</sub>(c) \ S — equal-sized sets — and swap them one
+  pair at a time, each step staying inside 𝒞<sub>s</sub>(c). Doing this for every c reaches T in
+  ∑<sub>c</sub>|S∩𝒞<sub>s</sub>(c) \ T| swaps. ∎</p>
+
+  <h2 id="s10"><span class="num">10</span>The swap identity and the conditional</h2>
+
+  <p>Let S ∈ 𝒮(𝒦), j ∈ S, m ∈ 𝒞<sub>s</sub>(c(j)) \ S, and S′ = (S\{j}) ∪ {m}. By Lemma 1,
+  S′ ∈ 𝒮(𝒦) and |S′| = n, so the factor 1/(n−1) is the same in E(S) and E(S′). Every
+  <var>b</var> except b<sub>j</sub>, b<sub>m</sub> cancels, as does every pair involving
+  neither. What remains:</p>
+
+  <div class="eq key"><div class="body">
+    E(S′) − E(S) = (b<sub>im</sub> − b<sub>ij</sub>)
+    + (α<sub>m</sub> − α<sub>j</sub>)<sup>⊤</sup>ᾱ<sub>−j</sub>
+    = u<sup>−j</sup><sub>m</sub> − u<sup>−j</sup><sub>j</sub>
+  </div><div class="tag">(14)</div></div>
+
+  <p>The step to <var>u</var> holds because <var>m</var>'s context in S′ and <var>j</var>'s
+  context in S are the same vector ᾱ<sub>−j</sub> = (n−1)<sup>−1</sup>∑<sub>k∈S\{j}</sub>α<sub>k</sub>.
+  Exponentiating and normalising over A<sub>−j</sub> gives the full conditional of Eq. 12 at one
+  position:</p>
+
+  <div class="eq key"><div class="body">
+    P(j | S\{j}, 𝒦) = <span class="frac">
+      <span>exp u<sup>−j</sup><sub>j</sub></span>
+      <span>∑<sub>m∈A<sub>−j</sub></sub> exp u<sup>−j</sup><sub>m</sub></span></span>
+  </div><div class="tag">(15)</div></div>
+
+  <p>By McFadden's theorem Eq. 15 is exactly the law of
+  argmax<sub>m∈A<sub>−j</sub></sub>[u<sup>−j</sup><sub>m</sub> + ε<sub>m</sub>] with
+  ε<sub>m</sub> iid Gumbel(0,1) over A<sub>−j</sub>. <strong>The shocks are redrawn
+  independently at every position and every visit</strong>; a single draw shared across
+  positions would correlate the conditionals and Eq. 15 would not be their law.</p>
+
+  <h2 id="s11"><span class="num">11</span>Uniqueness</h2>
+
+  <div class="lemma">
+    <p class="label">Lemma 2</p>
+    <p>Eq. 12 is the only distribution on 𝒮(𝒦) whose single-position conditionals are Eq. 15.</p>
+  </div>
+
+  <p><em>Proof.</em> Let Q be any such distribution. Eq. 15 assigns positive probability to
+  every admissible product, so Q(S) &gt; 0 for every S reachable from a point of its support;
+  by Lemma 1 that is all of 𝒮(𝒦). For a swap pair (S, S′) the conditional at the position in
+  question gives</p>
+
+  <div class="eq"><div class="body">
+    <span class="frac"><span>Q(S′)</span><span>Q(S)</span></span>
+    = <span class="frac">
+      <span>exp u<sup>−j</sup><sub>m</sub></span>
+      <span>exp u<sup>−j</sup><sub>j</sub></span></span>
+    = exp( E(S′) − E(S) )
+  </div><div class="tag">(16)</div></div>
+
+  <p>using Eq. 14. By Lemma 1 any T ∈ 𝒮(𝒦) is reached from a fixed S<sub>0</sub> by a chain of
+  swaps; telescoping Eq. 16 along the chain gives
+  Q(T)/Q(S<sub>0</sub>) = exp(E(T) − E(S<sub>0</sub>)), independent of the chain taken since the
+  right side depends only on the endpoints. Summing to one fixes Q(S<sub>0</sub>), so Q is
+  Eq. 12. ∎</p>
+
+  <p class="note">This is Brook's telescoping argument. It needs only swap-connectedness, from
+  Lemma 1. It does <em>not</em> use Besag's positivity condition, which requires the support to
+  be a product of coordinate supports — false here, since 𝒮(𝒦) forbids repeats and fixes
+  category counts. Hammersley–Clifford is a factorisation theorem and is not used.</p>
+
+  <p><strong>What symmetry is needed for, and what it is not needed for.</strong> Eq. 14
+  requires the pairwise interaction W<sub>jk</sub> to be symmetric. It does <em>not</em> require
+  W to be a Gram matrix: W<sub>jk</sub> = ½(α<sub>j</sub><sup>⊤</sup>ρ<sub>k</sub> +
+  ρ<sub>j</sub><sup>⊤</sup>α<sub>k</sub>) is symmetric for free ρ and admits a potential.
+  Tying ρ = α is a stronger restriction than the theory needs, and it costs something:</p>
+
+  <div class="flag">
+    <p class="label">Cost of the tied form</p>
+    <p>W = AA<sup>⊤</sup> is positive semidefinite of rank ≤ K, so the model cannot represent
+    an arbitrary symmetric co-purchase structure. Concretely
+    ∑<sub>{j,k}⊂S</sub>α<sub>j</sub><sup>⊤</sup>α<sub>k</sub> =
+    ½(‖∑<sub>j∈S</sub>α<sub>j</sub>‖² − ∑<sub>j∈S</sub>‖α<sub>j</sub>‖²) ≥
+    −½∑<sub>j∈S</sub>‖α<sub>j</sub>‖², so the total substitution the energy can express is
+    bounded below. Tying also forces the same α to carry household taste in Eq. 4 and
+    co-purchase in Eq. 11, which is an identification constraint (§18), not a free choice.</p>
+  </div>
+
+  <p class="note">What is <em>not</em> claimed: that Eq. 12 has no random-utility
+  representation. Any strictly positive distribution on a finite set is the argmax of
+  {score + iid Gumbel} indexed by the elements of that set, so Eq. 12 is the argmax of
+  E(S′) + ε<sub>S′</sub> over S′ ∈ 𝒮(𝒦). What fails is a representation with errors attached to
+  <em>positions</em> and drawn once: that is what forces the sampler in §12 to redraw.</p>
+
+  <h2 id="s12"><span class="num">12</span>Sampling</h2>
+
+  <p>The normaliser of Eq. 12 is a sum over</p>
+
+  <div class="eq"><div class="body">
+    |𝒮(𝒦)| = ∏<sub>(c,k<sub>c</sub>)∈𝒦</sub>
+    <span class="frac"><span>N<sub>c</sub>!</span>
+    <span>k<sub>c</sub>!(N<sub>c</sub>−k<sub>c</sub>)!</span></span>
+  </div><div class="tag">(17)</div></div>
+
+  <p>measured on 3,000 held-out compositions at median 10<sup>6.7</sup>, 90th percentile
+  10<sup>28.6</sup>, maximum 10<sup>124</sup>. Neither E(S) nor the normaliser is evaluated.
+  Only Eq. 15 is, a sum over at most 225 terms.</p>
+
+  <ol>
+    <li>For each (c, k<sub>c</sub>) ∈ 𝒦 draw k<sub>c</sub> distinct products from
+    𝒞<sub>s</sub>(c) in proportion to e<sup>b</sup>, without replacement.</li>
+    <li>Visit the n positions in a random order. At position −<var>j</var>: form A<sub>−j</sub>
+    and ᾱ<sub>−j</sub> from the current S, draw from Eq. 15, update S.</li>
+    <li>Repeat step 2 for <var>T</var> sweeps and return S.</li>
+  </ol>
+
+  <p>Each move is a Gibbs step for Eq. 12, so Eq. 12 is invariant. Lemma 1 gives irreducibility
+  on 𝒮(𝒦); since <var>j</var> ∈ A<sub>−j</sub> the self-transition has positive probability, so
+  the chain is aperiodic. Irreducible + aperiodic + invariant ⟹ convergence to Eq. 12 from any
+  start. One sweep costs n conditionals, each a sum over |A<sub>−j</sub>| candidates — measured
+  at 8.44 positions × 42.5 admissible products ≈ 359 evaluations of Eq. 5 per sweep.</p>
+
+  <div class="flag">
+    <p class="label">Unresolved</p>
+    <p>T is a free parameter and no mixing diagnostic is reported. Convergence is asymptotic in
+    T; nothing here bounds the error at finite T, and the support sizes above make a worst case
+    plausible. This needs an autocorrelation or coupling check before generated baskets are used
+    as evidence.</p>
+  </div>
+
+  <h2 id="s13"><span class="num">13</span>What κ is, and what it is not</h2>
+
+  <p>In the model as specified, κ<sub>c</sub> appears in <strong>Eq. 6 and nowhere else</strong>.
+  It scales how far the inclusive value moves the log-hazard of entering category c. Breadth
+  (Eq. 7) and units (Eq. 7) contain no IV, and the product-choice factor (Eq. 12) contains no
+  κ. Anything said about κ must be a statement about entry alone.</p>
+
+  <p>The scale is fixed by an auxiliary construction. Suppose the total units from category c
+  were Q ~ Poisson(e<sup>a<sub>ic</sub>+κ<sub>c</sub>IV</sup>) split across the category in
+  proportion to e<sup>b</sup>. Poisson thinning gives independent per-product counts with rates
+  e<sup>a+κIV</sup>·e<sup>b−IV</sup>, since product j's share is e<sup>b−IV</sup> by Eq. 6, so</p>
+
+  <div class="eq"><div class="body">
+    Q<sub>ij</sub> ~ Poisson( e<sup>a<sub>ic</sub> + (κ<sub>c</sub>−1)IV<sub>ict</sub> + b<sub>ijt</sub></sup> )
+  </div><div class="tag">(18)</div></div>
+
+  <p>At κ<sub>c</sub> = 1 the inclusive value cancels. And y<sub>c</sub> = 1{Q &gt; 0} gives
+  P = 1 − e<sup>−rate</sup>, the same cloglog as Eq. 9 — so the two routes to §5 agree, which is
+  why the link and κ's scale are chosen together.</p>
+
+  <div class="flag">
+    <p class="label">The interpretation does not transfer wholesale</p>
+    <p>Eq. 18 is a different model from Eqs. 8–13: there, one Poisson governs entry, breadth and
+    units together; here they are three separate factors and only entry sees IV. So:</p>
+    <ul>
+      <li><strong>Valid:</strong> κ<sub>c</sub> = 1 is the point at which a uniform rise in a
+      category's product appeals raises its <em>entry log-hazard</em> by exactly the amount the
+      appeals rose. κ &lt; 1 damps that transmission, κ &gt; 1 amplifies it.</li>
+      <li><strong>Not valid:</strong> "at κ = 1 the category grows exactly as much as its
+      products gained." Category <em>volume</em> also moves through breadth and units, neither of
+      which sees IV at any κ.</li>
+      <li><strong>Not valid:</strong> "κ = 0 means pure cannibalisation." At κ = 0 entry ignores
+      IV, but a price cut still moves breadth via c<sup>p</sup><sub>c</sub> and units via
+      γ<sup>q⊤</sup>β<sup>q</sup>. Moreover κ<sub>c</sub> = softplus(·) &gt; 0 strictly, so κ = 0
+      is a limit the parameterisation cannot attain.</li>
+    </ul>
+    <p>Eq. 18 is never evaluated. It fixes one number — the neutral point — and κ is initialised
+    at 1.0 so the data must move it off.</p>
+  </div>
+
+  <h2 id="s14"><span class="num">14</span>What is imposed rather than derived</h2>
+
+  <p>§5 and §10 follow from stated error distributions. Eqs. 10 and 13 do not: the count is the
+  primitive, with no latent utility beneath it.</p>
+
+  <ul>
+    <li><strong>Equidispersion.</strong> A Poisson ties variance to mean; basket counts are
+    typically overdispersed. Untested.</li>
+    <li><strong>Units independent given S.</strong> Eq. 13 makes q<sub>j</sub> independent
+    across products. All modelled dependence is in <em>which</em> products appear, none in
+    <em>how many</em>.</li>
+    <li><strong>A hard floor on the modal line.</strong> q = 1 + Poisson gives
+    P(q = 1) = e<sup>−Λ</sup>, which cannot fall below that value for any Λ. A zero-truncated
+    Poisson or negative binomial would relax this at the cost of one more parameter.</li>
+    <li><strong>Not the same object as Eq. 18.</strong> If a latent per-product count were
+    Poisson, k<sub>c</sub> = #{j : Q<sub>ij</sub> ≥ 1} would be Poisson-binomial, not truncated
+    shifted Poisson, and q<sub>j</sub> would be zero-truncated Poisson, not 1 + Poisson. Eqs. 10
+    and 13 share a functional form with Eq. 18, not a derivation.</li>
+  </ul>
+
+  <!-- ================================ PART IV -->
+  <div class="part"><span class="pn">Part IV</span><span class="pt">Estimation, identification, inference</span></div>
+
+  <h2 id="s15"><span class="num">15</span>The objective</h2>
+
+  <p>Index trips by <var>v</var> = 1…V with observed basket ℬ<sub>v</sub> and descriptor
+  𝒢<sub>v</sub>. Write 𝒮<sub>v</sub> for the sampled category set of §17.2. The four components,
+  each a sum over the trips in a batch ℬ𝒶𝓉 of size M:</p>
+
+  <div class="eq"><div class="body">
+    ℓ<sub>inc</sub> = ∑<sub>v</sub> <span class="frac"><span>C</span><span>|𝒮<sub>v</sub>|</span></span>
+      ∑<sub>c∈𝒮<sub>v</sub></sub> log P(y<sub>c</sub>) &nbsp;[Eq. 9]
+    &nbsp;&nbsp;&nbsp;
+    ℓ<sub>brd</sub> = ∑<sub>v</sub> ∑<sub>c:y<sub>c</sub>=1</sub> log P(k<sub>c</sub>) &nbsp;[Eq. 10]
+  </div><div class="tag">(19)</div></div>
+
+  <div class="eq"><div class="body">
+    ℓ<sub>item</sub> = ∑<sub>v</sub> ∑<sub>j∈S<sub>v</sub></sub> log P(j | S<sub>v</sub>\{j}, 𝒦<sub>v</sub>) &nbsp;[Eq. 15]
+    &nbsp;&nbsp;&nbsp;
+    ℓ<sub>qty</sub> = ∑<sub>v</sub> ∑<sub>j∈S<sub>v</sub></sub> log P(q<sub>j</sub>) &nbsp;[Eq. 13]
+  </div><div class="tag">(20)</div></div>
+
+  <div class="eq key"><div class="body">
+    ℒ = ℓ<sub>item</sub> + w<sub>q</sub>ℓ<sub>qty</sub> + w<sub>c</sub>ℓ<sub>inc</sub>
+    + w<sub>b</sub>ℓ<sub>brd</sub>
+    − τ<sub>repr</sub>‖Θ<sub>repr</sub>‖² − τ<sub>price</sub>‖Θ<sub>price</sub>‖²
+  </div><div class="tag">(21)</div></div>
+
+  <p>ℓ<sub>item</sub> is Besag's pseudo-likelihood for Eq. 12: the sum of one-position
+  conditionals, exact because Eq. 15 is exact. Θ<sub>repr</sub> = {α, θ, ψ, μ, δ, ζ, ξ,
+  c<sup>u</sup>, c<sup>c</sup>, c<sup>s</sup>}, Θ<sub>price</sub> = {γ, β, γ<sup>q</sup>,
+  β<sup>q</sup>}. The blocks are penalised separately because shrinking the price block at the
+  representation block's rate biases the elasticity toward zero, and the elasticity is the
+  estimand. Defaults: w<sub>q</sub> = w<sub>c</sub> = w<sub>b</sub> = 1,
+  τ<sub>repr</sub> = 10<sup>−2</sup>/1500, τ<sub>price</sub> = 10<sup>−4</sup>/1500, M = 192
+  baskets, Adam at 0.005 annealed by cosine.</p>
+
+  <h2 id="s16"><span class="num">16</span>What consistency does and does not hold</h2>
+
+  <div class="flag">
+    <p class="label">The textbook pseudo-likelihood guarantee does not apply here</p>
+    <p>Two obstructions, both structural.</p>
+    <p><strong>Reweighting.</strong> Besag's consistency is for the maximiser of
+    ℓ<sub>item</sub> alone. Eq. 21 maximises a weighted sum of four log-likelihoods; unless
+    w<sub>q</sub> = w<sub>c</sub> = w<sub>b</sub> = 1 <em>and</em> the components share no
+    parameters, its maximiser is not an M-estimator for the parameters of any one of them. They
+    do share parameters — α and γ,β appear in all four — so the weights are not innocuous even at
+    1.</p>
+    <p><strong>Incidental parameters.</strong> θ<sub>i</sub>, γ<sub>i</sub>,
+    c<sup>u</sup><sub>i</sub>, h<sub>i</sub>, γ<sup>q</sup><sub>i</sub> are per-household:
+    2,066 households, ~145 parameters each, with a bounded number of trips per household.
+    Classical consistency requires the parameter count fixed as the sample grows. This is the
+    Neyman–Scott regime, in which the common parameters are generally inconsistent as well.</p>
+    <p>What can honestly be claimed: Eq. 21 is a penalised M-estimator whose population
+    objective is maximised at the truth when w = 1 and penalties vanish. Consistency of κ and of
+    γ<sup>⊤</sup>β requires either an argument that the household parameters are ancillary, or a
+    fixed-effects treatment, or an explicit prior. None is currently supplied.</p>
+  </div>
+
+  <h2 id="s17"><span class="num">17</span>The sampled estimators</h2>
+
+  <h3><span class="num">17.1</span>The inclusive value</h3>
+
+  <p>Sample m of the N<sub>c</sub> stocked products uniformly with replacement:</p>
+
+  <div class="eq"><div class="body">
+    ÎV<sub>ict</sub> = log( ∑<sub>r=1..m</sub> e<sup>b<sub>ij<sub>r</sub>t</sub></sup> )
+    + log <span class="frac"><span>N<sub>c</sub></span><span>m</span></span>,
+    &nbsp;&nbsp; m = 32
+  </div><div class="tag">(22)</div></div>
+
+  <p>The sum is unbiased: 𝔼[(N<sub>c</sub>/m)∑<sub>r</sub>e<sup>b</sup>] =
+  ∑<sub>j</sub>e<sup>b</sup>. Its logarithm is biased low by Jensen.</p>
+
+  <div class="flag">
+    <p class="label">The damage is attenuation of κ, not a level shift</p>
+    <p>Writing ÎV = IV + <var>e</var>, the estimator enters Eq. 6 as a regressor multiplied by
+    the estimand κ<sub>c</sub>. Noise in such a regressor produces classical attenuation: κ̂ is
+    biased toward zero by roughly Var(IV)/(Var(IV) + Var(<var>e</var>)). Absorbing 𝔼[<var>e</var>]
+    into c<sup>0</sup><sub>c</sub> removes the mean and does nothing about the variance.
+    Further, IV sits inside the nonlinear cloglog of Eq. 9, so 𝔼[∇ℓ] ≠ ∇ℓ(𝔼[·]) — the
+    <em>gradient</em> is biased, and no intercept absorbs a biased gradient. Var(<var>e</var>)
+    falls as 1/m; m = 32 against N<sub>c</sub> up to 225 is not obviously enough. Neither the
+    attenuation factor nor its sensitivity to m is currently measured.</p>
+  </div>
+
+  <h3><span class="num">17.2</span>Category sampling</h3>
+
+  <p>Eq. 9 is a Bernoulli over 188 categories per trip, of which 6.12 are entered. Sixteen are
+  sampled <strong>uniformly, without replacement</strong>, and ℓ<sub>inc</sub> is rescaled by
+  C/|𝒮<sub>v</sub>| (Eq. 19) so the sampled sum is an unbiased estimate of the full one.</p>
+
+  <p>Case-control sampling — a few entered, a few not — is rejected for a reason specific to the
+  link. The standard log(π<sub>1</sub>/π<sub>0</sub>) intercept correction is a <em>logit</em>
+  result (Prentice–Pyke): only for the logistic link does outcome-dependent sampling shift the
+  intercept alone and leave the slopes intact. Eq. 9 is cloglog, for which no such invariance
+  holds — outcome-dependent sampling distorts the slopes too, including κ, and cannot be repaired
+  by an offset. Uniform sampling avoids the question.</p>
+
+  <p class="note">An earlier version of this document argued instead that case-control biases the
+  term κ<sub>c</sub>(IV − <span style="text-decoration:overline">IV</span><sub>c</sub>) because
+  its sample mean differs from its population mean. That argument is wrong twice over: a
+  difference in a regressor's sample mean does not by itself bias an M-estimator, and
+  <span style="text-decoration:overline">IV</span><sub>c</sub> is a fixed constant, which §17.3
+  correctly says is absorbed by c<sup>0</sup><sub>c</sub>.</p>
+
+  <h3><span class="num">17.3</span>The frozen reference</h3>
+
+  <p><span style="text-decoration:overline">IV</span><sub>c</sub> is fixed early in fitting to
+  the mean of ÎV<sub>ict</sub> over a uniform category sample. Being a fixed per-category
+  constant it is absorbed by c<sup>0</sup><sub>c</sub> and does not change the fit; freezing
+  guarantees that training and generation subtract the same thing. It is a distinct object from
+  Eq. 22, which is a per-trip random quantity.</p>
+
+  <h2 id="s18"><span class="num">18</span>Identification</h2>
+
+  <p>Four invariances, none previously stated.</p>
+
+  <ol>
+    <li><strong>Rotation.</strong> b contains θ<sub>i</sub><sup>⊤</sup>α<sub>j</sub> and E
+    contains α<sub>j</sub><sup>⊤</sup>α<sub>k</sub>; both are invariant under α → Rα, θ → Rθ for
+    any R ∈ O(K). With K = 64 that is a <strong>K(K−1)/2 = 2,016-dimensional</strong>
+    indeterminacy. Only the Gram matrices are identified. Any reported embedding geometry must
+    be rotation-invariant, or the rotation must be fixed by a convention that is stated.</li>
+    <li><strong>Scale.</strong> Under α → cα, θ → θ/c the taste term is invariant but the
+    interaction scales by c², so the scale of α <em>is</em> pinned — by the interaction, not by
+    the taste term.</li>
+    <li><strong>Price sign and rotation.</strong> γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub> is
+    invariant under O(K<sub>p</sub>) and under (γ,β) → (−γ,−β). Only the product is identified,
+    and nothing constrains it to be positive, so the model admits upward-sloping demand for any
+    (i, j) pair. Reported elasticities are meaningful only in aggregate unless a sign restriction
+    is imposed.</li>
+    <li><strong>Category levels.</strong> This is the consequential one. A<sub>−j</sub> ⊆
+    𝒞<sub>s</sub>(c(j)), so ℓ<sub>item</sub> only ever compares products <em>within</em> a
+    category: adding a constant to b<sub>ijt</sub> for all j in one category leaves every Eq. 15
+    unchanged. The category level of b is therefore identified only through IV in Eq. 6 — that
+    is, through the noisy, Jensen-biased Eq. 22, whose bias §17.1 absorbs into
+    c<sup>0</sup><sub>c</sub>, which is the same parameter the category level lives in. The
+    identification of category levels and the correction of the IV bias compete for one
+    parameter.</li>
+  </ol>
+
+  <h2 id="s19"><span class="num">19</span>Inference</h2>
+
+  <p>The estimand is the price elasticity (Appendix C) and κ. Neither is a maximum-likelihood
+  estimate, so the inverse Hessian is not a valid variance.</p>
+
+  <ul>
+    <li><strong>Sandwich.</strong> For a pseudo-likelihood the asymptotic variance is
+    H<sup>−1</sup>VH<sup>−1</sup> with H the expected Hessian and V the variance of the score.
+    Because ℓ<sub>item</sub> sums n dependent conditionals per basket, V must be estimated with
+    the basket — not the position — as the independent unit.</li>
+    <li><strong>Cluster.</strong> Trips repeat within households, and household parameters are
+    estimated from those same trips, so the resampling unit is the <em>household</em>.</li>
+    <li><strong>Practical route.</strong> A household-level block bootstrap over the whole
+    pipeline, refitting each replicate, is the only procedure that also propagates the §17.1
+    attenuation and the §16 reweighting. It is expensive and is what the estimand requires.</li>
+  </ul>
+
+  <p class="note">No uncertainty is currently reported for any quantity in this specification.
+  Until it is, differences between model variants cannot be called real.</p>
+
+  <!-- ================================ APPENDICES -->
+  <div class="part"><span class="pn">Appendices</span><span class="pt">Reference</span></div>
+
+  <h2 id="a"><span class="num">A</span>Symbols</h2>
+
+  <p>K = 64, K<sub>p</sub> = 8, K<sub>t</sub> = 8, K<sub>s</sub> = 4. Each symbol denotes
+  exactly one object.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Symbol</th><th>Shape</th><th>Enters</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="sym">λ<sub>j</sub></td><td class="shape">J</td><td>Eq. 4</td><td>product intercept</td></tr>
+      <tr><td class="sym">θ<sub>i</sub>, α<sub>j</sub></td><td class="shape">N×K, J×K</td><td>Eq. 4, 5, 11</td><td>household taste; product attributes, also the co-purchase embedding</td></tr>
+      <tr><td class="sym">γ<sub>i</sub>, β<sub>j</sub></td><td class="shape">N×K<sub>p</sub>, J×K<sub>p</sub></td><td>Eq. 4</td><td>price sensitivity, choice margin</td></tr>
+      <tr><td class="sym">ψ<sub>j</sub></td><td class="shape">J×4</td><td>Eq. 4</td><td>recency loading, choice margin</td></tr>
+      <tr><td class="sym">μ<sub>j</sub>, δ<sub>w</sub></td><td class="shape">J×K<sub>t</sub>, 52×K<sub>t</sub></td><td>Eq. 4</td><td>seasonality</td></tr>
+      <tr><td class="sym">ζ<sub>j</sub>, ξ<sub>s</sub></td><td class="shape">J×K<sub>s</sub>, 115×K<sub>s</sub></td><td>Eq. 4</td><td>store–product affinity</td></tr>
+      <tr><td class="sym">c<sup>0</sup><sub>c</sub></td><td class="shape">C</td><td>Eq. 6</td><td>category entry intercept</td></tr>
+      <tr><td class="sym">c<sup>u</sup><sub>i</sub>, c<sup>c</sup><sub>c</sub></td><td class="shape">N×K, C×K</td><td>Eq. 6</td><td>household appetite for category kinds</td></tr>
+      <tr><td class="sym">c<sup>s</sup><sub>c</sub></td><td class="shape">C×4</td><td>Eq. 6</td><td>category recency loading</td></tr>
+      <tr><td class="sym">κ<sup>raw</sup><sub>c</sub></td><td class="shape">C</td><td>Eq. 6</td><td>nesting coefficient via softplus, init at κ = 1</td></tr>
+      <tr><td class="sym">c<sup>b</sup><sub>c</sub>, h<sub>i</sub>, c<sup>p</sup><sub>c</sub></td><td class="shape">C, N, C</td><td>Eq. 7</td><td>breadth intercept; household breadth; promotion widening</td></tr>
+      <tr><td class="sym">a<sub>j</sub>, γ<sup>q</sup><sub>i</sub>, β<sup>q</sup><sub>j</sub>, ψ<sup>q</sup><sub>j</sub></td><td class="shape">J, N×K<sub>p</sub>, J×K<sub>p</sub>, J×4</td><td>Eq. 7</td><td>units intercept; price sensitivity, units margin; recency, units margin</td></tr>
+      <tr><td class="sym">Λ<sup>brd</sup>, Λ<sup>qty</sup></td><td class="shape">scalars</td><td>Eq. 7, 10, 13</td><td>the two Poisson rates</td></tr>
+      <tr><td class="sym">τ<sub>repr</sub>, τ<sub>price</sub></td><td class="shape">scalars</td><td>Eq. 21</td><td>the two penalty coefficients</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="note">Dummy indices: <var>r</var> for values of k<sub>c</sub>, <var>ν</var> for
+  values of q<sub>j</sub>. Neither collides with a parameter. ÎV (Eq. 22, random per trip) and
+  <span style="text-decoration:overline">IV</span><sub>c</sub> (Eq. 6, a frozen constant) are
+  distinct objects.</p>
+
+  <h2 id="b"><span class="num">B</span>Construction of 𝒢</h2>
+
+  <h3><span class="num">B.1</span>Δlog p</h3>
+
+  <p><strong>Price.</strong> The loyalty price a card holder faces:
+  (SALES_VALUE − COUPON_MATCH_DISC)/QUANTITY. The coupon match is a manufacturer refund, not a
+  price the shopper responded to. The paid price is not used: two shoppers at one shelf with
+  different coupons would otherwise face different prices for the same product on the same
+  day.</p>
+
+  <p><strong>Per product-day.</strong> The median over that day's purchase lines. 24.7% of the
+  J × D grid is observed; missing days carry the last observed price forward, and days before a
+  product's first sale carry the first observed price backward.</p>
+
+  <p><strong>Centring.</strong> With 𝒯 the training days,
+  Δlog p<sub>jt</sub> = log p<sub>jt</sub> − |𝒯|<sup>−1</sup>∑<sub>t′∈𝒯</sub> log p<sub>jt′</sub>,
+  where log p = log max(price, 10<sup>−3</sup>).</p>
+
+  <div class="flag">
+    <p class="label">Two properties of this covariate to keep in view</p>
+    <p><strong>Three quarters of it is imputed.</strong> With 24.7% of the grid observed, most
+    values of Δlog p are a carried-forward constant, and Δlog p is exactly zero wherever the
+    carried price equals the training mean. Price <em>variation</em> is therefore concentrated in
+    a minority of product-days, and any elasticity is estimated off that minority.</p>
+    <p><strong>The centring looks ahead within training.</strong> The mean runs over all of 𝒯,
+    including days after <var>t</var>, as does g<sub>sub(j)</sub> in B.3. This is not test
+    leakage — 𝒯 excludes held-out days — but it does mean a training-day covariate uses
+    information from later training days, which matters if the series is used sequentially.</p>
+  </div>
+
+  <p><strong>Store deviation.</strong> d<sub>jsw</sub> = log p̃<sub>jsw</sub> −
+  log p̃<sub>jw</sub>, store median against chain median that week, kept where
+  |d| &gt; 10<sup>−6</sup> — 244,880 cells, 0.53% of the grid; zero elsewhere. The model reads
+  Δlog p<sub>jst</sub> = Δlog p<sub>jt</sub> + d<sub>jsw</sub>.</p>
+
+  <h3><span class="num">B.2</span>𝒞<sub>s</sub>(c)</h3>
+
+  <p>Product <var>j</var> ∈ 𝒞<sub>s</sub>(c(j)) if store <var>s</var> sold it at least once in
+  the training window. Covers 50.9% of the product × store grid.</p>
+
+  <div class="flag">
+    <p class="label">The choice set is constructed from the choices</p>
+    <p>Defining assortment by "was sold" is selection on the outcome, not merely a stale proxy.
+    A product stocked but never bought is deleted from the denominator of Eq. 15 and from the sum
+    in Eq. 6. Both effects run one way: fitted choice probabilities are inflated, and IV is
+    inflated — and IV multiplied by κ is the estimand. An assortment measure independent of
+    purchases, or a sensitivity analysis over the inclusion threshold, is needed before κ is
+    interpreted.</p>
+  </div>
+
+  <h3><span class="num">B.3</span>Recency</h3>
+
+  <p>With τ the days since household <var>i</var> last bought product <var>j</var>'s
+  sub-commodity, by a strictly-before lookup:</p>
+
+  <div class="eq"><div class="body">
+    x<sub>ijt</sub> = [ 1{never}, &nbsp; e<sup>−τ/7</sup>, &nbsp;
+    e<sup>−τ/g<sub>sub(j)</sub></sup>, &nbsp; log(1+τ)/log 100 ]<sup>⊤</sup>
+  </div><div class="tag">(23)</div></div>
+
+  <p>with the last three zero when there is no earlier purchase. g<sub>sub(j)</sub> is that
+  sub-commodity's median repurchase gap over 𝒯. x<sub>ict</sub> is the same four functions of
+  the days since the household last bought anything in category <var>c</var>.</p>
+
+  <h2 id="c"><span class="num">C</span>Price derivatives</h2>
+
+  <p><strong>Four</strong> margins, one per factor of Eq. 8. Two distinct shares appear and they
+  are not equal:</p>
+
+  <div class="eq"><div class="body">
+    π<sup>IV</sup><sub>j</sub> =
+    <span class="frac"><span>e<sup>b<sub>ijt</sub></sup></span>
+    <span>∑<sub>j′∈𝒞<sub>s</sub>(c)</sub> e<sup>b<sub>ij′t</sub></sup></span></span>
+    &nbsp;&nbsp;&nbsp;
+    π<sup>−j</sup><sub>j</sub> =
+    <span class="frac"><span>e<sup>u<sup>−j</sup><sub>j</sub></sup></span>
+    <span>∑<sub>m∈A<sub>−j</sub></sub> e<sup>u<sup>−j</sup><sub>m</sub></sup></span></span>
+  </div><div class="tag">(24)</div></div>
+
+  <p>π<sup>IV</sup> normalises <var>b</var> over the whole category and is what IV
+  differentiates; π<sup>−j</sup> normalises <var>u</var> over the admissible set and is the
+  model's actual choice probability. Writing g<sub>j</sub> = −(γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub>)
+  for ∂b/∂log p<sub>j</sub>:</p>
+
+  <div class="eq"><div class="body">
+    <span class="frac"><span>∂ log π<sup>−j</sup><sub>j</sub></span><span>∂ log p<sub>j</sub></span></span>
+    = g<sub>j</sub>(1 − π<sup>−j</sup><sub>j</sub>)
+    &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="frac"><span>∂ log P(y<sub>c</sub>=1)</span><span>∂ log p<sub>j</sub></span></span>
+    = G(η<sub>ict</sub>) · κ<sub>c</sub> g<sub>j</sub> π<sup>IV</sup><sub>j</sub>
+  </div><div class="tag">(25)</div></div>
+
+  <div class="eq"><div class="body">
+    <span class="frac"><span>∂ log 𝔼[k<sub>c</sub>]</span><span>∂ log p<sub>j</sub></span></span>
+    ≈ −<span class="frac"><span>c<sup>p</sup><sub>c</sub></span><span>N<sub>c</sub></span></span>
+    <span class="frac"><span>Λ<sup>brd</sup></span><span>1+Λ<sup>brd</sup></span></span>
+    &nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="frac"><span>∂ log 𝔼[q<sub>j</sub>]</span><span>∂ log p<sub>j</sub></span></span>
+    = −(γ<sup>q⊤</sup><sub>i</sub>β<sup>q</sup><sub>j</sub>)
+    <span class="frac"><span>Λ<sup>qty</sup></span><span>1+Λ<sup>qty</sup></span></span>
+  </div><div class="tag">(26)</div></div>
+
+  <p>where G(η) = e<sup>η</sup>e<sup>−e<sup>η</sup></sup> / (1 − e<sup>−e<sup>η</sup></sup>) is
+  the cloglog chain factor, the derivative of log P(y=1) with respect to η. G → 1 as η → −∞ and
+  equals 0.983 at the observed base rate π = 0.0325. The breadth derivative is approximate only
+  in that it ignores truncation, which binds rarely.</p>
+
+  <div class="flag">
+    <p class="label">The margins do not collapse into one expression</p>
+    <p>Combining the first two into −(γ<sup>⊤</sup>β)[1 − π(1 − κ<sub>c</sub>)] requires
+    <em>both</em> G(η) = 1 and π<sup>IV</sup> = π<sup>−j</sup>. Neither is exact: G = 0.983 at
+    the base rate, and the two shares normalise different scores over different sets. Report the
+    four margins separately, or state the two approximations with their magnitudes.</p>
+  </div>
+
+  <h2 id="d"><span class="num">D</span>Edge cases</h2>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Case</th><th>Treatment</th></tr></thead>
+    <tbody>
+      <tr><td>n = 1</td><td>ᾱ<sub>−j</sub> = <strong>0</strong> (Eq. 5); E(S) = b<sub>ijt</sub> (Eq. 11). Eq. 15 still normalises over A<sub>−j</sub> = 𝒞<sub>s</sub>(c(j)).</td></tr>
+      <tr><td>n = 0</td><td>Excluded by the conditioning in Eq. 8.</td></tr>
+      <tr><td>N<sub>c</sub> = 1</td><td>Eq. 10 forces k<sub>c</sub> = 1, so Λ<sup>brd</sup><sub>ic</sub> is unidentified from that store-category. Such cells contribute nothing to ℓ<sub>brd</sub> and should be excluded from it.</td></tr>
+      <tr><td>k<sub>c</sub> = N<sub>c</sub></td><td>A<sub>−j</sub> = {j}: the conditional is degenerate at j and the position contributes 0 to ℓ<sub>item</sub>. Correct, but such positions carry no information and inflate the count of terms.</td></tr>
+      <tr><td>Non-integer QUANTITY</td><td>Weight-sold produce violates q<sub>j</sub> ∈ {1,2,…}. B.1 divides by QUANTITY, so these lines exist. Either they are excluded from the sample or Eq. 13 is misspecified for them; this must be stated.</td></tr>
+      <tr><td>Store stocks nothing in c</td><td>N<sub>c</sub> = 0 makes Eq. 6's IV a sum over the empty set. Such (store, category) pairs must be dropped from ℓ<sub>inc</sub>, not assigned IV = −∞.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+</div>
