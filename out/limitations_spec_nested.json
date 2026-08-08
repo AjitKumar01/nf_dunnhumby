@@ -1,0 +1,141 @@
+{
+  "label": "spec_nested",
+  "assortment": [
+    {
+      "threshold": 1,
+      "set_size": 45.37489318847656,
+      "loglik": -2.6345016956329346,
+      "top1": 0.3091380000114441,
+      "allocation_elasticity": -0.606205940246582
+    },
+    {
+      "threshold": 2,
+      "set_size": 29.834856033325195,
+      "loglik": -2.3665359020233154,
+      "top1": 0.33970797061920166,
+      "allocation_elasticity": -0.5465958714485168
+    },
+    {
+      "threshold": 3,
+      "set_size": 21.11078643798828,
+      "loglik": -2.148059129714966,
+      "top1": 0.3702307939529419,
+      "allocation_elasticity": -0.48060712218284607
+    },
+    {
+      "threshold": 5,
+      "set_size": 12.443946838378906,
+      "loglik": -1.7938729524612427,
+      "top1": 0.4353273808956146,
+      "allocation_elasticity": -0.3401760458946228
+    },
+    {
+      "threshold": 10,
+      "set_size": 5.690956115722656,
+      "loglik": -1.2501201629638672,
+      "top1": 0.5766368508338928,
+      "allocation_elasticity": -0.053142763674259186
+    },
+    {
+      "threshold": 25,
+      "set_size": 2.239802122116089,
+      "loglik": -0.5919557809829712,
+      "top1": 0.793876588344574,
+      "allocation_elasticity": 0.0
+    }
+  ],
+  "novelty": {
+    "real_novel": 0.14237773418426514,
+    "real_items": 7.688,
+    "by_temperature": [
+      {
+        "T": 1.0,
+        "novel": 0.4611906111240387,
+        "items": 8.315,
+        "median_days": 90.9999929601217
+      },
+      {
+        "T": 0.7,
+        "novel": 0.43999046087265015,
+        "items": 10.0734,
+        "median_days": 81.99998090062368
+      },
+      {
+        "T": 0.5,
+        "novel": 0.42056363821029663,
+        "items": 14.8534,
+        "median_days": 80.00000673133648
+      },
+      {
+        "T": 0.35,
+        "novel": 0.4227009415626526,
+        "items": 24.7144,
+        "median_days": 82.99998585923073
+      },
+      {
+        "T": 0.25,
+        "novel": 0.43484097719192505,
+        "items": 38.1436,
+        "median_days": 89.00001609166168
+      }
+    ]
+  },
+  "c2st": {
+    "auc": 0.8101363486257176,
+    "n": 4860,
+    "importances": [
+      [
+        "n categories",
+        0.3098059228327875
+      ],
+      [
+        "n items",
+        0.26025431495014045
+      ],
+      [
+        "min log-popularity",
+        0.12105312287186722
+      ],
+      [
+        "mean pairwise cos(alpha)",
+        0.09874579478561951
+      ],
+      [
+        "sd log-popularity",
+        0.08726898911656583
+      ],
+      [
+        "items per category",
+        0.061641514456718914
+      ],
+      [
+        "mean log-popularity",
+        0.04676005715087668
+      ],
+      [
+        "largest category count",
+        0.01447028383542388
+      ]
+    ],
+    "real_means": {
+      "n items": 7.688,
+      "n categories": 6.018,
+      "items per category": 1.2367957315367741,
+      "mean log-popularity": 5.980197467005567,
+      "sd log-popularity": 0.8987162884601854,
+      "min log-popularity": 4.855978996563338,
+      "mean pairwise cos(alpha)": 0.0731623865531108,
+      "largest category count": 1.8776
+    },
+    "gen_means": {
+      "n items": 8.579423868312757,
+      "n categories": 6.555349794238683,
+      "items per category": 1.300729388862021,
+      "mean log-popularity": 5.868658103919734,
+      "sd log-popularity": 1.0208312359134122,
+      "min log-popularity": 4.644518152439295,
+      "mean pairwise cos(alpha)": 0.0681185496969282,
+      "largest category count": 2.148559670781893
+    }
+  }
+}
