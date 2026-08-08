@@ -5,11 +5,11 @@
     "quantity": true,
     "store": true,
     "price_coef": 0.7055543065071106,
-    "quantity_price_coef": 1.700671868243171e-40,
+    "quantity_price_coef": 0.06771625578403473,
     "median_kappa": 0.8265990018844604,
     "test_item": -2.581810932668462,
     "test_top1": 0.3176648819159092,
-    "test_quantity_nll": 0.7465851080240499,
+    "test_quantity_nll": 0.6588647836435134,
     "test_incidence_nll": 0.12502968754371008
   },
   "spec_pl": {
@@ -18,11 +18,11 @@
     "quantity": true,
     "store": true,
     "price_coef": 4.4988622737418893e-38,
-    "quantity_price_coef": -2.997111168482562e-40,
+    "quantity_price_coef": -2.8599324566159484e-39,
     "median_kappa": 0.83100825548172,
     "test_item": -2.641298780701345,
     "test_top1": 0.3058772257502179,
-    "test_quantity_nll": 0.7469192627038564,
+    "test_quantity_nll": 0.6750483113114397,
     "test_incidence_nll": 0.12482938534021377,
     "retained": 6.376351518586542e-38
   },
@@ -30,12 +30,12 @@
     "n": 12724,
     "allocation": -0.994933009147644,
     "incidence": -0.11839715391397476,
-    "quantity": -0.0008025605347938836,
-    "total": -1.1141327619552612,
-    "median_total": -0.8766688108444214,
-    "share_allocation": 0.8930111770535981,
-    "share_incidence": 0.10626844300511565,
-    "share_quantity": 0.0007203455119526509,
+    "quantity": -0.11148865520954132,
+    "total": -1.2248188257217407,
+    "median_total": -0.9244748950004578,
+    "share_allocation": 0.8123103501135089,
+    "share_incidence": 0.09666503439331746,
+    "share_quantity": 0.09102460941016738,
     "median_kappa": 0.8265990018844604,
     "share_categories_kappa_above_1": 0.005319148767739534
   },
@@ -46,7 +46,7 @@
       "p90": 21.0
     },
     "generated_items": {
-      "mean": 8.4835,
+      "mean": 8.475666666666665,
       "median": 7.833333333333333,
       "p90": 23.5
     },
@@ -56,7 +56,7 @@
       "p90": 16.0
     },
     "generated_categories": {
-      "mean": 6.421375,
+      "mean": 6.501666666666666,
       "median": 7.833333333333333,
       "p90": 15.666666666666666
     },
@@ -66,9 +66,9 @@
       "p90": 28.0
     },
     "generated_units": {
-      "mean": 16.847095595429337,
-      "median": 15.45121145248413,
-      "p90": 46.95048773288726
+      "mean": 12.079070219650864,
+      "median": 9.32559843858083,
+      "p90": 32.224977342287694
     },
     "trips": 4000
   },

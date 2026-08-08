@@ -88,7 +88,7 @@ def build_batches(d, split, n_batches, n_neg, seed, device, ctx_model,
     return out
 
 
-def score_loglik(scores, avail, rng=None):
+def score_loglik(scores, avail, target, rng=None):
     """Mean log P(true item), where the true item is column 0.
 
     Ties are broken at random, not by position.  The true item sits in column 0, so
@@ -97,9 +97,10 @@ def score_loglik(scores, avail, rng=None):
     A tiny random jitter, far below any real score difference, removes the artefact.
     """
     s = scores.masked_fill(~avail, -1e9)
-    lp = torch.log_softmax(s, dim=1)[:, 0]
+    ar = torch.arange(s.shape[0], device=s.device)
+    lp = torch.log_softmax(s, dim=1)[ar, target]
     j = torch.rand(s.shape, device=s.device, generator=rng) * 1e-6
-    return float(lp.mean()), float(((s + j).argmax(1) == 0).float().mean())
+    return float(lp.mean()), float(((s + j).argmax(1) == target).float().mean())
 
 
 def main(a):
@@ -127,7 +128,7 @@ def main(a):
         # popularity temperature first
         bp, bwp = -1e9, 1.0
         for w in [0.05, 0.1, 0.25, 0.5, 1.0]:
-            v = np.mean([score_loglik(pop0[bt["cand"]] * w, bt["avail"])[0]
+            v = np.mean([score_loglik(pop0[bt["cand"]] * w, bt["avail"], bt["target"])[0]
                          for _, bt in vb])
             if v > bp:
                 bp, bwp = v, w
@@ -136,7 +137,7 @@ def main(a):
         best, bw = -1e9, a.w_repeat
         for w in [0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0]:
             v = np.mean([score_loglik(H0[bt["user"].unsqueeze(1), bt["cand"]] * w
-                                      + pop0[bt["cand"]] * a.w_pop, bt["avail"])[0]
+                                      + pop0[bt["cand"]] * a.w_pop, bt["avail"], bt["target"])[0]
                          for _, bt in vb])
             if v > best:
                 best, bw = v, w
@@ -153,14 +154,14 @@ def main(a):
     res = {}
 
     # ---------------------------------------------------------------- random
-    tot = [score_loglik(torch.zeros_like(bt["dlogp"]), bt["avail"]) for _, bt in batches]
+    tot = [score_loglik(torch.zeros_like(bt["dlogp"]), bt["avail"], bt["target"]) for _, bt in batches]
     res["random"] = {"loglik": float(np.mean([x[0] for x in tot])),
                      "top1": float(np.mean([x[1] for x in tot]))}
 
     # ------------------------------------------------------------ popularity
     cnt = np.bincount(tr.item_id.to_numpy(), minlength=d.J).astype(np.float64)
     pop = torch.as_tensor(np.log(cnt + 1.0), dtype=torch.float32, device=dev)
-    tot = [score_loglik(pop[bt["cand"]] * a.w_pop, bt["avail"]) for _, bt in batches]
+    tot = [score_loglik(pop[bt["cand"]] * a.w_pop, bt["avail"], bt["target"]) for _, bt in batches]
     res["popularity"] = {"loglik": float(np.mean([x[0] for x in tot])),
                          "top1": float(np.mean([x[1] for x in tot]))}
 
@@ -175,7 +176,7 @@ def main(a):
     tot = []
     for _, bt in batches:
         s = H[bt["user"].unsqueeze(1), bt["cand"]] * a.w_repeat + pop[bt["cand"]] * a.w_pop
-        tot.append(score_loglik(s, bt["avail"]))
+        tot.append(score_loglik(s, bt["avail"], bt["target"]))
     res["household_repeat"] = {"loglik": float(np.mean([x[0] for x in tot])),
                                "top1": float(np.mean([x[1] for x in tot]))}
 
@@ -217,7 +218,7 @@ def main(a):
         ctx = (basket_vec @ C) / n_in                           # [B, J]
         s = torch.gather(ctx[torch.as_tensor(owner, device=dev)], 1, bt["cand"])
         s = s * a.w_cooc + pop[bt["cand"]] * a.w_pop
-        tot.append(score_loglik(s, bt["avail"]))
+        tot.append(score_loglik(s, bt["avail"], bt["target"]))
     res["cooccurrence"] = {"loglik": float(np.mean([x[0] for x in tot])),
                            "top1": float(np.mean([x[1] for x in tot]))}
 
@@ -235,7 +236,7 @@ def main(a):
         s = (H[bt["user"].unsqueeze(1), bt["cand"]] * a.w_repeat
              + torch.gather(ctx[torch.as_tensor(owner, device=dev)], 1, bt["cand"]) * a.w_cooc
              + pop[bt["cand"]] * a.w_pop)
-        tot.append(score_loglik(s, bt["avail"]))
+        tot.append(score_loglik(s, bt["avail"], bt["target"]))
     res["household_plus_cooc"] = {"loglik": float(np.mean([x[0] for x in tot])),
                                   "top1": float(np.mean([x[1] for x in tot]))}
 
@@ -259,7 +260,7 @@ def main(a):
             for _, bt in mb:
                 s = m.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                                    bt["state"], bt["week"], bt["store"])
-                tot.append(score_loglik(s, bt["avail"]))
+                tot.append(score_loglik(s, bt["avail"], bt["target"]))
         res[label] = {"loglik": float(np.mean([x[0] for x in tot])),
                       "top1": float(np.mean([x[1] for x in tot]))}
 

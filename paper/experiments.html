@@ -1,0 +1,417 @@
+<title>Nested Basket Model — Experiments</title>
+<style>
+  :root{
+    --paper:#fbfbfa; --ink:#14171a; --muted:#5f6a72; --rule:#e0e3e0;
+    --accent:#1f5c4a; --warn:#8a5a1a; --bad:#8b2f3d;
+    --band:#f1f4f2; --warnband:#faf6ef; --badband:#faf3f4;
+    --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --math:"Cambria Math","STIX Two Math","Latin Modern Math","Times New Roman",Times,serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--paper:#0f1210; --ink:#e7ece8; --muted:#93a0a0; --rule:#232a26;
+          --accent:#5fbf9e; --warn:#d0a15c; --bad:#d98692;
+          --band:#161b18; --warnband:#1a1610; --badband:#1c1417;}
+  }
+  :root[data-theme="dark"]{--paper:#0f1210; --ink:#e7ece8; --muted:#93a0a0; --rule:#232a26;
+    --accent:#5fbf9e; --warn:#d0a15c; --bad:#d98692;
+    --band:#161b18; --warnband:#1a1610; --badband:#1c1417;}
+  :root[data-theme="light"]{--paper:#fbfbfa; --ink:#14171a; --muted:#5f6a72; --rule:#e0e3e0;
+    --accent:#1f5c4a; --warn:#8a5a1a; --bad:#8b2f3d;
+    --band:#f1f4f2; --warnband:#faf6ef; --badband:#faf3f4;}
+
+  body{background:var(--paper); color:var(--ink); font-family:var(--body);
+       font-size:16.5px; line-height:1.62; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:53rem; margin:0 auto; padding:3.5rem 1.5rem 7rem;
+        display:flex; flex-direction:column; gap:1rem;}
+  p{margin:0; max-width:68ch;}
+  .lede{font-size:1.06rem; color:var(--muted); max-width:66ch;}
+  .eyebrow{font-size:.7rem; letter-spacing:.16em; text-transform:uppercase;
+           color:var(--accent); font-weight:700; margin:0;}
+  h1{font-size:2rem; line-height:1.18; margin:.3rem 0 0; font-weight:600;
+     letter-spacing:-.012em; max-width:26ch;}
+  h2{font-size:1.16rem; margin:2.1rem 0 0; font-weight:600;
+     padding-top:1rem; border-top:1px solid var(--rule);}
+  h2 .num{color:var(--accent); font-variant-numeric:tabular-nums; margin-right:.5rem;}
+  h3{font-size:.98rem; margin:1.25rem 0 0; font-weight:600;}
+
+  var,.v{font-style:italic; font-family:var(--math); font-size:1.05em;}
+  code{font-family:var(--mono); font-size:.83em; color:var(--accent);
+       background:var(--band); padding:.08em .34em; border-radius:2px;}
+
+  .scroll{overflow-x:auto; margin:.35rem 0;}
+  table{border-collapse:collapse; font-size:.88rem; min-width:100%;
+        font-variant-numeric:tabular-nums;}
+  th,td{text-align:right; padding:.44rem .55rem; border-bottom:1px solid var(--rule);
+        vertical-align:top; white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left; padding-left:0;}
+  th{font-size:.68rem; letter-spacing:.09em; text-transform:uppercase;
+     color:var(--muted); font-weight:700; border-bottom:1px solid var(--ink);}
+  tr.hi td{background:var(--band); font-weight:600;}
+  td.good{color:var(--accent);} td.bad{color:var(--bad);}
+  caption{caption-side:bottom; text-align:left; font-size:.82rem; color:var(--muted);
+          padding-top:.5rem; white-space:normal;}
+
+  .flag{border-left:2px solid var(--warn); background:var(--warnband);
+        padding:.7rem 0 .7rem 1rem; display:flex; flex-direction:column; gap:.5rem;}
+  .flag.neg{border-left-color:var(--bad); background:var(--badband);}
+  .flag .label{font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+               font-weight:700; color:var(--warn); margin:0;}
+  .flag.neg .label{color:var(--bad);}
+  .key{border-left:3px solid var(--accent); background:var(--band);
+       padding:.75rem 0 .75rem 1rem; display:flex; flex-direction:column; gap:.4rem;}
+  .key .label{font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+              font-weight:700; color:var(--accent); margin:0;}
+
+  ol,ul{margin:0; padding-left:1.3rem; display:flex; flex-direction:column;
+        gap:.4rem; max-width:68ch;}
+  li::marker{color:var(--accent);}
+  .note{font-size:.87rem; color:var(--muted); max-width:66ch;}
+  strong{font-weight:600;}
+  a{color:var(--accent);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Experiments</p>
+  <h1>What the fitted model does, and does not, deliver</h1>
+  <p class="lede">Everything here is fitted to the specification in
+  <code>model_spec.html</code>: the item conditional is summed exactly over the category,
+  so no number depends on a negative-sampling scheme. Three results are negative and are
+  reported as such.</p>
+
+  <h2 id="s1"><span class="num">1</span>Protocol, and what is comparable</h2>
+
+  <p>All numbers are on held-out test weeks. Eight models were fitted, differing only in
+  which term is removed, all for 6,000 iterations with identical data and schedule. The
+  item score is the exact conditional of Eq. 18 of the specification: a softmax over the
+  purchased product's category minus whatever else the basket holds from that category.
+  Its choice set averages <strong>46.9 admissible products</strong>, so <em>chance is
+  −log 46.9 = −3.848 and 2.1% top-1</em>.</p>
+
+  <div class="key">
+    <p class="label">Not comparable to earlier numbers</p>
+    <p>Every item log-likelihood previously reported for this project was a 21-way or
+    201-way discrimination against sampled decoys. Those metrics were tilted by the
+    proposal distribution — their optimal scorer is log&nbsp;p − log&nbsp;q, not
+    log&nbsp;p. Nothing here can be placed alongside them; only the distance from chance
+    carries across.</p>
+  </div>
+
+  <p><strong>The seed spread is 0.0095 nats</strong> (two seeds, identical but for
+  initialisation), so gaps above about 0.02 are real and anything smaller is not. Two
+  seeds is a weak basis for that statement and §8 says what would replace it.</p>
+
+  <h2 id="s2"><span class="num">2</span>Do the equations match the code?</h2>
+
+  <p>Fifteen checks compare each printed formula against the fitted model, by autograd
+  where the specification states a derivative and by direct evaluation where it states an
+  identity (<code>scripts/33_verify_equations.py</code>). <strong>All fifteen pass</strong>,
+  including the three that carry the argument: the swap identity
+  E(S′) − E(S) = u<sup>−j</sup><sub>m</sub> − u<sup>−j</sup><sub>j</sub>, the unbiasedness
+  of the sampled inclusive value, and the three price derivatives of Appendix C.</p>
+
+  <h2 id="s3"><span class="num">3</span>Ablations</h2>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>model</th><th>item</th><th>top-1</th><th>cost of removing</th><th>qNLL</th><th>price</th><th>κ</th></tr></thead>
+    <tbody>
+      <tr><td>seed replicate</td><td>−2.5723</td><td>0.321</td><td>−0.0095</td><td>0.6609</td><td>+0.709</td><td>0.827</td></tr>
+      <tr><td>no quantity head</td><td>−2.5813</td><td>0.318</td><td>−0.0005</td><td>—</td><td>+0.706</td><td>0.825</td></tr>
+      <tr class="hi"><td>full model</td><td>−2.5818</td><td>0.318</td><td>—</td><td>0.6589</td><td>+0.706</td><td>0.827</td></tr>
+      <tr><td>no nest</td><td>−2.6003</td><td>0.318</td><td>+0.0185</td><td>0.6601</td><td>+0.611</td><td>—</td></tr>
+      <tr><td>no household state</td><td>−2.6305</td><td>0.308</td><td>+0.0487</td><td>0.6620</td><td>+0.715</td><td>0.819</td></tr>
+      <tr><td>no basket interaction</td><td>−2.6400</td><td>0.312</td><td>+0.0582</td><td>0.6589</td><td>+0.730</td><td>0.825</td></tr>
+      <tr><td>prices scrambled</td><td>−2.6413</td><td>0.306</td><td>+0.0595</td><td>0.6750</td><td class="good">+0.000</td><td>0.831</td></tr>
+      <tr><td>no store</td><td>−2.9187</td><td>0.286</td><td>+0.3369</td><td>0.6582</td><td>+0.754</td><td>0.849</td></tr>
+    </tbody>
+    <caption>Test set. Chance −3.848 / 0.021. Seed spread 0.0095 nats.</caption>
+  </table>
+  </div>
+
+  <p>Store dominates at 0.337, then the basket interaction at 0.058 and household state at
+  0.049. Removing the quantity head costs <strong>0.0005</strong> — inside the seed spread,
+  and correctly so, since that head never enters item utility. κ is stable at 0.819–0.849
+  across every variant including the placebo, and sits below 1 throughout: a price cut
+  reaches category entry at less than full strength.</p>
+
+  <div class="key">
+    <p class="label">One conclusion reversed</p>
+    <p>Under the old sampled metric, removing the nest <em>improved</em> item likelihood by
+    0.005, and the paper concluded the model was "marginally better without the nest". On
+    the exact conditional it <strong>costs +0.0185</strong>. The earlier finding was an
+    artefact of a proposal-tilted metric, not a property of the model.</p>
+  </div>
+
+  <h2 id="s4"><span class="num">4</span>Against baselines, on one candidate set</h2>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>model</th><th>log-lik</th><th>top-1</th><th>vs popularity</th></tr></thead>
+    <tbody>
+      <tr><td>random</td><td>−3.3624</td><td>0.081</td><td>−0.1759</td></tr>
+      <tr><td>co-occurrence</td><td>−3.2641</td><td>0.141</td><td>−0.0776</td></tr>
+      <tr><td>popularity</td><td>−3.1865</td><td>0.174</td><td>+0.0000</td></tr>
+      <tr><td>household + co-occurrence</td><td>−3.0781</td><td>0.275</td><td>+0.1085</td></tr>
+      <tr><td>household repeat-purchase</td><td>−2.7826</td><td>0.310</td><td>+0.4039</td></tr>
+      <tr><td>full model, no interaction</td><td>−2.6625</td><td>0.309</td><td>+0.5241</td></tr>
+      <tr class="hi"><td>full model</td><td>−2.5972</td><td>0.314</td><td>+0.5893</td></tr>
+    </tbody>
+    <caption>49,845 held-out purchases, identical candidate sets for every model, heuristic
+    weights tuned on validation before scoring on test.</caption>
+  </table>
+  </div>
+
+  <p>The model beats popularity by 0.589 nats and the strongest heuristic — household
+  repeat-purchase — by <strong>0.185 nats</strong>. That last gap is the one worth quoting:
+  repeat-purchase needs no model at all, and closing 0.185 nats above it is the whole
+  contribution of the learned representation on this task.</p>
+
+  <div class="flag">
+    <p class="label">Unequal tuning budget</p>
+    <p>The heuristics have one tuned weight each. The fitted model has 870,392 parameters
+    and its architecture was chosen across many configurations. This comparison is not
+    like-for-like and should not be read as one; the learned baselines that would make it
+    fair (HPF, B-Emb) have not been refitted against the current specification.</p>
+  </div>
+
+  <h2 id="s5"><span class="num">5</span>Is the price response causal?</h2>
+
+  <p>Refitting on a price panel scrambled before fitting, store deviations included:</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>model</th><th>price coef.</th><th>quantity price coef.</th><th>κ</th><th>item</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td>fitted</td><td>+0.706</td><td>+0.068</td><td>0.827</td><td>−2.5818</td></tr>
+      <tr><td>seed replicate</td><td>+0.709</td><td>+0.067</td><td>0.827</td><td>−2.5723</td></tr>
+      <tr><td>prices scrambled</td><td class="good">+0.000</td><td class="good">−0.000</td><td>0.831</td><td>−2.6413</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The placebo retains <strong>0.0% of the coefficient on both margins</strong> while κ
+  moves 0.827 → 0.831 and the incidence likelihood is untouched: prices scramble, category
+  structure does not. Two seeds agree to 0.003.</p>
+
+  <div class="flag">
+    <p class="label">What this does and does not show</p>
+    <p>Permuting a product's price series across days destroys the price–demand association
+    <em>whether it is causal or confounded</em>. The test rules out a spurious constant. It
+    cannot distinguish "price moves demand" from "the retailer times promotions to demand",
+    which is the actual endogeneity concern for within-product price variation. There is no
+    instrument here and no discontinuity. The section title in the earlier paper —
+    "Is the price response causal?" — overstated what this design answers.</p>
+  </div>
+
+  <h3>Where a price cut goes</h3>
+
+  <p>Median own-price elasticity <strong>−1.2248</strong>, split as</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>margin</th><th>elasticity</th><th>share</th><th>which factor</th></tr></thead>
+    <tbody>
+      <tr><td>allocation — share within category</td><td>−0.9949</td><td>81%</td><td>P(S ∣ 𝒦)</td></tr>
+      <tr><td>incidence — category entered</td><td>−0.1184</td><td>10%</td><td>P(y<sub>c</sub>)</td></tr>
+      <tr><td>quantity — units per buyer</td><td>−0.1115</td><td>9%</td><td>P(q<sub>j</sub>)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Mostly a price cut moves share. The quantity margin at 9% is invisible to any
+  binary-purchase model. The breadth margin is not in this table: Appendix C of the
+  specification notes it exists, through
+  −c<sup>p</sup><sub>c</sub>/N<sub>c</sub> in the breadth rate, and it has not been
+  measured.</p>
+
+  <h2 id="s6"><span class="num">6</span>Generation</h2>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th></th><th>real</th><th>0 sweeps</th><th>TVD</th><th>4 sweeps</th><th>TVD</th></tr></thead>
+    <tbody>
+      <tr><td>items per basket</td><td>8.18</td><td>8.35</td><td>0.35</td><td>8.31</td><td>0.34</td></tr>
+      <tr><td>categories per basket</td><td>6.38</td><td>6.36</td><td>0.36</td><td>6.33</td><td>0.36</td></tr>
+      <tr><td>units per basket</td><td>11.06</td><td>11.35</td><td>0.34</td><td>11.38</td><td>0.33</td></tr>
+      <tr><td>distinct items per category</td><td>1.28</td><td>1.31</td><td>0.05</td><td>1.31</td><td>0.05</td></tr>
+      <tr><td>units per line</td><td>1.35</td><td>1.36</td><td>0.04</td><td>1.37</td><td>0.04</td></tr>
+    </tbody>
+    <caption>TVD = total variation distance from the real distribution; 0 identical, 1 disjoint.</caption>
+  </table>
+  </div>
+
+  <p><strong>Matching means is not matching distributions.</strong> Basket size agrees to
+  2% on the mean and sits 0.34 away in total variation. Item marginals correlate
+  <strong>+0.891</strong> across the catalogue with only 0.1% of real products never
+  generated. Price response re-estimated from generated data with the same estimator used
+  on real data recovers <strong>76–78%</strong> of the real elasticity (−0.4934 and −0.5046
+  against −0.6480).</p>
+
+  <h3>Co-occurrence</h3>
+
+  <p>Spearman rank correlation of pairwise lift against real: <strong>+0.028 at 0 sweeps,
+  +0.082 at 4</strong>. The previous session reached +0.097 only by drawing 75% of
+  negatives from the true product's own category. That mechanism no longer exists — there
+  are no negatives — and §6 of the specification predicted category normalisation would
+  absorb most of the gain. It reached +0.082 of +0.097, so the prediction is
+  <em>partly</em> confirmed: most of the effect was the choice-set mismatch, not negative
+  difficulty, but not all of it.</p>
+
+  <div class="flag neg">
+    <p class="label">Negative result — fine-grained substitution</p>
+    <p>Within-basket pairs sharing a held-out sub-commodity label: real
+    <strong>0.0646</strong>, generated <strong>0.0295</strong> at 0 sweeps and
+    <strong>0.0375</strong> at 4. The generator under-produces fine substitution by about
+    40%, and Gibbs sweeps close only part of it. At department level it is nearly right
+    (real 0.5581, generated 0.5399), so the failure is specific to fine distinctions. This
+    is the weakest result in the study.</p>
+  </div>
+
+  <h2 id="s7"><span class="num">7</span>What the representations learned</h2>
+
+  <h3>Product embeddings</h3>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>embedding</th><th>10-NN purity</th><th>same-sub AUC</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td>fitted α</td><td>0.1024</td><td>0.5835</td></tr>
+      <tr><td>random, identical shape</td><td>0.0047</td><td>0.4983</td></tr>
+      <tr><td>chance (size-matched)</td><td>0.0041</td><td>0.5000</td></tr>
+    </tbody>
+    <caption>Sub-commodity labels are never shown to the model. 2,000 products sampled.</caption>
+  </table>
+  </div>
+
+  <p>α recovers product structure at <strong>25× chance</strong> on neighbour purity — a
+  clear positive, and it must come from the data since a random embedding of identical
+  shape scores at chance. But the AUC of 0.583 is modest: ranking <em>all</em> pairs by
+  cosine separates same-sub-commodity pairs only weakly. The embedding gets close
+  neighbours right and the global geometry mostly wrong, which is consistent with the
+  co-occurrence result above.</p>
+
+  <h3>Household embeddings</h3>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>held-out target</th><th>n</th><th>majority</th><th>θ</th><th>c<sup>u</sup></th><th>γ</th><th>all</th><th>volume only</th><th>shuffled</th></tr></thead>
+    <tbody>
+      <tr><td>income band</td><td>651</td><td>0.235</td><td class="bad">0.152</td><td>0.192</td><td>0.235</td><td>0.137</td><td>0.240</td><td>0.152</td></tr>
+      <tr><td>household size</td><td>655</td><td>0.395</td><td class="bad">0.318</td><td>0.328</td><td>0.382</td><td>0.298</td><td>0.397</td><td>0.321</td></tr>
+      <tr><td>age group</td><td>655</td><td>0.359</td><td class="bad">0.275</td><td>0.311</td><td>0.340</td><td>0.250</td><td>0.354</td><td>0.235</td></tr>
+      <tr><td>children</td><td>655</td><td>0.692</td><td class="bad">0.598</td><td>0.637</td><td>0.692</td><td>0.536</td><td>0.692</td><td>0.530</td></tr>
+      <tr><td>homeowner</td><td>655</td><td>0.611</td><td class="bad">0.507</td><td>0.557</td><td>0.611</td><td>0.484</td><td>0.611</td><td>0.484</td></tr>
+    </tbody>
+    <caption>5-fold CV accuracy of a linear probe. 655 of 2,066 households have demographics.</caption>
+  </table>
+  </div>
+
+  <div class="flag neg">
+    <p class="label">Negative result — household embeddings carry no demographic signal</p>
+    <p>Not one probe beats always predicting the majority class. θ scores <em>at the
+    shuffled-label level</em> on income (0.152 against 0.152). γ reaches exactly the
+    majority rate on four of five targets, which is what a probe does when it finds nothing
+    and defaults to the base class. Concatenating the blocks makes it worse, the signature
+    of overfitting: 136 features against 655 households.</p>
+    <p>The honest reading is that the probe is linear and the sample is small, so this rules
+    out a <em>linear, low-sample</em> relationship rather than any relationship. But it is
+    the natural first test, and it fails. The household parameters are fitted from purchases
+    and appear to encode purchase behaviour only — not who the household is.</p>
+  </div>
+
+  <h2 id="s8"><span class="num">8</span>Price sensitivity</h2>
+
+  <p>g<sub>ij</sub> = γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub> is a 2,066 × 5,455 matrix
+  delivered as a rank-8 bilinear form. Positive means the household buys less when the
+  product is dear. Mean <strong>+0.9181</strong>, sd 1.4647, median +0.7056.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>variance of g<sub>ij</sub></th><th>share</th></tr></thead>
+    <tbody>
+      <tr><td>between products</td><td>46.2%</td></tr>
+      <tr><td>residual (household × product)</td><td>36.4%</td></tr>
+      <tr><td>between households</td><td>17.4%</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Price sensitivity is mostly a property of the <em>product</em>, not the household.
+  That is worth stating plainly because the household-specific price slope is the model's
+  main claim to heterogeneity, and it accounts for 17.4% of the variation.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>least price-sensitive category</th><th>g</th><th>most price-sensitive</th><th>g</th></tr></thead>
+    <tbody>
+      <tr><td>BABY FOODS</td><td>+0.115</td><td>BATH TISSUES</td><td>+2.024</td></tr>
+      <tr><td>DELI MEATS</td><td>+0.165</td><td>BREAKFAST SAUSAGE/SANDWICHES</td><td>+1.836</td></tr>
+      <tr><td>CHEESES</td><td>+0.171</td><td>COLD CEREAL</td><td>+1.829</td></tr>
+      <tr><td>CIGARETTES</td><td>+0.177</td><td>BACON</td><td>+1.796</td></tr>
+      <tr><td>VEGETABLES — ALL OTHERS</td><td>+0.187</td><td>FRUIT — SHELF STABLE</td><td>+1.635</td></tr>
+    </tbody>
+    <caption>Category means over products, categories with ≥20 products.</caption>
+  </table>
+  </div>
+
+  <div class="key">
+    <p class="label">This ordering is economically sensible</p>
+    <p>Cigarettes and baby food are the textbook inelastic goods — addiction and
+    non-negotiable need. Bath tissue, cold cereal and bacon are storable, heavily promoted
+    and brand-switchable, which is exactly where a shopper can respond to a price move. The
+    model was given no category labels and no elasticity priors; this ordering is a
+    consequence of the fit, and it is the strongest evidence in this document that
+    γ<sup>⊤</sup>β is estimating something real.</p>
+  </div>
+
+  <div class="flag neg">
+    <p class="label">Two negative findings about g<sub>ij</sub></p>
+    <p><strong>24.28% of (household, product) pairs have the wrong sign</strong> — the model
+    says those households buy <em>more</em> when the product is dearer. Nothing in the
+    specification constrains γ<sup>⊤</sup>β to be positive (§18 of the specification lists
+    this), so upward-sloping demand is representable and the fit uses it for a quarter of
+    all pairs. Aggregate elasticities remain negative, but no individual
+    (household, product) elasticity should be quoted.</p>
+    <p><strong>Household price sensitivity is unrelated to income:</strong> Spearman
+    <strong>+0.0046</strong>, p = 0.906, n = 655. The expected economic pattern — poorer
+    households more price sensitive — is entirely absent. Combined with §7, the household
+    side of the price interaction has no demonstrated external validity.</p>
+  </div>
+
+  <p>The choice margin and the quantity margin are fitted separately and agree only weakly:
+  Spearman <strong>+0.138</strong> across products. Nothing imposes agreement, so this is a
+  measurement rather than a check — but it means "price-sensitive product" means something
+  different at the two margins.</p>
+
+  <h2 id="s9"><span class="num">9</span>What is not established</h2>
+
+  <ol>
+    <li><strong>No uncertainty beyond two seeds.</strong> Every gap in §3 and §4 is a point
+    estimate. §19 of the specification asks for a household-level block bootstrap with the
+    basket as the score unit; it has not been run. Until it is, the ablation ordering is
+    suggestive and the smaller gaps are not claims.</li>
+    <li><strong>The test set has been used repeatedly.</strong> Eight models are compared on
+    it here, on top of the iteration that produced the specification. Nothing reserves it
+    for a single final evaluation.</li>
+    <li><strong>Learned baselines are stale.</strong> HPF and B-Emb were fitted against the
+    old sampled-softmax code and have not been refitted, so §4 compares against heuristics
+    only.</li>
+    <li><strong>Identification is unaddressed.</strong> §18 of the specification lists a
+    2,016-dimensional rotational invariance in α and θ, an unconstrained sign on
+    γ<sup>⊤</sup>β — now measured at 24.28% negative — and the fact that the pseudo-likelihood
+    never compares across categories, so category levels are identified only through the
+    noisy inclusive value. None of this is tested here.</li>
+    <li><strong>The assortment is selection on the outcome.</strong> 𝒞<sub>s</sub>(c) is
+    defined as "sold at least once", so the choice set is built from the choices. This
+    inflates both fitted choice probabilities and the inclusive value, and κ·IV is the
+    estimand.</li>
+    <li><strong>Generation is not validated on the joint.</strong> Every likelihood is a
+    conditional; §6 compares summary statistics. The price-response check in §6 re-estimates
+    a quantity the model was explicitly fitted to, so it verifies the sampler propagates the
+    fitted coefficient rather than that the coefficient is right.</li>
+  </ol>
+
+</div>

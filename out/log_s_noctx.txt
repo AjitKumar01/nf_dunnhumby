@@ -2,11 +2,11 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27] model spec_noctx: K=64 nest=True quantity=True context=False store=True avail_only=False -> 870,392 parameters
 [27]   froze IV reference at iteration 500: mean 0.302, 188 of 188 categories observed
-[27]   it  1000  item -2.7683  top1 0.271  qNLL 0.7475  cNLL 0.1239  bNLL 0.6327  kappa 0.874  breadth 1.502  price +0.188 *
-[27]   it  2000  item -2.6382  top1 0.308  qNLL 0.7392  cNLL 0.1207  bNLL 0.6048  kappa 0.867  breadth 1.437  price +0.536 *
-[27]   it  3000  item -2.5818  top1 0.320  qNLL 0.7601  cNLL 0.1284  bNLL 0.6008  kappa 0.855  breadth 1.414  price +0.663 *
-[27]   it  4000  item -2.5913  top1 0.320  qNLL 0.7816  cNLL 0.1232  bNLL 0.6040  kappa 0.841  breadth 1.403  price +0.709
-[27]   it  5000  item -2.6036  top1 0.318  qNLL 0.7571  cNLL 0.1214  bNLL 0.5802  kappa 0.831  breadth 1.401  price +0.724 *
-[27]   it  6000  item -2.5895  top1 0.320  qNLL 0.7450  cNLL 0.1247  bNLL 0.5602  kappa 0.825  breadth 1.399  price +0.730 *
-[27] best at 6000; TEST item -2.6400 top1 0.312 qNLL 0.7466 cNLL 0.1260 bNLL 0.5680
+[27]   it  1000  item -2.7683  top1 0.271  qNLL 0.6855  cNLL 0.1239  bNLL 0.6327  kappa 0.874  breadth 1.502  price +0.188 *
+[27]   it  2000  item -2.6382  top1 0.308  qNLL 0.6573  cNLL 0.1207  bNLL 0.6048  kappa 0.867  breadth 1.437  price +0.536 *
+[27]   it  3000  item -2.5818  top1 0.320  qNLL 0.6710  cNLL 0.1284  bNLL 0.6008  kappa 0.855  breadth 1.414  price +0.663 *
+[27]   it  4000  item -2.5913  top1 0.320  qNLL 0.6801  cNLL 0.1232  bNLL 0.6040  kappa 0.841  breadth 1.403  price +0.709
+[27]   it  5000  item -2.6036  top1 0.318  qNLL 0.6642  cNLL 0.1214  bNLL 0.5802  kappa 0.831  breadth 1.401  price +0.724 *
+[27]   it  6000  item -2.5895  top1 0.320  qNLL 0.6561  cNLL 0.1247  bNLL 0.5602  kappa 0.825  breadth 1.399  price +0.730 *
+[27] best at 6000; TEST item -2.6400 top1 0.312 qNLL 0.6589 cNLL 0.1260 bNLL 0.5680
 [27] saved spec_noctx_nested.pt

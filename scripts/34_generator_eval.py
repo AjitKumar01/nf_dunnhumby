@@ -110,6 +110,12 @@ def main(a):
     gens = {}
     for sw in a.sweeps:
         log(f"  generating with {sw} Gibbs sweeps ...")
+        if not getattr(m, "use_nest", True):
+            log("")
+            log(f"{a.label} has no incidence head (--no-nest), so it defines no P(K) and")
+            log("cannot generate baskets: there is nothing to decide which categories are")
+            log("bought.  This is a property of the ablation, not a failure.  Skipping.")
+            return
         g = cf.generate_baskets(m, d, dev, n_trips=n, seed=a.seed, sweeps=sw,
                                 use_ctx=sw > 0, with_units=True, trips=trips)
         gens[sw] = [(b[0], b[1], int(w)) for b, w in zip(g, weeks)]

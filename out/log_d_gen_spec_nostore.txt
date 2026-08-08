@@ -2,3 +2,33 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [34] 24,768 held-out trips; generating with the SAME household, day, week and store
 [34]   generating with 0 Gibbs sweeps ...
+[34]   generating with 4 Gibbs sweeps ...
+[34] 
+[34] 1. shape -- whole distributions, compared by total variation distance
+[34]                                    real        gibbs0        gibbs4
+[34]    items per basket          8.18           8.41 (0.36)    8.44 (0.36)
+[34]    categories per basket     6.38           6.41 (0.37)    6.43 (0.37)
+[34]    units per basket         11.06          11.47 (0.34)   11.57 (0.34)
+[34]    distinct items / cat      1.28           1.31 (0.05)    1.31 (0.05)
+[34]    units per line            1.35           1.36 (0.04)    1.37 (0.04)
+[34]    (mean, and in brackets the total variation distance from the real distribution; 0 = identical, 1 = disjoint)
+[34] 
+[34] 2. per-item purchase rate across the whole catalogue
+[34]    gibbs0     pearson +0.879  spearman +0.554  real items never generated 0.0%
+[34]    gibbs4     pearson +0.876  spearman +0.580  real items never generated 0.0%
+[34] 
+[34] 3. co-occurrence lift -- the model-free version of the interaction term
+[34]    gibbs0     24,146 pairs   spearman of lift +0.016   mean lift real 3.23 vs generated 1.62
+[34]    gibbs4     24,947 pairs   spearman of lift +0.072   mean lift real 3.22 vs generated 1.67
+[34] 
+[34] 4. within-basket pairs sharing a held-out label (model never sees these)
+[34]    real       same sub-commodity 0.0646   same department 0.5581
+[34]    gibbs0     same sub-commodity 0.0292   same department 0.5418
+[34]    gibbs4     same sub-commodity 0.0377   same department 0.5425
+[34] 
+[34] 5. price response recovered FROM GENERATED DATA
+[34]    real held-out baskets      elasticity -0.6480  on 49,784 item-weeks
+[34]    generated, 0 Gibbs sweeps   elasticity -0.5098  on 55,241 item-weeks   (79% of real)
+[34]    generated, 4 Gibbs sweeps   elasticity -0.5072  on 54,375 item-weeks   (78% of real)
+[34] 
+[34] wrote out/generator_eval_spec_nostore.json and figures/generator_eval_spec_nostore.png

@@ -1,0 +1,142 @@
+{
+  "label": "spec_nested",
+  "households": {
+    "income band": {
+      "n": 651,
+      "majority_class": 0.2350230414746544,
+      "theta (taste)": 0.15211978860833822,
+      "c_user (category appetite)": 0.19201409277745157,
+      "gamma (price)": 0.23505578391074575,
+      "all concatenated": 0.13672342924251318,
+      "volume only (control)": 0.23963593658250146,
+      "shuffled": 0.15210804462712862
+    },
+    "household size": {
+      "n": 655,
+      "majority_class": 0.39541984732824426,
+      "theta (taste)": 0.31755725190839695,
+      "c_user (category appetite)": 0.32824427480916024,
+      "gamma (price)": 0.38167938931297707,
+      "all concatenated": 0.29770992366412213,
+      "volume only (control)": 0.39694656488549623,
+      "shuffled": 0.32061068702290074
+    },
+    "age group": {
+      "n": 655,
+      "majority_class": 0.35877862595419846,
+      "theta (taste)": 0.27480916030534347,
+      "c_user (category appetite)": 0.3114503816793893,
+      "gamma (price)": 0.34045801526717556,
+      "all concatenated": 0.25038167938931294,
+      "volume only (control)": 0.35419847328244275,
+      "shuffled": 0.23511450381679388
+    },
+    "children": {
+      "n": 655,
+      "majority_class": 0.6916030534351145,
+      "theta (taste)": 0.5984732824427481,
+      "c_user (category appetite)": 0.6366412213740459,
+      "gamma (price)": 0.6916030534351145,
+      "all concatenated": 0.5358778625954199,
+      "volume only (control)": 0.6916030534351145,
+      "shuffled": 0.5297709923664121
+    },
+    "homeowner": {
+      "n": 655,
+      "majority_class": 0.6106870229007634,
+      "theta (taste)": 0.5068702290076337,
+      "c_user (category appetite)": 0.5572519083969466,
+      "gamma (price)": 0.6106870229007634,
+      "all concatenated": 0.48396946564885496,
+      "volume only (control)": 0.6106870229007634,
+      "shuffled": 0.48396946564885496
+    },
+    "classification_5": {
+      "n": 655,
+      "majority_class": 0.3068702290076336,
+      "theta (taste)": 0.21068702290076335,
+      "c_user (category appetite)": 0.23206106870229007,
+      "gamma (price)": 0.2977099236641222,
+      "all concatenated": 0.20305343511450383,
+      "volume only (control)": 0.3068702290076336,
+      "shuffled": 0.1954198473282443
+    },
+    "classification_2": {
+      "n": 655,
+      "majority_class": 0.44274809160305345,
+      "theta (taste)": 0.4366412213740459,
+      "c_user (category appetite)": 0.38625954198473283,
+      "gamma (price)": 0.4213740458015267,
+      "all concatenated": 0.3969465648854962,
+      "volume only (control)": 0.42748091603053434,
+      "shuffled": 0.4015267175572519
+    }
+  },
+  "products": {
+    "fitted alpha": {
+      "knn_purity": 0.10245,
+      "same_sub_auc": 0.5835305962378466
+    },
+    "random, same shape": {
+      "knn_purity": 0.0047,
+      "same_sub_auc": 0.4982573696352346
+    },
+    "chance_purity": 0.004095985522780819
+  },
+  "price": {
+    "mean": 0.9180830121040344,
+    "sd": 1.4647153615951538,
+    "frac_wrong_sign": 0.24283218412018423,
+    "share_between_households": 0.17433633926744718,
+    "share_between_products": 0.461686619977745,
+    "income_spearman": 0.004616511076437132,
+    "income_p": 0.9061269481292219,
+    "income_n": 655,
+    "choice_vs_quantity_spearman": 0.13837850802613746,
+    "quantity_mean": 0.15193329751491547,
+    "cat_least": [
+      [
+        "BABY FOODS",
+        0.1145009994506836
+      ],
+      [
+        "DELI MEATS",
+        0.1653689742088318
+      ],
+      [
+        "CHEESES",
+        0.1709301918745041
+      ],
+      [
+        "CIGARETTES",
+        0.17698530852794647
+      ],
+      [
+        "VEGETABLES - ALL OTHERS",
+        0.187070831656456
+      ]
+    ],
+    "cat_most": [
+      [
+        "BATH TISSUES",
+        2.023583173751831
+      ],
+      [
+        "BREAKFAST SAUSAGE/SANDWICHES",
+        1.8358713388442993
+      ],
+      [
+        "COLD CEREAL",
+        1.8292806148529053
+      ],
+      [
+        "BACON",
+        1.7962909936904907
+      ],
+      [
+        "FRUIT - SHELF STABLE",
+        1.635263442993164
+      ]
+    ]
+  }
+}

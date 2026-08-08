@@ -50,80 +50,80 @@
       "iter": 1000,
       "val_item": -2.732672105831607,
       "val_top1": 0.2736589620584387,
-      "val_quantity_nll": 0.7394257566734427,
+      "val_quantity_nll": 0.6940018139938782,
       "val_incidence_nll": 0.12255796484152476,
       "val_breadth_nll": 0.6324307719344617,
       "kappa_median": 0.8746838569641113,
       "price_coef": 2.67128825217322e-26,
-      "quantity_price_coef": -1.5025753943894363e-28,
-      "secs": 236.92723774909973
+      "quantity_price_coef": -7.616047594620548e-28,
+      "secs": 290.68972182273865
     },
     {
       "iter": 2000,
       "val_item": -2.6374106152146664,
       "val_top1": 0.30125294315506224,
-      "val_quantity_nll": 0.7381148644836711,
+      "val_quantity_nll": 0.6716373379843787,
       "val_incidence_nll": 0.11999567838509878,
       "val_breadth_nll": 0.6046640082133018,
       "kappa_median": 0.8681098818778992,
       "price_coef": 2.9306655189399793e-38,
-      "quantity_price_coef": 4.2682149924869603e-41,
-      "secs": 497.19088196754456
+      "quantity_price_coef": 2.9192872556693546e-39,
+      "secs": 602.7418718338013
     },
     {
       "iter": 3000,
       "val_item": -2.597375997203831,
       "val_top1": 0.3087709078805026,
-      "val_quantity_nll": 0.7601903245613144,
+      "val_quantity_nll": 0.6879931365336556,
       "val_incidence_nll": 0.12833626844485602,
       "val_breadth_nll": 0.6004241572964206,
       "kappa_median": 0.857643723487854,
       "price_coef": 2.2509857373872666e-38,
-      "quantity_price_coef": -1.3340641640065123e-40,
-      "secs": 744.2579619884491
+      "quantity_price_coef": -1.9843947301328668e-38,
+      "secs": 895.5219347476959
     },
     {
       "iter": 4000,
       "val_item": -2.6074078485849776,
       "val_top1": 0.30930760499432464,
-      "val_quantity_nll": 0.7758670381601227,
+      "val_quantity_nll": 0.6975306454110144,
       "val_incidence_nll": 0.12256548492113749,
       "val_breadth_nll": 0.6040763827682069,
       "kappa_median": 0.8452564477920532,
       "price_coef": 2.992189808275853e-38,
-      "quantity_price_coef": -2.3332320080240367e-40,
-      "secs": 1003.8241720199585
+      "quantity_price_coef": -9.015654441594508e-39,
+      "secs": 1278.574316740036
     },
     {
       "iter": 5000,
       "val_item": -2.623135577212424,
       "val_top1": 0.30584048566045635,
-      "val_quantity_nll": 0.7505818429566188,
+      "val_quantity_nll": 0.6847560620417724,
       "val_incidence_nll": 0.12064482976992925,
       "val_breadth_nll": 0.5803344006884604,
       "kappa_median": 0.8365740180015564,
       "price_coef": 3.3802186016172596e-38,
-      "quantity_price_coef": -2.505297446458481e-40,
-      "secs": 1236.0163488388062
+      "quantity_price_coef": 5.284438040113782e-39,
+      "secs": 1557.6104006767273
     },
     {
       "iter": 6000,
       "val_item": -2.614975827948841,
       "val_top1": 0.30831737928100406,
-      "val_quantity_nll": 0.7405771982565862,
+      "val_quantity_nll": 0.6760642045636147,
       "val_incidence_nll": 0.12370867220560709,
       "val_breadth_nll": 0.5603206283029938,
       "kappa_median": 0.83100825548172,
       "price_coef": 4.4988622737418893e-38,
-      "quantity_price_coef": -2.997111168482562e-40,
-      "secs": 1443.7381517887115
+      "quantity_price_coef": -2.8599324566159484e-39,
+      "secs": 1802.8524470329285
     }
   ],
   "n_parameters": 870392,
   "best_iter": 6000,
   "test_item": -2.641298780701345,
   "test_top1": 0.3058772257502179,
-  "test_quantity_nll": 0.7469192627038564,
+  "test_quantity_nll": 0.6750483113114397,
   "test_incidence_nll": 0.12482938534021377,
   "test_breadth_nll": 0.5679649370870773
 }

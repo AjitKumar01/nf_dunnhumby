@@ -11,11 +11,11 @@ Traceback (most recent call last):
                             use_ctx=sw > 0, with_units=True, trips=trips)
   File "/Users/ajit/.pyenv/versions/3.13.4/lib/python3.13/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
     return func(*args, **kwargs)
-  File "/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/28_nested_counterfactual.py", line 382, in generate_baskets
-    iv = torch.where(ok, iv - m.iv_ref, torch.zeros_like(iv))
-                              ^^^^^^^^
+  File "/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/28_nested_counterfactual.py", line 389, in generate_baskets
+    lin = (m.c0 + (m.c_user[user].unsqueeze(0) * m.c_cat).sum(-1)
+           ^^^^
   File "/Users/ajit/.pyenv/versions/3.13.4/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1964, in __getattr__
     raise AttributeError(
         f"'{type(self).__name__}' object has no attribute '{name}'"
     )
-AttributeError: 'NestedModel' object has no attribute 'iv_ref'
+AttributeError: 'NestedModel' object has no attribute 'c0'. Did you mean: 'b0'?
