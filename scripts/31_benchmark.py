@@ -83,7 +83,7 @@ def build_batches(d, split, n_batches, n_neg, seed, device, ctx_model,
     out = []
     for _ in range(n_batches):
         bidx = rng.integers(0, sp["n_baskets"], size=batch_baskets)
-        bt = nb.make_batch(d, ctx_model, split, bidx, n_neg, rng, device, clean_neg=False)
+        bt = nb.make_batch(d, ctx_model, split, bidx, rng, device)
         out.append((bidx, bt))
     return out
 
@@ -240,7 +240,7 @@ def main(a):
                                   "top1": float(np.mean([x[1] for x in tot]))}
 
     # ------------------------------------------------------------- fitted models
-    for label, kind in [("nested", "nested"), ("nested_noctx", "nested")]:
+    for label, kind in [(lb, "nested") for lb in a.labels]:
         path = os.path.join(OUT, f"{label}_nested.pt")
         if not os.path.exists(path):
             continue
@@ -311,6 +311,7 @@ def main(a):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
+    p.add_argument("--labels", nargs="+", default=["nested", "nested_noctx"])
     p.add_argument("--batches", type=int, default=24)
     p.add_argument("--n-neg", type=int, default=20)
     p.add_argument("--w-repeat", type=float, default=1.0,

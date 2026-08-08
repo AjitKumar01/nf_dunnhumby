@@ -702,10 +702,15 @@ def losses(model, bt, ib, iv_center):
     if model.use_quantity:
         # units - 1 ~ Poisson(exp(z)), with its own price coefficient so the quantity
         # margin is not forced to share the incidence one.
-        j = bt["cand"][:, 0]
+        # The purchased product is at index bt["target"] inside its category block, not
+        # at slot 0.  Slot 0 is whichever product happens to be first in the block, so
+        # reading it here silently priced the wrong product.
+        ar_ = torch.arange(bt["cand"].shape[0], device=bt["cand"].device)
+        tg_ = bt["target"]
+        j = bt["cand"][ar_, tg_]
         z = (model.q0[j]
-             - (model.q_gamma[bt["user"]] * model.q_beta[j]).sum(-1) * bt["dlogp"][:, 0]
-             + (model.q_state[j] * bt["state"][:, 0, :]).sum(-1)).clamp(-6.0, 4.0)
+             - (model.q_gamma[bt["user"]] * model.q_beta[j]).sum(-1) * bt["dlogp"][ar_, tg_]
+             + (model.q_state[j] * bt["state"][ar_, tg_, :]).sum(-1)).clamp(-6.0, 4.0)
         k = (bt["units"] - 1.0).clamp_min(0)
         out["quantity"] = (torch.exp(z) - k * z + torch.lgamma(k + 1)).mean()
 

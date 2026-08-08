@@ -41,7 +41,7 @@ def main(label="nested"):
     m.eval()
     rng = np.random.default_rng(0)
     bidx = rng.integers(0, d.splits["validation"]["n_baskets"], size=8)
-    bt = nb.make_batch(d, m, "validation", bidx, 20, rng, "cpu", clean_neg=False)
+    bt = nb.make_batch(d, m, "validation", bidx, rng, "cpu")
 
     with torch.no_grad():
         u = m.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
