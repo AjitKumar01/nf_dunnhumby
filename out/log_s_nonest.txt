@@ -1,0 +1,11 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model spec_nonest: K=64 nest=False quantity=True context=True store=True avail_only=False -> 725,008 parameters
+[27]   it  1000  item -2.6724  top1 0.291  qNLL 0.7427  cNLL 0.0000  bNLL 0.0000  kappa nan  breadth 2.000  price +0.158 *
+[27]   it  2000  item -2.6113  top1 0.312  qNLL 0.7444  cNLL 0.0000  bNLL 0.0000  kappa nan  breadth 2.000  price +0.392 *
+[27]   it  3000  item -2.5765  top1 0.318  qNLL 0.7482  cNLL 0.0000  bNLL 0.0000  kappa nan  breadth 2.000  price +0.519 *
+[27]   it  4000  item -2.5664  top1 0.320  qNLL 0.7548  cNLL 0.0000  bNLL 0.0000  kappa nan  breadth 2.000  price +0.577 *
+[27]   it  5000  item -2.5662  top1 0.322  qNLL 0.7551  cNLL 0.0000  bNLL 0.0000  kappa nan  breadth 2.000  price +0.602
+[27]   it  6000  item -2.5591  top1 0.322  qNLL 0.7515  cNLL 0.0000  bNLL 0.0000  kappa nan  breadth 2.000  price +0.611 *
+[27] best at 6000; TEST item -2.6003 top1 0.318 qNLL 0.7447 cNLL 0.0000 bNLL 0.0000
+[27] saved spec_nonest_nested.pt

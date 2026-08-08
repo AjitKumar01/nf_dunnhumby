@@ -1,0 +1,12 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model spec_nested: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,392 parameters
+[27]   froze IV reference at iteration 500: mean 0.174, 188 of 188 categories observed
+[27]   it  1000  item -2.6917  top1 0.285  qNLL 0.7475  cNLL 0.1221  bNLL 0.6327  kappa 0.875  breadth 1.502  price +0.163 *
+[27]   it  2000  item -2.5806  top1 0.318  qNLL 0.7392  cNLL 0.1191  bNLL 0.6048  kappa 0.868  breadth 1.437  price +0.506 *
+[27]   it  3000  item -2.5290  top1 0.327  qNLL 0.7601  cNLL 0.1271  bNLL 0.6008  kappa 0.857  breadth 1.414  price +0.637 *
+[27]   it  4000  item -2.5325  top1 0.328  qNLL 0.7816  cNLL 0.1218  bNLL 0.6040  kappa 0.843  breadth 1.403  price +0.683
+[27]   it  5000  item -2.5477  top1 0.324  qNLL 0.7571  cNLL 0.1202  bNLL 0.5802  kappa 0.833  breadth 1.401  price +0.699 *
+[27]   it  6000  item -2.5372  top1 0.326  qNLL 0.7450  cNLL 0.1234  bNLL 0.5602  kappa 0.827  breadth 1.399  price +0.706 *
+[27] best at 6000; TEST item -2.5818 top1 0.318 qNLL 0.7466 cNLL 0.1250 bNLL 0.5680
+[27] saved spec_nested_nested.pt
