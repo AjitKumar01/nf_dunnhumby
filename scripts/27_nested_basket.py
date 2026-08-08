@@ -622,6 +622,7 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
         cat_ctx = torch.where((nb_[tt] - yv > 0).unsqueeze(1), num / den,
                               torch.zeros_like(num))
     return dict(cat=ct, user=torch.as_tensor(user, device=device), iv=iv,
+                trip=torch.as_tensor(trip, device=device), n_trips=len(bidx),
                 cat_ctx=cat_ctx, pair_term=pair_term,
                 state=torch.as_tensor(cst, device=device),
                 offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
@@ -725,7 +726,18 @@ def losses(model, bt, ib, iv_center):
         #   -log P(y=1) = -log(-expm1(-exp(eta)))      -log P(y=0) = exp(eta)
         r = torch.exp(lin.clamp(-12.0, 4.0))
         nll1 = -torch.log(-torch.expm1(-r) + 1e-12)
-        out["incidence"] = (ib["y"] * nll1 + (1.0 - ib["y"]) * r).mean()
+        # A trip enters the data only because something was bought, so the model is
+        # conditioned on n >= 1 (spec Eq. 8).  Subtracting the empty-basket mass adds
+        # + log(1 - exp(-R)) per trip, R = sum_c exp(eta_ict), estimated by scaling the
+        # sampled categories up to C.  log(1 - e^-R) is very flat near the observed
+        # R ~ 6.2, so the sampling noise in R does not propagate.  Magnitude: about
+        # -0.002 nats per trip, -1.1e-05 spread over the C per-category terms.
+        per_pair = ib["y"] * nll1 + (1.0 - ib["y"]) * r
+        per_trip = max(1, len(r) // max(1, ib["n_trips"]))     # categories sampled
+        R = torch.zeros(ib["n_trips"], device=lin.device).index_add_(
+            0, ib["trip"], r) * (model.d.C / per_trip)
+        trunc = torch.log1p(-torch.exp(-R.clamp_min(1e-6))).mean() / model.d.C
+        out["incidence"] = per_pair.mean() + trunc
 
         if model.use_breadth:
             # breadth - 1 ~ Poisson, on the categories actually bought

@@ -488,6 +488,16 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                         stc.unsqueeze(0),
                         torch.full((1,), week, device=dev, dtype=torch.long),
                         torch.full((1,), store, device=dev, dtype=torch.long))[0]
+                    # A_-j excludes whatever occupies the OTHER slots: the basket is a
+                    # set (spec Eq. 3), so without this a category can be given the same
+                    # product twice and the chain leaves S(K).
+                    others = {jj_ for si2, (c2, jj_) in enumerate(slots)
+                              if si2 != si and c2 == c}
+                    if others:
+                        blocked = torch.as_tensor(
+                            np.isin(jj.cpu().numpy(), np.fromiter(others, dtype=np.int64)),
+                            device=dev)
+                        uc = uc.masked_fill(blocked, -1e9)
                     q = int(torch.multinomial(torch.softmax(uc, 0), 1, generator=g))
                     new_j = int(jj[q])
                     tot = tot - A[cur] + A[new_j]      # keep the running sum exact
