@@ -84,8 +84,17 @@ def load(label, d, dev):
                        prefix_context=cfg.get("prefix_context", False),
                        neg_in_cat=cfg.get("neg_in_cat", 0.0),
                        item_loss=cfg.get("item_loss", "softmax")).to(dev)
-    m.load_state_dict(torch.load(os.path.join(OUT, f"{label}_nested.pt"),
-                                 map_location=dev))
+    # strict=False so checkpoints predating a newly added parameter still load.  Any
+    # such parameter is initialised at zero, so the loaded model reproduces the older one
+    # exactly rather than silently inheriting a random value.
+    sd = torch.load(os.path.join(OUT, f"{label}_nested.pt"), map_location=dev)
+    missing, unexpected = m.load_state_dict(sd, strict=False)
+    if unexpected:
+        raise RuntimeError(f"{label}: checkpoint has parameters the model lacks: {unexpected}")
+    for k in missing:
+        p_ = dict(m.named_parameters()).get(k)
+        if p_ is not None:
+            torch.nn.init.zeros_(p_)
     m.eval()
     # Temperature fitted on validation during training.  Generation samples from
     # softmax(u), which is scale-sensitive: an uncalibrated model at sd(u)=2.15 instead

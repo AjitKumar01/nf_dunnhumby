@@ -147,6 +147,21 @@ class NestedData:
             ip[js] = np.arange(len(js))
         self.item_pos_np = ip
         self.item_pos = torch.as_tensor(ip, device=device)
+        # How often this household bought from this category, in TRAINING only.  The
+        # incidence head was measured to separate familiar from unfamiliar categories by
+        # only ~0.94 nats (-0.49 from the never-before indicator, +0.45 from the c_u.c_c
+        # affinity) where ~2.80 are needed to push an unfamiliar category from the 3.25%
+        # base rate down to 0.2%.  Generated baskets therefore drew from categories with a
+        # median of 5 prior purchases against 15 in real baskets, and 23% from categories
+        # the household had never touched against 6%.  This gives the head the signal
+        # directly.  Train-only, so it is a past lookup and not a leak.
+        self.hh_cat = None
+
+        hc = np.zeros((self.N, self.C), dtype=np.float32)
+        _tr = bk[bk.split == "train"]
+        np.add.at(hc, (_tr.user_id.to_numpy(), it_cat[_tr.item_id.to_numpy()]), 1.0)
+        self.hh_cat = torch.as_tensor(
+            (np.log1p(hc) / np.log(100.0)).astype(np.float32), device=device)
 
         bk = bk.sort_values(["split", "BASKET_ID", "item_id"]).reset_index(drop=True)
         self.splits = {}
@@ -346,6 +361,8 @@ class NestedModel(nn.Module):
             # is the "IV cancels" point, so the data has to move it either way
             self.kappa_raw = nn.Parameter(torch.full((C,), 0.5413))   # softplus -> 1.0
             self.c_state = emb(C, N_STATE_FEATURES, 0.01)
+            # loading on log1p(household's train purchases in this category)/log 100
+            self.c_hab = nn.Parameter(torch.zeros(C))
 
     def kappa(self):
         return nn.functional.softplus(self.kappa_raw)
@@ -628,6 +645,7 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
                 offset=torch.as_tensor(np.asarray(off, dtype=np.float32), device=device),
                 breadth=torch.as_tensor(np.asarray(brd, dtype=np.float32), device=device),
                 pdev=pdev,
+                habit=d.hh_cat[torch.as_tensor(user, device=device), ct],
                 # products this store stocks in the category -- the truncation point
                 # for the breadth count (spec Eq. 10)
                 nmax=d.carried[d.cat_items[ct], torch.as_tensor(
@@ -720,6 +738,8 @@ def losses(model, bt, ib, iv_center):
                + (model.c_user[ib["user"]] * model.c_cat[ib["cat"]]).sum(-1)
                + (model.c_state[ib["cat"]] * ib["state"]).sum(-1)
                + kap * (ib["iv"] - model.iv_ref[ib["cat"]]))
+        if getattr(model, "c_hab", None) is not None:
+            lin = lin + model.c_hab[ib["cat"]] * ib["habit"]
         if model.cat_pair is not None and "pair_term" in ib:
             lin = lin + ib["pair_term"]
         if model.cat_ctx_scale is not None and "cat_ctx" in ib:
