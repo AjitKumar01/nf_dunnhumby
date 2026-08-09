@@ -100,8 +100,53 @@
   </div>
 
   <p><strong>The seed spread is 0.0095 nats</strong> (two seeds, identical but for
-  initialisation), so gaps above about 0.02 are real and anything smaller is not. Two
-  seeds is a weak basis for that statement and §8 says what would replace it.</p>
+  initialisation). That is a weak handle on refitting variability, so gaps are now also
+  bootstrapped.</p>
+
+  <div class="key">
+    <p class="label">Confidence intervals — household block bootstrap</p>
+    <p>Each basket is scored once per model, then <strong>households</strong> are resampled
+    with replacement (400 draws, 1,664 households, 6,000 held-out baskets). Households are
+    the unit because trips repeat within a household and are not independent. Gaps are
+    <em>paired</em>: the same resampled households score both models, so the interval is on
+    the difference rather than the difference of two intervals.</p>
+  </div>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>model</th><th>item</th><th>95% CI</th><th>gap vs full</th><th>95% CI on the gap</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td>full model</td><td>−2.4611</td><td>[−2.5022, −2.4254]</td><td>—</td><td>—</td></tr>
+      <tr><td>no persistence</td><td>−2.5340</td><td>[−2.5748, −2.4990]</td><td>+0.0728</td><td><strong>[+0.0648, +0.0816]</strong></td></tr>
+      <tr><td>original incidence penalty</td><td>−2.5327</td><td>[−2.5735, −2.4975]</td><td>+0.0715</td><td><strong>[+0.0635, +0.0804]</strong></td></tr>
+      <tr><td>prices scrambled</td><td>−2.5174</td><td>[−2.5591, −2.4793]</td><td>+0.0562</td><td><strong>[+0.0489, +0.0626]</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>own-price elasticity, allocation margin</th><th>median</th><th>95% CI</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td>full model</td><td>−0.7171</td><td>[−0.7646, −0.6713]</td></tr>
+      <tr><td>no persistence</td><td>−0.7481</td><td>[−0.8007, −0.7061]</td></tr>
+      <tr><td>prices scrambled</td><td>+0.0000</td><td><strong>[−0.0029, +0.0000]</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Every gap excludes zero, so the ablation ordering is not an artefact of test-set
+  sampling. The placebo's elasticity interval <strong>[−0.0029, +0.0000]</strong> contains
+  zero and essentially nothing else — the strongest form the causal check has taken.</p>
+
+  <div class="flag">
+    <p class="label">What these intervals do not cover</p>
+    <p>Evaluation uncertainty only. Refitting variability — optimisation noise,
+    initialisation, and the training sample — is not included, because a full bootstrap
+    would need a refit per replicate at ~25 minutes each. The two-seed spread of 0.0095
+    nats is the only handle on that, and it is of the same order as the smallest gaps
+    quoted. A gap of +0.056 comfortably exceeds both sources; a gap of 0.02 would not.</p>
+  </div>
 
   <h2 id="s2"><span class="num">2</span>Do the equations match the code?</h2>
 
@@ -486,61 +531,66 @@
 
   <h2 id="s9b"><span class="num">10</span>Can generated baskets train a Markovian policy?</h2>
 
+  <div class="flag neg">
+    <p class="label">Correction — this section previously reported the opposite</p>
+    <p>An earlier version concluded "no", on the basis that 46% of generated purchases
+    were products the household had never bought against 14% real. <strong>That number was
+    an artefact of a bug in the measurement, not a property of the model.</strong>
+    <code>generate_baskets()</code> selects a random subset of test baskets and did not
+    return which ones; the analysis attributed the k-th generated basket to test basket k,
+    so every "has this household bought this before?" question was asked against a
+    <em>different</em> household's history. Two random households share about 15% of their
+    products, which is exactly the repeat rate that kept appearing. The function now
+    returns its trip indices so the mistake cannot recur.</p>
+  </div>
+
   <p>A pricing policy learned on synthetic baskets needs the generator to behave as a
-  Markov decision process: a state summarising history, a transition depending only on
-  (state, action), and a reward. This model has exactly <strong>one</strong> dynamic state —
-  the purchase-recency vector x<sub>ijt</sub> of Eq. 23. So the question reduces to whether
-  the generated data reproduces the real distribution of that state. If it does not, every
-  rollout drifts into states the real world does not visit.</p>
+  Markov decision process. This model has one dynamic state — the purchase-recency vector
+  x<sub>ijt</sub> — so the question is whether generation reproduces its distribution.
+  Measured correctly, matching each generated basket to its own household:</p>
 
   <div class="scroll">
   <table>
-    <thead><tr><th>quantile of the recency feature log(1+τ)/log 100</th><th>real</th><th>generated</th></tr></thead>
+    <thead><tr><th>model</th><th>novel category</th><th>novel item</th><th>new item, familiar cat</th><th>median prior purchases</th><th>never-bought state</th></tr></thead>
     <tbody>
-      <tr><td>q10</td><td>0.0000</td><td>0.0000</td></tr>
-      <tr><td>q25</td><td>0.4515</td><td class="bad">0.0000</td></tr>
-      <tr><td>q50</td><td>0.6990</td><td class="bad">0.4225</td></tr>
-      <tr><td>q75</td><td>0.9569</td><td>1.0106</td></tr>
-      <tr><td>q90</td><td>1.1712</td><td>1.2349</td></tr>
-      <tr class="hi"><td>share never bought before</td><td>13.89%</td><td class="bad">46.11%</td></tr>
-      <tr><td>mean</td><td>0.6711</td><td>0.5014</td></tr>
+      <tr class="hi"><td>REAL</td><td>6.58%</td><td>41.48%</td><td>37.36%</td><td>14</td><td>13.89%</td></tr>
+      <tr><td>original penalty, no persistence</td><td>15.82%</td><td>63.34%</td><td>56.45%</td><td>7</td><td>27.04%</td></tr>
+      <tr><td>+ corrected incidence penalty</td><td>9.89%</td><td>58.17%</td><td>53.58%</td><td>11</td><td>20.86%</td></tr>
+      <tr><td>+ persistence term</td><td><strong>8.38%</strong></td><td><strong>49.26%</strong></td><td><strong>44.62%</strong></td><td><strong>11</strong></td><td><strong>18.93%</strong></td></tr>
     </tbody>
-    <caption>6,000 generated baskets, 4 Gibbs sweeps, against held-out real baskets.</caption>
   </table>
   </div>
 
-  <div class="flag neg">
-    <p class="label">Negative — the state distribution is wrong, so the answer is no</p>
-    <p><strong>46.11% of generated purchases are products the household has never bought
-    before, against 13.89% in reality — a 3.3× over-production of novelty.</strong> The
-    lower half of the recency distribution is badly misplaced: the real 25th percentile is
-    0.4515 and the generated one is 0.0000.</p>
-    <p>This is fatal for policy learning in a way the summary statistics of §6 conceal. A
-    policy trained on these rollouts would be optimised on a state distribution where
-    shoppers constantly buy things they have never bought, so the value of a promotion aimed
-    at repeat purchase — which is most of grocery retail — would be systematically
-    mis-estimated. Basket <em>sizes</em> match to 2% (§6) while the composition drifts, which
-    is exactly the failure mode a mean-matching check cannot detect.</p>
-  </div>
+  <p>The generator over-produces novelty by roughly <strong>20%</strong>, not the 240% the
+  buggy measurement implied. Two model changes account for most of the improvement:
+  separating the incidence penalty (§11) closed <strong>64%</strong> of the
+  novel-category gap, and a per-(household, product) persistence term closed
+  <strong>55%</strong> of the novel-item gap. Together they close 81% and 64% of the two
+  gaps respectively.</p>
 
-  <p>Three further obstructions stand even if the state distribution were fixed, and none is
-  addressed by anything in this study:</p>
+  <div class="flag">
+    <p class="label">Revised verdict — closer to usable, still not established</p>
+    <p>An 18.93% never-bought rate against a real 13.89% is a materially different
+    situation from 46% against 14%: the state distribution is in the right region rather
+    than in a different one. That removes the categorical objection to multi-step rollouts,
+    but does not establish that they are sound. A 36% relative excess of novelty still
+    compounds over a horizon, and the three structural obstructions below are untouched by
+    any of this.</p>
+  </div>
 
   <ul>
     <li><strong>Prices are exogenous.</strong> The model conditions on Δlog p and never
-    generates it, so there is no feedback from a policy's action to future prices, to
-    competitor response, or to the retailer's own later pricing.</li>
+    generates it, so there is no feedback from a policy's action to future prices.</li>
     <li><strong>Δlog p is centred on the training window.</strong> A policy that shifts the
-    price level moves products outside the support the coefficients were fitted on, and the
-    centring constant itself would be wrong under the new regime.</li>
+    price level moves products outside the support the coefficients were fitted on.</li>
     <li><strong>No budget constraint.</strong> Nothing couples spending across categories,
-    so a policy cutting prices everywhere generates unbounded purchasing rather than
+    so a policy cutting prices everywhere produces unbounded purchasing rather than
     substitution.</li>
   </ul>
 
-  <p class="note">What the generator <em>is</em> suitable for, on this evidence: single-step
-  counterfactuals of the kind in §5, where the state is taken from real data and only the
-  immediate response is simulated. Multi-step rollouts are not supported.</p>
+  <p class="note">What can be said: single-step counterfactuals of the kind in §5 are
+  supported. Multi-step rollouts are no longer ruled out by the state distribution, but
+  would need the residual novelty excess quantified over a horizon before being trusted.</p>
 
   <h2 id="s11a"><span class="num">11</span>Three limitations, attacked</h2>
 
@@ -651,10 +701,9 @@
   <h2 id="s12"><span class="num">12</span>What is still not established</h2>
 
   <ol>
-    <li><strong>No uncertainty beyond two seeds.</strong> Every gap in §3 and §4 is a point
-    estimate. §19 of the specification asks for a household-level block bootstrap with the
-    basket as the score unit; it has not been run. Until it is, the ablation ordering is
-    suggestive and the smaller gaps are not claims.</li>
+    <li><strong>Refitting uncertainty is still missing.</strong> §1 now carries a household
+    block bootstrap, but it covers evaluation sampling only. A full bootstrap needs a refit
+    per replicate and has not been run.</li>
     <li><strong>The test set has been used repeatedly.</strong> Eight models are compared on
     it here, on top of the iteration that produced the specification. Nothing reserves it
     for a single final evaluation.</li>
@@ -669,8 +718,9 @@
     <li><strong>The assortment threshold is unjustified and the estimand is sensitive to
     it</strong> (§11). Not resolved — resolving it needs an assortment measure independent
     of purchases, which this data does not contain.</li>
-    <li><strong>Multi-step generation is not usable</strong> (§10), and §11 rules out the
-    obvious explanation. The cause of the novelty gap is still unknown.</li>
+    <li><strong>Multi-step generation is not established</strong> (§10). The residual
+    novelty excess is ~20% relative, down from an apparent 240% that was a measurement
+    artefact; its effect over a horizon has not been quantified.</li>
     <li><strong>The joint is now tested and it fails</strong> (§11, AUC 0.8101). The
     price-response check in §6 remains circular: it re-estimates a quantity the model was
     fitted to, so it verifies the sampler propagates the coefficient, not that the

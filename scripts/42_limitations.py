@@ -157,10 +157,13 @@ def main(a):
         g = cf.generate_baskets(m, d, dev, n_trips=a.n_trips, seed=a.seed,
                                 sweeps=4, use_ctx=True, with_units=False)
         m.item_utility = orig
+        # g.trips[k] is the trip the k-th basket came from; indexing by k compares
+        # against a different household's history
+        tp = g.trips
         gi = np.concatenate([np.asarray(b) for b in g if len(b)])
-        gu = np.concatenate([np.full(len(b), int(sp["user"][sp["starts"][k]]))
+        gu = np.concatenate([np.full(len(b), int(sp["user"][sp["starts"][tp[k]]]))
                              for k, b in enumerate(g) if len(b)])
-        gd = np.concatenate([np.full(len(b), int(sp["day"][sp["starts"][k]]))
+        gd = np.concatenate([np.full(len(b), int(sp["day"][sp["starts"][tp[k]]]))
                              for k, b in enumerate(g) if len(b)])
         sg = d.state(gu, gi, gd)
         nov = float(sg[:, 0].mean())
