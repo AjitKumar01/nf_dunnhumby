@@ -1,0 +1,53 @@
+{
+  "grid_observed_share": 0.25985180073945147,
+  "strata": [
+    {
+      "stratum": "carried forward (0 lines)",
+      "cells": 32045,
+      "share": 0.6424161020007217,
+      "elasticity": -0.41015377780869006,
+      "n_used": 31619
+    },
+    {
+      "stratum": "1 line",
+      "cells": 12639,
+      "share": 0.2533779720139529,
+      "elasticity": -0.5055820368088173,
+      "n_used": 9064
+    },
+    {
+      "stratum": "2-4 lines",
+      "cells": 4533,
+      "share": 0.09087446373441321,
+      "elasticity": -0.6049019134788934,
+      "n_used": 2388
+    },
+    {
+      "stratum": "5-19 lines",
+      "cells": 633,
+      "share": 0.012689948277935929,
+      "elasticity": -0.9505461955955147,
+      "n_used": 464
+    },
+    {
+      "stratum": "20+ lines",
+      "cells": 32,
+      "share": 0.0006415139729762239,
+      "elasticity": null,
+      "n_used": 25
+    }
+  ],
+  "interaction": {
+    "items": 3869,
+    "cells": 39244,
+    "observed_share": 0.39397105289980633,
+    "carried_forward": -0.7383132152559414,
+    "differential": 0.1959101184675143,
+    "observed": -0.5424030967884271,
+    "se_carried": 0.01441963263566259,
+    "se_diff": 0.005555473473841721,
+    "t_diff": 35.26434234453081
+  },
+  "elasticity_all": -0.6479547044114536,
+  "elasticity_observed_only": -0.7243371297477907
+}

@@ -237,6 +237,63 @@ was, and it was bought with two localised changes and no refit.
 
 ---
 
+## 4. A quarter of the price association sits in imputed prices
+
+Appendix B.1 records that only ~25% of the item × day price grid is observed and the rest
+carries the last price forward, then moves on. Nobody had asked whether the fitted response
+comes from the observed minority or the imputed majority. `eval/50_price_observability.py`
+asks it, model-free and with no refit. An item-day is observed exactly when at least one
+transaction line exists for it that day — the same condition under which stage 22 writes a
+real median price instead of carrying one forward.
+
+### The descriptive table is confounded and gives the wrong sign
+
+| price support on the week's representative day | cells | share | elasticity |
+|---|---|---|---|
+| carried forward (0 lines) | 32,045 | 64.2% | −0.4102 |
+| 1 line | 12,639 | 25.3% | −0.5056 |
+| 2–4 lines | 4,533 | 9.1% | −0.6049 |
+| 5–19 lines | 633 | 1.3% | −0.9505 |
+
+Read directly this says the response is *stronger* where prices are observed, so imputation
+merely dilutes it. That reading is wrong. Median training lines per item across the four
+strata run **125 / 152 / 293 / 1,929**, over **5,158 / 4,628 / 2,257 / 212** distinct items:
+the strata are different item populations, and the gradient is popularity, not
+observability. Popular items are the promoted, brand-switchable ones that §9 of the
+experiments page already shows are the elastic ones.
+
+### Controlled, it reverses
+
+Interacting the elasticity with "the price was observed", within item, restricted to the
+3,869 items that supply both kinds of week (39,244 cells, 39.4% observed):
+
+| | elasticity |
+|---|---|
+| carried-forward weeks | **−0.7383** (se 0.0144) |
+| differential when observed | **+0.1959** (se 0.0056), t = **+35.3** |
+| implied on observed weeks | **−0.5424** |
+
+The association is **weaker where prices were genuinely observed**, and about **27%** of it
+sits in cells whose price was imputed rather than measured. The headline elasticity is
+partly a property of the carry-forward rule.
+
+This compounds with §1 rather than duplicating it. Promotion accounted for 32% of the
+*coefficient*; imputation accounts for ~27% of the *association*, and the two are different
+mechanisms — one is an omitted cause of price, the other is measurement of price. Neither is
+addressed by the placebo.
+
+### Three readings of one test, and why the last is right
+
+Worth recording, because the first two were mine. The stratified table said "stronger where
+observed". A sign bug in the scripted conclusion — comparing negative elasticities with `<`
+instead of by magnitude — reported "weaker" for the wrong reason and by accident got the
+direction that later proved right. Only the within-item interaction, which holds the item
+population fixed, gives an answer that means anything. The lesson is the design, not the
+arithmetic: a stratified comparison across selected populations cannot answer a question
+about measurement.
+
+---
+
 ## Reproducing
 
 ```bash
