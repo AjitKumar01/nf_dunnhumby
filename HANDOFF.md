@@ -58,30 +58,85 @@ Key flags: `--l2-incidence 1e-4` (**required** — see §4), `--no-persist`, `--
 
 Chance on the within-category conditional is `−log 47 = −3.85`, top-1 `2.1%`.
 
-| | item | 95% CI on the gap |
-|---|---|---|
-| full model | **−2.4611** | — |
-| no persistence | −2.5340 | [+0.0648, +0.0816] |
-| original incidence penalty | −2.5327 | [+0.0635, +0.0804] |
-| prices scrambled | −2.5174 | [+0.0489, +0.0626] |
+| | item | 95% CI on the gap | clears refit noise? |
+|---|---|---|---|
+| full model | **−2.4611** | — | — |
+| no persistence | −2.5340 | [+0.0648, +0.0816] | yes |
+| original incidence penalty | −2.5327 | [+0.0635, +0.0804] | yes |
+| basket interaction | −2.6400 | — | yes |
+| prices scrambled | −2.5174 | [+0.0489, +0.0626] | yes |
+| household state | −2.6305 | — | yes |
+| nest | −2.6003 | — | yes, by under 2× |
+| quantity head | −2.5813 | — | **no**, and correctly so |
 
 Ablation ordering: store 0.337 ≫ persistence 0.073 > interaction 0.058 ≈ state 0.049 >
 nest 0.019 ≫ quantity 0.000.
+
+**Two kinds of uncertainty, measured separately.**
+
+*Refitting* — seven independent fits, identical data and schedule, differing only in seed:
+item sd **0.0040**, top-1 sd 0.0013, price coefficient sd 0.0104, κ sd **0.0011**. A gap
+between two independent fits must exceed **~0.011** to clear refit noise at 95%. This
+replaces the two-seed figure of 0.0095, which was too noisy to support the claims resting
+on it.
+
+*Evaluation sampling* — household block bootstrap, 400 draws over 1,664 households, paired
+so the interval is on the difference. `43_bootstrap.py`, no refitting needed.
+
+Neither covers variability from resampling the training households; that needs a refit per
+replicate and has not been run.
 
 **Causal.** The placebo retains 0.0% of the price coefficient on both margins; its
 allocation-elasticity interval is `[−0.0029, +0.0000]`. Median own-price elasticity
 −1.2248: allocation 81%, incidence 10%, quantity 9%.
 
-**Against baselines**, all on identical choice sets:
+**Against baselines**, all on identical choice sets (chance −3.85 within category, −8.04
+full catalogue):
 
 | | within-category | full catalogue |
 |---|---|---|
 | HPF | −3.1866 | — |
 | B-Emb | −3.0939 | — |
-| SHOPPER (reimplemented) | −2.8262 | −7.0501 |
+| SHOPPER (reimplemented, `45_shopper.py`) | −2.8262 | −7.0501 |
 | **ours** | **−2.5058** | **−6.7402** |
 
-The margin survives on SHOPPER's own home ground, which is the point of scoring both ways.
++0.586 nats over B-Emb [+0.563, +0.609]; +0.320 over SHOPPER within category and **+0.310
+on the full catalogue**, which is SHOPPER's own normalisation — that is the point of
+scoring both ways. Caveats: one tuned scalar per baseline against 870k parameters, and
+SHOPPER is a PyTorch reimplementation fitted by MAP, not the authors' variational CUDA
+code. A floor, not a benchmark result.
+
+---
+
+## 3a. Representations, coupon targeting, MDP policies
+
+**Product embeddings — real.** 10-NN sub-commodity purity **0.1126** [0.1041, 0.1260],
+against a permutation null at 0.0039 and a random embedding at 0.0029, chance 0.0040 —
+**27.8× chance with both nulls at chance**. Same-sub AUC is **0.9384** among pairs co-bought
+≥8× but only 0.5919 over all pairs: α is organised where the data is dense and unstructured
+where it is sparse. Nearest neighbours are often *basket* relations, not taxonomy
+(BANANAS → KIDS COOKIES), which is what the tied interaction asks for.
+`47_embeddings_verified.py`, figure in `figures/embeddings_verified.png`.
+
+**Household embeddings — nothing.** Linear *and* gradient-boosted probes on θ, c_user, γ
+fail to beat the majority class on income, household size, age, children or home ownership;
+best boosted probe is 0.037 **below** it, and on income the shuffled control outscores the
+real labels. Not recoverable linearly or non-linearly at n = 655.
+
+**Coupon targeting — a screen, not a score.** Spearman between predicted `g` and real
+held-out slope is **−0.122**; aggregating to products (−0.154) or households (−0.169) does
+not help. But the sign split is validated: `g > 0` pairs show a real slope of **−0.188**,
+`g ≤ 0` pairs **+0.003**. So the 21% of pairs with the "wrong" sign are the model correctly
+flagging non-responders. **Use it as a binary screen; do not rank within it.**
+
+**MDP policies — single-step yes, rollouts drift.** The never-bought state is 18.93%
+against a real 13.89% (not the 46% a measurement bug once implied). But the excess
+compounds: cumulative new distinct products run **1.156× real after one trip and 1.261×
+after twelve** (`46_horizon.py`), and that is a lower bound because generation reads recency
+from the real history rather than its own output. Three structural blockers are untouched:
+prices are exogenous so a policy gets no feedback; `Δlog p` is centred on the training
+window so a level shift leaves support; and there is no budget constraint. Single-step
+counterfactuals are supported; multi-step rollouts are usable over short horizons at most.
 
 ---
 
@@ -126,7 +181,13 @@ python3 33_verify_equations.py --label mymodel      # must print "all equations 
 python3 43_bootstrap.py --labels mymodel ...        # CIs, no refitting needed
 python3 44_baselines_exact.py --labels mymodel      # HPF and B-Emb
 python3 45_shopper.py --labels mymodel              # SHOPPER, both metrics
+python3 46_horizon.py --label mymodel               # rollout drift
+python3 47_embeddings_verified.py --label mymodel   # embeddings + nulls + figure
 ```
+
+Current fitted labels: `ps_nested` (main), `ps_off` (no persistence), `ps_pl` (placebo),
+`ps_s2..ps_s7` (seed replicates), `rk_base`/`rk_lowl2`/`rk_ncat`/`rk_both` (the penalty
+2×2), `pcd_lo`/`pcd_hi`, `hab_nested`.
 
 ---
 
@@ -144,8 +205,9 @@ python3 45_shopper.py --labels mymodel              # SHOPPER, both metrics
 5. **The IV estimator's "bias is constant per category"** assumption is stated and never
    checked.
 6. **Generation is distinguishable from real** at classifier AUC 0.81, and the residual
-   novelty excess accumulates over a horizon (ratio 1.156 → 1.261 over 12 trips, itself a
-   lower bound since generation reads recency from the real history).
+   novelty excess accumulates over a horizon (1.156 → 1.261 over 12 trips, a lower bound).
+   Co-occurrence rank correlation reaches +0.082 against real; within-basket pairs sharing a
+   sub-commodity run 0.0375 generated against 0.0646 real.
 7. **SHOPPER is a reimplementation** fitted by MAP, not the authors' variational code.
 
 ---
