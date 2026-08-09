@@ -972,14 +972,26 @@ def losses(model, bt, ib, iv_center):
         # -0.002 nats per trip, -1.1e-05 spread over the C per-category terms.
         per_pair = ib["y"] * nll1 + (1.0 - ib["y"]) * r
         per_trip = max(1, len(r) // max(1, ib["n_trips"]))     # categories sampled
+        # Appendix D of the spec: a (store, category) pair with nothing stocked has no
+        # choice set, so y_c = 0 is forced rather than observed -- measured at 9.46% of
+        # sampled pairs, of which exactly 0 are positive.  Keeping them fits c0 to a base
+        # rate 9.5% below the true one, and c0 is what generation draws entry from.
+        keep = (ib["nmax"] > 0).float() if getattr(model, "spec_edges", False) \
+            else torch.ones_like(per_pair)
+        rk = r * keep
         R = torch.zeros(ib["n_trips"], device=lin.device).index_add_(
-            0, ib["trip"], r) * (model.d.C / per_trip)
+            0, ib["trip"], rk) * (model.d.C / per_trip)
         trunc = torch.log1p(-torch.exp(-R.clamp_min(1e-6))).mean() / model.d.C
-        out["incidence"] = per_pair.mean() + trunc
+        out["incidence"] = (per_pair * keep).sum() / keep.sum().clamp_min(1) + trunc
 
         if model.use_breadth:
             # breadth - 1 ~ Poisson, on the categories actually bought
+            # Appendix D: N_c = 1 forces k_c = 1, so the cell identifies nothing.  It
+            # contributes exactly 0 either way; excluding it only stops it diluting the
+            # mean (measured at 0.91% of breadth terms).
             pos = ib["y"] > 0
+            if getattr(model, "spec_edges", False):
+                pos = pos & (ib["nmax"] > 1)
             if bool(pos.any()):
                 zb = (model.b0[ib["cat"][pos]]
                       + model.b_user[ib["user"][pos]]
@@ -1058,6 +1070,7 @@ def main(a):
                         neg_in_cat=a.neg_in_cat, item_loss=a.item_loss,
                         use_persist=not a.no_persist).to(dev)
     model.use_logq = not a.no_logq
+    model.spec_edges = a.spec_edges
     # A FIXED validation subsample, so the selection score is comparable across
     # iterations and across models rather than moving with the draw.
     chains = None
@@ -1215,6 +1228,11 @@ if __name__ == "__main__":
     p.add_argument("--l2", type=float, default=1e-2)
     p.add_argument("--no-persist", action="store_true",
                    help="drop the per-(household, product) persistence term")
+    p.add_argument("--spec-edges", action="store_true",
+                   help="obey Appendix D of the specification: drop (store, category) "
+                        "pairs with nothing stocked from l_inc (9.46% of sampled pairs, "
+                        "all forced zeros, which biases c0 down by 9.5%), and drop "
+                        "N_c = 1 cells from l_brd")
     p.add_argument("--pcd", type=float, default=0.0,
                    help="weight on the persistent-contrastive-divergence term for the "
                         "contents factor.  0 disables it and the objective is the "

@@ -9,6 +9,7 @@ exactly, or by finite difference where the document claims a derivative.
 
 Run:  python3 33_verify_equations.py
 """
+import argparse
 import importlib
 import json
 import os
@@ -46,13 +47,36 @@ def main(label="nested"):
     with torch.no_grad():
         u = m.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
                            bt["state"], bt["week"], bt["store"])
-        r, cix = 3, 2
+        # Pick a (row, candidate) whose PERSISTENCE lookup is non-zero.  The old fixed
+        # choice of (3, 2) had omega_ij = 0, so the two Eq. 4 persistence terms were
+        # absent from `man` and the check still passed -- it never covered them.
+        loy = d.loyal[bt["user"].unsqueeze(1), bt["cand"]]
+        nz = torch.nonzero(loy > 0)
+        r, cix = (int(nz[0, 0]), int(nz[0, 1])) if len(nz) else (3, 2)
         i, j = int(bt["user"][r]), int(bt["cand"][r, cix])
         man = (m.lam[j] + m.theta[i] @ m.alpha[j] + m.alpha[j] @ bt["ctx"][r]
                - (m.gamma[i] @ m.beta[j]) * bt["dlogp"][r, cix]
                + m.eta[j] @ bt["state"][r, cix] + m.mu[j] @ m.delta[bt["week"][r]]
-               + m.item_store[j] @ m.store_vec[bt["store"][r]])
-        check("3.1  u_ijt, term by term", float(u[r, cix]), float(man))
+               + m.item_store[j] @ m.store_vec[bt["store"][r]]
+               + m.w_loyal[j] * d.loyal[i, j] + m.w_freq[j] * d.freq[i, j])
+        check("4    b_ijt, term by term (persistence live)", float(u[r, cix]), float(man))
+        check("4    the persistence term is non-zero at this pair",
+              float(d.loyal[i, j] > 0), 1.0)
+
+        # Eq. 4a: the two persistence lookups, rebuilt from the training split alone.
+        tr_ = d.splits["train"]
+        nT = np.zeros((d.N, d.J))
+        np.add.at(nT, (tr_["user"], tr_["item"]), 1.0)
+        den = np.zeros((d.N, d.C))
+        np.add.at(den, (tr_["user"], d.item_cat_np[tr_["item"]]), 1.0)
+        check("4a   omega_ij = n_ij / sum_{j' in c} n_ij'",
+              float(np.abs(nT / np.maximum(den[:, d.item_cat_np], 1.0)
+                           - d.loyal.numpy()).max()), 0.0, 1e-6)
+        check("4a   f_ij = log(1+n_ij)/log 100",
+              float(np.abs(np.log1p(nT) / np.log(100.0) - d.freq.numpy()).max()), 0.0, 1e-6)
+        check("4a   f_ic = log(1+sum_j n_ij)/log 100  [Eq. 6]",
+              float(np.abs(np.log1p(den) / np.log(100.0) - d.hh_cat.numpy()).max()),
+              0.0, 1e-6)
 
         sp = d.splits["validation"]
         itms = sp["item"][sp["starts"][bidx[0]]:sp["ends"][bidx[0]]]
@@ -76,15 +100,71 @@ def main(label="nested"):
               float(m.alpha[mm] @ ctxj - m.alpha[jj] @ ctxj), 1e-4)
 
         L = nb.losses(m, bt, None, 0.0)
-        j2 = bt["cand"][:, 0]
-        z = (m.q0[j2] - (m.q_gamma[bt["user"]] * m.q_beta[j2]).sum(-1) * bt["dlogp"][:, 0]
-             + (m.q_state[j2] * bt["state"][:, 0, :]).sum(-1)).clamp(-6, 4)
+        # The purchased product sits at bt["target"] inside its category block, NOT at
+        # slot 0 -- slot 0 is whichever product is first in the block.  This check read
+        # slot 0 and kept reading it after 27_nested_basket.py was fixed to index the
+        # target, so it compared the loss against the formula the code no longer uses
+        # and failed for that reason alone.
+        ar_ = torch.arange(bt["cand"].shape[0])
+        tg_ = bt["target"]
+        j2 = bt["cand"][ar_, tg_]
+        z = (m.q0[j2]
+             - (m.q_gamma[bt["user"]] * m.q_beta[j2]).sum(-1) * bt["dlogp"][ar_, tg_]
+             + (m.q_state[j2] * bt["state"][ar_, tg_, :]).sum(-1)).clamp(-6, 4)
         k = (bt["units"] - 1.0).clamp_min(0)
         check("3.5  L_qty = mean(exp z - k z + logGamma(k+1))", float(L["quantity"]),
               float((torch.exp(z) - k * z + torch.lgamma(k + 1)).mean()))
 
         check("3.4  kappa_c = log(1 + exp(kappa_raw))", float(m.kappa()[7]),
               float(torch.log1p(torch.exp(m.kappa_raw[7]))))
+
+        # Eq. 6 carries a c_hab * f_ic term.  Verify the linear predictor is exactly the
+        # five stated pieces, by rebuilding it and by confirming c_hab is live.
+        ib = nb.incidence_batch(d, m, "validation", bidx, 16, np.random.default_rng(1),
+                                "cpu", 32)
+        lin = (m.c0[ib["cat"]] + (m.c_user[ib["user"]] * m.c_cat[ib["cat"]]).sum(-1)
+               + (m.c_state[ib["cat"]] * ib["state"]).sum(-1)
+               + m.c_hab[ib["cat"]] * ib["habit"]
+               + m.kappa()[ib["cat"]] * (ib["iv"] - m.iv_ref[ib["cat"]]))
+        base = float(nb.losses(m, bt, ib, 0.0)["incidence"])
+        keep = m.c_hab.clone()
+        m.c_hab.zero_()
+        off = float(nb.losses(m, bt, ib, 0.0)["incidence"])
+        m.c_hab.copy_(keep)
+        check("6    eta_ict rebuilt from its five stated terms",
+              float((torch.exp(lin.clamp(-12., 4.)) -
+                     torch.exp(((m.c0[ib["cat"]]
+                                 + (m.c_user[ib["user"]] * m.c_cat[ib["cat"]]).sum(-1)
+                                 + (m.c_state[ib["cat"]] * ib["state"]).sum(-1)
+                                 + m.c_hab[ib["cat"]] * ib["habit"]
+                                 + m.kappa()[ib["cat"]]
+                                 * (ib["iv"] - m.iv_ref[ib["cat"]]))).clamp(-12., 4.))
+                     ).abs().max()), 0.0, 1e-6)
+        check("6    c_hab is live (zeroing it moves the incidence loss)",
+              float(abs(base - off) > 1e-9), 1.0)
+        check("6    f_ic in Eq. 6 is the code's habit lookup",
+              float((ib["habit"] - d.hh_cat[ib["user"], ib["cat"]]).abs().max()), 0.0)
+
+        # Spec Eq. 9.  HANDOFF claimed the cloglog was "verified against the direct
+        # formula to 3.3e-06" and HANDOFF claimed the truncated breadth "sums to 1",
+        # but neither had a check anywhere in the repository.  Both are cheap.
+        for eta in (-4.0, -2.0, -0.5, 0.0, 1.5):
+            e = torch.tensor(eta, dtype=torch.float64)
+            r_ = torch.exp(e)
+            check(f"9    -log P(y=1) = -log(1-e^-e^eta) at eta={eta:+.1f}",
+                  float(-torch.log(-torch.expm1(-r_) + 1e-12)),
+                  float(-torch.log(1.0 - torch.exp(-torch.exp(e)))), 1e-6)
+
+        # Spec Eq. 10: the shifted Poisson truncated at the store's stock N_c must be a
+        # distribution on r = 1..N_c.  Reproduces the logZ the loss subtracts.
+        for zb_, nmax in ((-1.0, 3), (0.4, 8), (1.2, 25)):
+            z_ = torch.tensor(zb_, dtype=torch.float64)
+            lam_ = torch.exp(z_)
+            rr = torch.arange(nmax, dtype=torch.float64)          # r - 1 = 0..N_c-1
+            lp = -lam_ + rr * z_ - torch.lgamma(rr + 1)
+            logZ = torch.logsumexp(lp, 0)
+            check(f"10   truncated breadth sums to 1 (N_c={nmax}, z={zb_:+.1f})",
+                  float(torch.exp(lp - logZ).sum()), 1.0, 1e-9)
 
         for p in (0.02, 0.05, 0.10, 0.20):
             lam = -np.log(1 - p)
@@ -155,4 +235,9 @@ def main(label="nested"):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # HANDOFF documented `--label mymodel`, but main() took its label as a default
+    # argument and nothing ever read argv, so every documented invocation silently
+    # verified the stale `nested` checkpoint instead of the model asked for.
+    p = argparse.ArgumentParser()
+    p.add_argument("--label", default="ps_nested")
+    raise SystemExit(main(p.parse_args().label))

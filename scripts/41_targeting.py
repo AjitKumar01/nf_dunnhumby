@@ -138,6 +138,22 @@ def main(a):
         res["targeting"]["spearman_products"] = float(rp.statistic)
         res["targeting"]["spearman_households"] = float(ru.statistic)
 
+        # The SIGN split.  HANDOFF asserted "g > 0 pairs show a real slope of -0.188,
+        # g <= 0 pairs +0.003" and recommended using g as a binary screen on that basis,
+        # but nothing here ever computed it and no artifact contained it.  It is the
+        # claim the recommendation rests on, so it is computed rather than asserted.
+        pos, neg = R[R.pred_g > 0], R[R.pred_g <= 0]
+        log("")
+        log(f"   {'sign screen':22s} {'n':>7s} {'REAL held-out slope':>21s}")
+        for nm, gg in (("predicted g > 0", pos), ("predicted g <= 0", neg)):
+            if len(gg):
+                log(f"   {nm:22s} {len(gg):7d} {gg.real_slope.mean():21.4f}")
+        res["targeting"]["sign_split"] = {
+            "n_pos": int(len(pos)), "n_neg": int(len(neg)),
+            "slope_pos": float(pos.real_slope.mean()) if len(pos) else None,
+            "slope_neg": float(neg.real_slope.mean()) if len(neg) else None,
+            "share_neg": float(len(neg) / max(len(R), 1))}
+
     # ---------------------------------------------------------------- PART B
     log("")
     log("B. MARKOV -- does generated data reproduce the recency transition?")

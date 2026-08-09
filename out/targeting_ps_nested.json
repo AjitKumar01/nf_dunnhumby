@@ -37,7 +37,14 @@
     "p": 1.4643189842497737e-51,
     "n": 15138,
     "spearman_products": -0.15371537264697852,
-    "spearman_households": -0.16891122874218736
+    "spearman_households": -0.16891122874218736,
+    "sign_split": {
+      "n_pos": 11949,
+      "n_neg": 3189,
+      "slope_pos": -0.18653556135127017,
+      "slope_neg": -0.004304918288278034,
+      "share_neg": 0.2106619104240983
+    }
   },
   "markov": {
     "recency_quantiles_real": [
