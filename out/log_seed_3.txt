@@ -1,0 +1,12 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27] model ps_s3: K=64 nest=True quantity=True context=True store=True avail_only=False -> 881,490 parameters
+[27]   froze IV reference at iteration 500: mean 0.159, 188 of 188 categories observed
+[27]   it  1000  item -2.5798  top1 0.320  qNLL 0.6856  cNLL 0.1173  bNLL 0.6270  kappa 0.874  breadth 1.507  price +0.179 *
+[27]   it  2000  item -2.4723  top1 0.348  qNLL 0.6595  cNLL 0.1143  bNLL 0.6031  kappa 0.873  breadth 1.441  price +0.499 *
+[27]   it  3000  item -2.4413  top1 0.355  qNLL 0.6744  cNLL 0.1224  bNLL 0.5974  kappa 0.871  breadth 1.418  price +0.626 *
+[27]   it  4000  item -2.4476  top1 0.352  qNLL 0.6785  cNLL 0.1150  bNLL 0.6002  kappa 0.871  breadth 1.405  price +0.669
+[27]   it  5000  item -2.4682  top1 0.349  qNLL 0.6671  cNLL 0.1158  bNLL 0.5744  kappa 0.871  breadth 1.400  price +0.687 *
+[27]   it  6000  item -2.4667  top1 0.349  qNLL 0.6612  cNLL 0.1185  bNLL 0.5652  kappa 0.871  breadth 1.398  price +0.694 *
+[27] best at 6000; TEST item -2.5008 top1 0.343 qNLL 0.6591 cNLL 0.1207 bNLL 0.5704
+[27] saved ps_s3_nested.pt

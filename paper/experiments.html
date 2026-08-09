@@ -99,9 +99,54 @@
     carries across.</p>
   </div>
 
-  <p><strong>The seed spread is 0.0095 nats</strong> (two seeds, identical but for
-  initialisation). That is a weak handle on refitting variability, so gaps are now also
-  bootstrapped.</p>
+  <p>Two sources of uncertainty are separated, because they cover different things.</p>
+
+  <div class="key">
+    <p class="label">Refitting — seven independent fits</p>
+    <p>Seven models, identical data and schedule, differing only in seed. This covers
+    initialisation and optimisation noise, which a bootstrap of the evaluation cannot
+    reach.</p>
+  </div>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>quantity</th><th>mean over 7 fits</th><th>sd</th><th>range</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td>item log-likelihood</td><td>−2.5053</td><td><strong>0.0040</strong></td><td>0.0110</td></tr>
+      <tr><td>top-1</td><td>0.3416</td><td>0.0013</td><td>0.0036</td></tr>
+      <tr><td>price coefficient</td><td>+0.6893</td><td>0.0104</td><td>0.0237</td></tr>
+      <tr><td>κ</td><td>0.8708</td><td>0.0011</td><td>0.0029</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The refit sd is <strong>0.0040</strong> nats — less than half the 0.0095 two-seed
+  figure this paper used previously, which was too noisy an estimate to support the claims
+  resting on it. A gap between two independently fitted models must exceed about
+  <strong>0.011</strong> to clear refit noise at 95%.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>gap</th><th>value</th><th>clears refit noise?</th></tr></thead>
+    <tbody>
+      <tr><td>persistence term</td><td>+0.0728</td><td class="good">yes</td></tr>
+      <tr><td>incidence penalty</td><td>+0.0715</td><td class="good">yes</td></tr>
+      <tr><td>basket interaction</td><td>+0.0582</td><td class="good">yes</td></tr>
+      <tr><td>prices scrambled</td><td>+0.0562</td><td class="good">yes</td></tr>
+      <tr><td>household state</td><td>+0.0487</td><td class="good">yes</td></tr>
+      <tr><td>nest</td><td>+0.0185</td><td class="good">yes</td></tr>
+      <tr><td>quantity head</td><td>−0.0005</td><td class="bad">no</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Every ablation clears refit noise except the quantity head, which is inside it and
+  should be — that head never enters item utility. The nest at +0.0185 clears it by less
+  than a factor of two, so it is real but the weakest claim in the table. κ is
+  extraordinarily stable across fits (sd 0.0011), which matters because it is the
+  interpretive centrepiece.</p>
+
+  <p>The second source, <strong>evaluation sampling</strong>, is bootstrapped below.</p>
 
   <div class="key">
     <p class="label">Confidence intervals — household block bootstrap</p>
@@ -750,9 +795,10 @@
   <h2 id="s12"><span class="num">12</span>What is still not established</h2>
 
   <ol>
-    <li><strong>Refitting uncertainty is still missing.</strong> §1 now carries a household
-    block bootstrap, but it covers evaluation sampling only. A full bootstrap needs a refit
-    per replicate and has not been run.</li>
+    <li><strong>Refitting uncertainty is estimated from seeds, not resampled data.</strong>
+    Seven fits give the initialisation and optimisation component (sd 0.0040); variability
+    from resampling the training households would need a refit per replicate and has not
+    been run.</li>
     <li><strong>The test set has been used repeatedly.</strong> Eight models are compared on
     it here, on top of the iteration that produced the specification. Nothing reserves it
     for a single final evaluation.</li>
@@ -768,9 +814,10 @@
     <li><strong>The assortment threshold is unjustified and the estimand is sensitive to
     it</strong> (§11). Not resolved — resolving it needs an assortment measure independent
     of purchases, which this data does not contain.</li>
-    <li><strong>Multi-step generation is not established</strong> (§10). The residual
-    novelty excess is ~20% relative, down from an apparent 240% that was a measurement
-    artefact; its effect over a horizon has not been quantified.</li>
+    <li><strong>Multi-step generation drifts.</strong> The residual novelty excess
+    accumulates: cumulative new distinct products run 1.156× real after one trip and
+    1.261× after twelve. That is a lower bound, since generation reads recency from the
+    real history rather than from its own output.</li>
     <li><strong>The joint is now tested and it fails</strong> (§11, AUC 0.8101). The
     price-response check in §6 remains circular: it re-estimates a quantity the model was
     fitted to, so it verifies the sampler propagates the coefficient, not that the
