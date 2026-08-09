@@ -58,19 +58,29 @@ Key flags: `--l2-incidence 1e-4` (**required** — see §4), `--no-persist`, `--
 
 Chance on the within-category conditional is `−log 47 = −3.85`, top-1 `2.1%`.
 
-| | item | 95% CI on the gap | clears refit noise? |
-|---|---|---|---|
-| full model | **−2.4611** | — | — |
-| no persistence | −2.5340 | [+0.0648, +0.0816] | yes |
-| original incidence penalty | −2.5327 | [+0.0635, +0.0804] | yes |
-| basket interaction | −2.6400 | — | yes |
-| prices scrambled | −2.5174 | [+0.0489, +0.0626] | yes |
-| household state | −2.6305 | — | yes |
-| nest | −2.6003 | — | yes, by under 2× |
-| quantity head | −2.5813 | — | **no**, and correctly so |
+All eight rows are `ps_*` models refitted at the same recipe and scored on the test set.
+The previous version of this table mixed these with `spec_*` rows scored a different way.
 
-Ablation ordering: store 0.337 ≫ persistence 0.073 > interaction 0.058 ≈ state 0.049 >
-nest 0.019 ≫ quantity 0.000.
+| removing | item | cost | clears refit noise (0.0110)? |
+|---|---|---|---|
+| — (full model) | **−2.5118** | — | — |
+| quantity head | −2.5113 | −0.0005 | **no**, and correctly so |
+| nest | −2.5334 | +0.0215 | yes, by 2× |
+| household state | −2.5373 | +0.0255 | yes |
+| prices scrambled | −2.5706 | +0.0587 | yes |
+| basket interaction | −2.5818 | +0.0700 | yes |
+| persistence | −2.5833 | +0.0714 | yes |
+| store | −2.8240 | +0.3122 | yes |
+
+Ablation ordering: store 0.312 ≫ persistence 0.071 ≈ interaction 0.070 > placebo 0.059 >
+state 0.026 > nest 0.022 ≫ quantity 0.000.
+
+**The ordering moved when persistence was added, and the reason is worth knowing.** On the
+earlier fit, state was worth 0.049 and the interaction 0.058. State has now *halved* while
+the interaction grew. `ω_ij` and `f_ij` are per-(household, product) purchase history,
+which overlaps with what the recency vector `x_ijt` carried — persistence did not simply
+add signal, it absorbed about half of the state term's job. Two terms the specification
+presents as independent are substitutes in the fit.
 
 **Two kinds of uncertainty, measured separately.**
 
@@ -82,13 +92,19 @@ on it.
 
 *Evaluation sampling* — household block bootstrap, 400 draws over 1,664 households, paired
 so the interval is on the difference. `scripts/eval/43_bootstrap.py`, no refitting needed.
+It scores its own resample, so its levels differ from the table above; only three models
+carry intervals: full −2.4611 [−2.5022, −2.4254]; no persistence gap **+0.0728**
+[+0.0648, +0.0816]; shared incidence penalty gap **+0.0715** [+0.0635, +0.0804]; placebo
+gap **+0.0562** [+0.0489, +0.0626]. Every gap excludes zero.
 
 Neither covers variability from resampling the training households; that needs a refit per
 replicate and has not been run.
 
-**Causal.** The placebo retains 0.0% of the price coefficient on both margins; its
-allocation-elasticity interval is `[−0.0029, +0.0000]`. Median own-price elasticity
-−1.2248: allocation 81%, incidence 10%, quantity 9%.
+**Causal.** The placebo retains 0.0% of the price coefficient on both margins (fitted at
+5×10⁻³⁹); its allocation-elasticity interval is `[−0.0029, +0.0000]`. Own-price elasticity
+**−1.2070**: allocation 79%, incidence 12%, quantity 9%. The previous figure here,
+−1.2248 with 81/10/9, was correct for `spec_nested` and was never regenerated when
+`ps_nested` became the headline.
 
 **Against baselines**, all on identical choice sets (chance −3.85 within category, −8.04
 full catalogue):
@@ -102,7 +118,7 @@ full catalogue):
 
 +0.586 nats over B-Emb [+0.563, +0.609]; +0.320 over SHOPPER within category and **+0.310
 on the full catalogue**, which is SHOPPER's own normalisation — that is the point of
-scoring both ways. Caveats: one tuned scalar per baseline against 870k parameters, and
+scoring both ways. Caveats: one tuned scalar per baseline against 881k parameters, and
 SHOPPER is a PyTorch reimplementation fitted by MAP, not the authors' variational CUDA
 code. A floor, not a benchmark result.
 
@@ -112,7 +128,7 @@ code. A floor, not a benchmark result.
 
 **Product embeddings — real.** 10-NN sub-commodity purity **0.1126** [0.1041, 0.1260],
 against a permutation null at 0.0039 and a random embedding at 0.0029, chance 0.0040 —
-**27.8× chance with both nulls at chance**. Same-sub AUC is **0.9384** among pairs co-bought
+**27.8× chance with both nulls at chance**. Same-sub AUC is **0.9277** among pairs co-bought
 ≥8× but only 0.5919 over all pairs: α is organised where the data is dense and unstructured
 where it is sparse. Nearest neighbours are often *basket* relations, not taxonomy
 (BANANAS → KIDS COOKIES), which is what the tied interaction asks for.
@@ -125,11 +141,17 @@ real labels. Not recoverable linearly or non-linearly at n = 655.
 
 **Coupon targeting — a screen, not a score.** Spearman between predicted `g` and real
 held-out slope is **−0.122**; aggregating to products (−0.154) or households (−0.169) does
-not help. But the sign split is validated: `g > 0` pairs show a real slope of **−0.188**,
-`g ≤ 0` pairs **+0.003**. So the 21% of pairs with the "wrong" sign are the model correctly
-flagging non-responders. **Use it as a binary screen; do not rank within it.**
+not help. But the sign split holds: `g > 0` pairs show a real slope of **−0.1865**,
+`g ≤ 0` pairs **−0.0043**. So the 21% of the targeting sample with a non-positive
+predicted slope are the model correctly flagging non-responders — that 21% is
+3,189/15,138 usable pairs, a different population from the 24% of *all* pairs with a
+negative sign. **Use it as a binary screen; do not rank within it:** the quintile ordering
+breaks badly, with Q2's real slope at **+0.141**.
 
-**MDP policies — single-step yes, rollouts drift.** The never-bought state is 18.93%
+`41_targeting.py` did not compute this split until it was checked; it had been asserted
+from memory. It now does.
+
+**MDP policies — single-step yes, rollouts drift.** The never-bought state is 19.20%
 against a real 13.89% (not the 46% a measurement bug once implied). But the excess
 compounds: cumulative new distinct products run **1.156× real after one trip and 1.261×
 after twelve** (`scripts/eval/46_horizon.py`), and that is a lower bound because generation reads recency
@@ -143,13 +165,27 @@ counterfactuals are supported; multi-step rollouts are usable over short horizon
 ## 4. Two things that will bite you
 
 **`--l2-incidence 1e-4` is not optional.** With the shared penalty, `c_user`/`c_cat`
-collapse to effective **rank 2 and 3** out of 64 — 144,512 parameters delivering one number
-per household times one per category, which cannot express "buys nappies, never cat food".
-Averaged over all dimensions the data gradient beats the penalty 5.8–17×, but that average
-is dominated by the one direction that is learning; on the other 61 the data gradient is
-near zero and the penalty is the only force. Separating it gives rank 23 and 41, improves
-incidence NLL 0.1249 → 0.1199 against a 0.1132 oracle floor, and cuts the novel-category
-share 22.5% → 19.7%.
+collapse to near rank one — 144,256 parameters delivering roughly one number per household
+times one per category, which cannot express "buys nappies, never cat food". Averaged over
+all dimensions the data gradient beats the penalty 5.8–17×, but that average is dominated
+by the one direction that is learning; on the rest the data gradient is near zero and the
+penalty is the only force.
+
+The size of the collapse depends on which rank definition you use, so state one. Measured
+on `rk_base` (shared) against `rk_lowl2` (separated):
+
+| definition | shared → separated, `c_user` | `c_cat` |
+|---|---|---|
+| dimensions to reach 90% of the spectrum | 1 → 2 | 1 → 1 |
+| participation ratio | 1.9 → 10.8 | 1.7 → 6.8 |
+| entropy effective rank | 5.2 → 31.8 | 4.1 → 23.7 |
+| numerical rank of `c_user @ c_cat.T` | 4 → 62 | — |
+
+Every definition shows the same large increase; the direction is robust and the magnitude
+is not a single number. An earlier version of this file quoted "rank 2 and 3 → 23 and 41",
+which no definition on any fitted model reproduces — the qualitative claim stands, those
+two integers do not. Separating the penalty also improves incidence NLL 0.1249 → 0.1199
+against a 0.1132 oracle floor.
 
 **`generate_baskets()` returns `.trips`. Use it.** When `trips=` is not passed it selects a
 *random* subset of test baskets. Attributing the k-th generated basket to test basket k
@@ -212,17 +248,24 @@ Current fitted labels: `ps_nested` (main), `ps_off` (no persistence), `ps_pl` (p
 2. **The test set has been used repeatedly** across model comparisons. Nothing reserves it
    for a single final evaluation.
 3. **Identification is asserted, not tested** — a 2,016-dimensional rotational invariance in
-   α and θ, an unconstrained sign on `γ·β` (21% of pairs negative), and category levels
+   α and θ, an unconstrained sign on `γ·β` (**24.02%** of all pairs negative — not the 21% of §3a,
+   which is the targeting subsample), and category levels
    identified only through the noisy inclusive value.
 4. **The assortment threshold is unjustified** and the elasticity is first-order sensitive
-   to it, running −0.61 to 0.00 as the rule tightens. Part of that is mechanical.
+   to it, running −0.57 to 0.00 as the rule tightens. Part of that is mechanical.
 5. **The IV estimator's "bias is constant per category"** assumption is stated and never
    checked.
-6. **Generation is distinguishable from real** at classifier AUC 0.81, and the residual
-   novelty excess accumulates over a horizon (1.156 → 1.261 over 12 trips, a lower bound).
-   Co-occurrence rank correlation reaches +0.082 against real; within-basket pairs sharing a
-   sub-commodity run 0.0375 generated against 0.0646 real.
-7. **SHOPPER is a reimplementation** fitted by MAP, not the authors' variational code.
+6. **Generation is distinguishable from real** at classifier AUC **0.7725**, and the
+   residual novelty excess accumulates over a horizon (1.156 → 1.261 over 12 trips, a lower
+   bound). Co-occurrence rank correlation reaches +0.099 against real; within-basket pairs
+   sharing a sub-commodity run 0.0482 generated against 0.0646 real. The generator also
+   under-produces basket size by 9% and categories by 12%, which is new and unexplained.
+7. **The objective is not Eq. 21 of the specification.** The code takes a mean over each
+   component's own terms; Eq. 21 at w_c = 1 weights incidence 24.5× higher. Fitting the
+   specification literally costs 63% of the price coefficient. The convention is now
+   documented, but it has no principled justification either way — §16 of the spec forfeits
+   pseudo-likelihood consistency at any w ≠ 1.
+8. **SHOPPER is a reimplementation** fitted by MAP, not the authors' variational code.
 
 ---
 
@@ -246,21 +289,30 @@ rules out a spurious constant; it cannot separate "price moves demand" from "the
 times promotions to demand", which is the actual endogeneity concern for within-product
 price variation. There is no instrument and no discontinuity anywhere in this work.
 
-Three further cracks: the elasticity runs **−0.61 to 0.00** as the assortment threshold
+Three further cracks: the elasticity runs **−0.57 to 0.00** as the assortment threshold
 tightens and nobody has justified the threshold; prices are reconstructed from the very
 transactions being scored, with 41% of held-out rows the sole observation of their
-item-day; and 21% of `γ·β` pairs carry the economically wrong sign, unconstrained.
+item-day; and 24% of `γ·β` pairs carry the economically wrong sign, unconstrained.
 
 *A well-specified demand model whose price parameter is stable and better than the
 published alternative. Calling it causal is a stretch the design does not support.*
 
-### Retail simulator — 4/10
+### Retail simulator — 5/10
 
-Marginals match — basket size to 2%, item marginals +0.891, price response recovered at
-76–78%. But a discriminator separates real from generated baskets at **AUC 0.81**, which is
-the test that matters. Basket-size TVD is 0.34 despite the means agreeing. Co-occurrence
-rank correlation tops out at **+0.082**. Fine substitution is 40% under-produced. Novelty
-runs ~20% high and compounds to **1.26× over twelve trips**.
+Revised up from 4/10, because every number the old score rested on was measured on
+`spec_nested` and each moved in the model's favour when recomputed: discriminator AUC
+**0.81 → 0.7725**, basket-size TVD **0.34 → 0.28**, co-occurrence rank correlation
+**+0.082 → +0.099**, fine substitution **40% → 25%** under-produced. The AUC improvement is
+genuinely the model, not the measurement — the corrected code scores the old model at
+0.8133.
+
+What still fails. A discriminator separates real from generated baskets at **AUC 0.77**,
+which is the test that matters, and its two most informative features are the two marginals
+that are off. The generator now makes baskets **too small** — 7.47 items against 8.18 and
+5.60 categories against 6.38 — where the earlier fit made them slightly too large; that
+regression is unexplained, and the unstocked-category base-rate distortion is ruled out as
+its cause. Novelty runs 19.2% against a real 14.2% and compounds to **1.26× over twelve
+trips**, a lower bound.
 
 For learning a pricing policy it fails on structure, not just fit: prices are exogenous so
 a policy gets no feedback; `Δlog p` is centred on the training window so a level shift
@@ -285,9 +337,14 @@ changed sign once the metric was fixed.
 
 ### Overall — 6/10, and the highest-value next step
 
-A solid demand model with an honest audit trail, and a simulator that isn't one yet. The
-single highest-value next step is **not more modelling — it is finding real price variation
-to identify against.**
+A solid demand model with an honest audit trail, and a simulator that isn't one yet.
+Unchanged from the previous scoring despite the simulator moving 4 → 5, because the audit
+that produced that revision also found the specification and the code disagreeing in four
+places, one of them worth 63% of the estimand — which is a mark against the same "honest
+audit trail" the score leans on. The two moves cancel.
+
+The single highest-value next step is **not more modelling — it is finding real price
+variation to identify against.**
 
 dunnhumby ships `causal_data.csv` (664 MB): `PRODUCT_ID × STORE_ID × WEEK_NO` with
 **`display`** (in-store placement, codes 0–7) and **`mailer`** (weekly circular placement,
