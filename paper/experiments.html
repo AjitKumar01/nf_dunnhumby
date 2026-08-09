@@ -100,7 +100,7 @@
     <code>ps_nested</code>. Two conclusions changed sign as a result, and both are marked
     where they occur (§9 and §12).</p>
     <p>Separately, the old §11 temperature table was produced by a version of
-    <code>42_limitations.py</code> that attributed each generated basket to the wrong
+    <code>scripts/eval/42_limitations.py</code> that attributed each generated basket to the wrong
     household — the same bug the old §10 explicitly retracted, two sections earlier. It was
     fixed in commit <code>95cc0fd</code>, seventeen hours after that artifact was written,
     and the page was never regenerated.</p>
@@ -116,7 +116,7 @@
   <p>Thirty checks compare each printed formula against the fitted model — by autograd
   where the specification states a derivative, by direct evaluation where it states an
   identity, and by rebuilding the quantity from the raw training split where it states a
-  definition (<code>scripts/33_verify_equations.py</code>). <strong>All thirty pass</strong>,
+  definition (<code>scripts/eval/33_verify_equations.py</code>). <strong>All thirty pass</strong>,
   on all four models fitted for this page.</p>
 
   <div class="flag neg">
@@ -742,7 +742,7 @@
   do not rank within it.</strong></p>
 
   <p class="note">This split was asserted in the handoff before it was ever computed —
-  <code>41_targeting.py</code> produced quintiles and correlations but no sign split
+  <code>scripts/eval/41_targeting.py</code> produced quintiles and correlations but no sign split
   anywhere. It now computes it, which is why the numbers here are −0.1865 and −0.0043 rather
   than the −0.188 and +0.003 previously quoted from memory.</p>
 
@@ -926,7 +926,7 @@
     <li><strong>The price response is not identified against confounding.</strong> The
     placebo rules out a spurious constant; it cannot separate price from promotion timing.
     dunnhumby ships <code>causal_data.csv</code> with display and mailer placement per
-    product × store × week, which is read by <code>04_extras.py</code> but never reaches
+    product × store × week, which is read by <code>archive/normalizing_flow/04_extras.py</code> but never reaches
     <code>basket_input/</code>. Wiring it in is the highest-value open step.</li>
     <li><strong>Identification is asserted, not tested</strong> — a 2,016-dimensional
     rotational invariance in α and θ, an unconstrained sign on γ<sup>⊤</sup>β now measured at

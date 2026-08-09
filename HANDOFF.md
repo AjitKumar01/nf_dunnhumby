@@ -47,7 +47,7 @@ Branch `spec-conformance`. Everything below is implemented and verified.
 | interaction | tied `ρ = α`, required for the swap identity and hence for `P(S\|𝒦)` to exist |
 | persistence | per-(household, product) share and frequency, train-only, per-product loadings |
 | conditioning | on `n ≥ 1`; the empty basket is never observed |
-| equations | 15 checks in `33_verify_equations.py`, all pass |
+| equations | 30 checks in `scripts/eval/33_verify_equations.py`, all pass |
 
 Key flags: `--l2-incidence 1e-4` (**required** — see §4), `--no-persist`, `--pcd`
 (default 0, off), `--placebo-price permute`.
@@ -81,7 +81,7 @@ replaces the two-seed figure of 0.0095, which was too noisy to support the claim
 on it.
 
 *Evaluation sampling* — household block bootstrap, 400 draws over 1,664 households, paired
-so the interval is on the difference. `43_bootstrap.py`, no refitting needed.
+so the interval is on the difference. `scripts/eval/43_bootstrap.py`, no refitting needed.
 
 Neither covers variability from resampling the training households; that needs a refit per
 replicate and has not been run.
@@ -97,7 +97,7 @@ full catalogue):
 |---|---|---|
 | HPF | −3.1866 | — |
 | B-Emb | −3.0939 | — |
-| SHOPPER (reimplemented, `45_shopper.py`) | −2.8262 | −7.0501 |
+| SHOPPER (reimplemented, `scripts/eval/45_shopper.py`) | −2.8262 | −7.0501 |
 | **ours** | **−2.5058** | **−6.7402** |
 
 +0.586 nats over B-Emb [+0.563, +0.609]; +0.320 over SHOPPER within category and **+0.310
@@ -116,7 +116,7 @@ against a permutation null at 0.0039 and a random embedding at 0.0029, chance 0.
 ≥8× but only 0.5919 over all pairs: α is organised where the data is dense and unstructured
 where it is sparse. Nearest neighbours are often *basket* relations, not taxonomy
 (BANANAS → KIDS COOKIES), which is what the tied interaction asks for.
-`47_embeddings_verified.py`, figure in `figures/embeddings_verified.png`.
+`scripts/eval/47_embeddings_verified.py`, figure in `figures/embeddings_verified.png`.
 
 **Household embeddings — nothing.** Linear *and* gradient-boosted probes on θ, c_user, γ
 fail to beat the majority class on income, household size, age, children or home ownership;
@@ -132,7 +132,7 @@ flagging non-responders. **Use it as a binary screen; do not rank within it.**
 **MDP policies — single-step yes, rollouts drift.** The never-bought state is 18.93%
 against a real 13.89% (not the 46% a measurement bug once implied). But the excess
 compounds: cumulative new distinct products run **1.156× real after one trip and 1.261×
-after twelve** (`46_horizon.py`), and that is a lower bound because generation reads recency
+after twelve** (`scripts/eval/46_horizon.py`), and that is a lower bound because generation reads recency
 from the real history rather than its own output. Three structural blockers are untouched:
 prices are exogenous so a policy gets no feedback; `Δlog p` is centred on the training
 window so a level shift leaves support; and there is no budget constraint. Single-step
@@ -173,17 +173,31 @@ once exhausted all 12 GB of swap, collapsed throughput 32×, and crashed the mac
 `/tmp/swapguard.sh` aborts training above 2 GB of swap. Anything that must survive belongs
 in the repo; `/private/tmp` does not survive a reboot.
 
+Scripts are grouped by role — `scripts/pipeline`, `scripts/model`, `scripts/eval` — with
+everything the two documents do not use in `archive/`. See `scripts/README.md` for the
+script-to-section map. **Run each from its own directory**; paths are resolved relative to
+it, and `eval/` adds `../model` to `sys.path`.
+
 ```bash
-cd scripts
 export OMP_NUM_THREADS=1
+
+cd scripts/model
 python3 27_nested_basket.py --label mymodel --iters 6000 --l2-incidence 1e-4   # ~25 min
+
+cd ../eval
 python3 33_verify_equations.py --label mymodel      # must print "all equations verified"
 python3 43_bootstrap.py --labels mymodel ...        # CIs, no refitting needed
 python3 44_baselines_exact.py --labels mymodel      # HPF and B-Emb
 python3 45_shopper.py --labels mymodel              # SHOPPER, both metrics
 python3 46_horizon.py --label mymodel               # rollout drift
 python3 47_embeddings_verified.py --label mymodel   # embeddings + nulls + figure
+python3 42_limitations.py --label mymodel           # NOTE: defaults to a superseded label
+python3 34_generator_eval.py --label mymodel --n-trips 24768 --top-items 500
 ```
+
+The two non-default arguments on the last line are what the published §7 numbers were
+produced with; the defaults (6000 / 300) give a smaller sample and different absolute
+figures.
 
 Current fitted labels: `ps_nested` (main), `ps_off` (no persistence), `ps_pl` (placebo),
 `ps_s2..ps_s7` (seed replicates), `rk_base`/`rk_lowl2`/`rk_ncat`/`rk_both` (the penalty
@@ -282,7 +296,7 @@ plausibly excludable from a household's product preference while strongly shifti
 price it faces — the shape of an instrument, or at minimum the basis for a
 difference-in-differences on placement rather than on price.
 
-It is read by `04_extras.py` but **never reaches the basket model**: `basket_input/` has no
+It is read by `archive/normalizing_flow/04_extras.py` but **never reaches the basket model**: `basket_input/` has no
 display or mailer field, so stages 22 and 27 have never seen it. Wiring it in and using it
 for identification would move the price model from 7 to something defensible far faster
 than another architecture change.
