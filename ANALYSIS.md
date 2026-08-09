@@ -170,6 +170,73 @@ In order of how much they matter, with evidence rather than assertion:
 
 ---
 
+## 3. Two corrections to the generator, and what they buy
+
+Both follow from §2's finding that the drift is a linear per-trip bias rather than a
+feedback loop: a per-trip bias is exactly the thing a per-trip correction can remove.
+Both are off by default, so every existing artefact reproduces unchanged.
+
+### `require_nonempty` — implement the n ≥ 1 conditioning at generation
+
+Spec Eq. 8 divides by `1 − ∏_c P(y_c = 0)`; the training loss implements it, the generator
+never did and emitted an empty basket **4.42%** of the time against a real 0%. Redrawing
+the composition until something is entered is exact rejection sampling from the
+conditioned law.
+
+Measured: empty rate **4.42% → 1.80%**, mean items **7.479 → 7.572**. That closes about
+**10%** of the basket-size shortfall, not the 39% predicted beforehand. The prediction
+assumed conditioning on the finished basket being non-empty; what Eq. 8 actually says, and
+what is implemented, is that the *composition* is non-empty. The residual 1.80% are trips
+that enter a category and then place no item in it — a separate defect, and now a
+localised one.
+
+### `item_temp` — sharpen the item draw without touching the inclusive value
+
+The temperature sweep in `42_limitations` scaled `m.item_utility` globally, which also
+scales IV, which feeds incidence — so sharpening inflated basket size 7.55 → 12.39 and the
+result was confounded. That section said a clean test "would scale only inside the item
+softmax and leave IV alone" and had not been run. It is now: IV is taken from the
+untempered utilities, and the temperature applies only to the pass-1 draw and the Gibbs
+resample.
+
+| item_temp | items | categories | novel item % | never-bought sub % |
+|---|---|---|---|---|
+| 1.00 | 7.572 | 5.667 | 49.17 | 18.96 |
+| 0.90 | 7.572 | 5.667 | 45.69 | 17.66 |
+| 0.85 | 7.572 | 5.667 | 43.75 | 16.98 |
+| **0.80** | **7.572** | **5.667** | **41.95** | 16.28 |
+| *real* | *8.360* | *6.494* | *41.87* | *12.01* |
+
+**The decoupling works exactly.** Basket size and category count are identical to three
+decimals across the whole range, where the confounded version moved them by 64%. And
+**T = 0.80 calibrates the novel-item rate to within 0.1 point** of real.
+
+The sub-commodity never-bought rate improves only 18.96% → 16.28% against a real 12.01%,
+and that is informative rather than disappointing: sharpening fixes *which item within a
+sub-commodity* gets picked, but which sub-commodity is reachable at all is set by incidence
+and breadth, which the temperature now deliberately does not touch. The residual novelty
+is a composition-stage problem, and this localises it.
+
+### The payoff on rollout drift
+
+Closed-loop, 600 households, twelve trips, `recency` mode:
+
+| | step 1 | step 4 | step 8 | step 12 |
+|---|---|---|---|---|
+| baseline | 1.165 | 1.217 | 1.253 | **1.261** |
+| + both corrections | **1.016** | 1.040 | 1.097 | **1.106** |
+
+Twelve-step drift falls from a **26% excess to 11%**, and step-one novelty is within 1.6%
+of real. Throughput is unchanged at 112 baskets/s — the rejection loop costs nothing
+measurable because it fires on 4% of trips.
+
+This does not make multi-step rollouts sound. Basket size is still 9% low, the composition
+stage still over-produces unfamiliar sub-commodities, and trip timing is still not modelled
+at all. But the horizon over which a trajectory stays usable is materially longer than it
+was, and it was bought with two localised changes and no refit.
+
+---
+
 ## Reproducing
 
 ```bash

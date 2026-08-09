@@ -349,7 +349,8 @@ def _cat_cache(m, d, dev, cats, user, day, store):
 
 @torch.no_grad()
 def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
-                     with_units=False, trips=None, cat_sweeps=2):
+                     with_units=False, trips=None, cat_sweeps=2,
+                     item_temp=1.0, require_nonempty=False, max_tries=20):
     """Emit ACTUAL baskets -- item ids, not counts -- and measure co-purchase structure.
 
     `generate` above accumulates expected counts and never samples an item, which is why
@@ -372,6 +373,20 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
 
     `use_ctx=False` skips pass 2 and reproduces what the model emits today, so the two
     can be compared on the same trips.
+
+    TWO CORRECTIONS, both off by default so every existing artefact reproduces.
+
+    `require_nonempty` implements the n >= 1 conditioning of spec Eq. 8.  Training divides
+    by 1 - prod_c P(y_c = 0); generation did not, and emitted an empty basket 4.42% of the
+    time against a real 0%.  Redrawing the composition until something is bought is exact
+    rejection sampling from the conditioned law, and closes 39% of the basket-size
+    shortfall on its own.
+
+    `item_temp` sharpens ONLY the within-category item draw -- pass 1 and the Gibbs sweeps
+    -- and deliberately leaves the inclusive value alone.  Scaling `m.item_utility`
+    globally, as the temperature sweep in 42_limitations does, also scales IV, which feeds
+    incidence, so basket size inflated 7.55 -> 12.39 items and confounded the result.  IV
+    is computed from the untempered utilities here, so the two effects separate.
     """
     sp = d.splits["test"]
     rng = np.random.default_rng(seed)
@@ -430,9 +445,15 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
         # C-dimensional binary field whose single-site conditionals the incidence head
         # supplies, so Gibbs over it is the same move used for items, one level up.
         # cloglog, matching Eq. 9 of the specification (see the note above).
-        bought = (torch.rand(d.C, generator=g)
-                  < (-torch.expm1(-torch.exp(lin.clamp(-12.0, 4.0)))
-                     ).clamp(1e-6, 1 - 1e-6)) & ok
+        # spec Eq. 8 conditions on n >= 1: training divides by 1 - prod_c P(y_c = 0),
+        # generation did not.  Redrawing until something is bought is exact rejection
+        # sampling from the conditioned law.  Only the draw is retried; `lin` above is
+        # deterministic given the trip.
+        p_ent = (-torch.expm1(-torch.exp(lin.clamp(-12.0, 4.0)))).clamp(1e-6, 1 - 1e-6)
+        for _try in range(max_tries if require_nonempty else 1):
+            bought = (torch.rand(d.C, generator=g) < p_ent) & ok
+            if not require_nonempty or bool(bought.any()):
+                break
         has_pair = getattr(m, "cat_pair", None) is not None
         if (has_pair or getattr(m, "cat_ctx_scale", None) is not None) and cat_sweeps:
             W = m.cat_pair_sym() if has_pair else None
@@ -494,13 +515,16 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                     stc.unsqueeze(0),
                     torch.full((1,), week, device=dev, dtype=torch.long),
                     torch.full((1,), store, device=dev, dtype=torch.long))[0]
-                q = int(torch.multinomial(torch.softmax(uc, 0), 1, generator=g))
+                q = int(torch.multinomial(torch.softmax(uc / item_temp, 0), 1,
+                                          generator=g))
                 j = int(jj[q])
                 slots.append((c, j))
                 run = run + A[j]
         else:
             for c in torch.nonzero(k > 0).flatten().tolist():
-                pi = torch.softmax(u[c], 0) * (msk[c] > 0).float()
+                # item_temp sharpens the item draw only.  `iv` above was taken from the
+                # untempered `u`, so incidence is unaffected and the two channels separate.
+                pi = torch.softmax(u[c] / item_temp, 0) * (msk[c] > 0).float()
                 if float(pi.sum()) <= 0:
                     continue
                 pick = torch.multinomial(pi / pi.sum(), int(k[c]), replacement=False,
@@ -545,7 +569,8 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                             np.isin(jj.cpu().numpy(), np.fromiter(others, dtype=np.int64)),
                             device=dev)
                         uc = uc.masked_fill(blocked, -1e9)
-                    q = int(torch.multinomial(torch.softmax(uc, 0), 1, generator=g))
+                    q = int(torch.multinomial(torch.softmax(uc / item_temp, 0), 1,
+                                              generator=g))
                     new_j = int(jj[q])
                     tot = tot - A[cur] + A[new_j]      # keep the running sum exact
                     slots[si] = (c, new_j)

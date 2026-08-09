@@ -142,7 +142,8 @@ class SimHistory:
             (self.cnt_j / np.maximum(cc, 1.0)).astype(np.float32))
 
 
-def rollout(m, d, dev, hh_trips, mode, seed, sweeps):
+def rollout(m, d, dev, hh_trips, mode, seed, sweeps, item_temp=1.0,
+            require_nonempty=False):
     """Roll every household forward together, one trip index at a time."""
     users = [u for u, _ in hh_trips]
     T = min(len(t) for _, t in hh_trips)
@@ -162,7 +163,8 @@ def rollout(m, d, dev, hh_trips, mode, seed, sweeps):
             trips = np.array([t[step] for _, t in hh_trips])
             g = cf.generate_baskets(m, d, dev, n_trips=len(trips), seed=seed + step,
                                     sweeps=sweeps, use_ctx=True, with_units=False,
-                                    trips=trips)
+                                    trips=trips, item_temp=item_temp,
+                                    require_nonempty=require_nonempty)
             sizes = [len(b) for b in g]
             if sim is not None:
                 for b, tr in zip(g, g.trips):
@@ -231,7 +233,8 @@ def main(a):
     res = {"label": a.label, "n_households": len(hh_trips), "horizon": a.horizon,
            "real_cumulative_new": real, "modes": {}}
     for mode in a.modes:
-        steps, secs = rollout(m, d, dev, hh_trips, mode, a.seed, a.sweeps)
+        steps, secs = rollout(m, d, dev, hh_trips, mode, a.seed, a.sweeps,
+                              a.item_temp, a.require_nonempty)
         cur = novelty_curve(steps, d, seen0)
         sizes = [s["mean_items"] for s in steps]
         n_b = len(hh_trips) * a.horizon
@@ -263,5 +266,10 @@ if __name__ == "__main__":
     p.add_argument("--n-households", type=int, default=200)
     p.add_argument("--modes", nargs="+", default=["open", "recency", "full"])
     p.add_argument("--sweeps", type=int, default=4)
+    p.add_argument("--item-temp", type=float, default=1.0,
+                   help="sharpen the within-category item draw only; 0.80 calibrates the "
+                        "novel-item rate without touching basket size")
+    p.add_argument("--require-nonempty", action="store_true",
+                   help="reject empty compositions, as spec Eq. 8 conditions on n >= 1")
     p.add_argument("--seed", type=int, default=0)
     main(p.parse_args())
