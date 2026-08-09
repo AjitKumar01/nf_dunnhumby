@@ -58,30 +58,24 @@
 \contentsline {section}{\numberline {7}From measurement to model}{17}{section.7}%
 \contentsline {section}{\numberline {8}Empirical study}{17}{section.8}%
 \contentsline {subsection}{\numberline {8.1}Protocol, and what is comparable}{17}{subsection.8.1}%
-\contentsline {subsection}{\numberline {8.2}Do the equations match the code?}{17}{subsection.8.2}%
+\contentsline {paragraph}{Superseded numbers.}{17}{section*.31}%
+\contentsline {subsection}{\numberline {8.2}Do the equations match the code?}{18}{subsection.8.2}%
 \contentsline {subsection}{\numberline {8.3}Ablations}{18}{subsection.8.3}%
-\contentsline {paragraph}{Stores, split honestly.}{18}{section*.31}%
-\contentsline {subsection}{\numberline {8.4}Against heuristic baselines}{18}{subsection.8.4}%
-\contentsline {subsection}{\numberline {8.5}Against learned baselines, and where prices move}{19}{subsection.8.5}%
-\contentsline {subsection}{\numberline {8.6}Deployment: recommending without a basket}{19}{subsection.8.6}%
-\contentsline {subsection}{\numberline {8.7}Is the price response causal?}{20}{subsection.8.7}%
-\contentsline {subsection}{\numberline {8.8}Where a price cut goes}{21}{subsection.8.8}%
-\contentsline {subsection}{\numberline {8.9}Do the embeddings recover product structure?}{21}{subsection.8.9}%
-\contentsline {subsection}{\numberline {8.10}Generation: does the distribution match?}{21}{subsection.8.10}%
-\contentsline {paragraph}{1. Shape.}{21}{section*.32}%
-\contentsline {paragraph}{2. Item marginals.}{22}{section*.33}%
-\contentsline {paragraph}{3. Co-occurrence lift.}{22}{section*.34}%
-\contentsline {paragraph}{4. Held-out labels.}{22}{section*.35}%
-\contentsline {paragraph}{5. Price response from generated data.}{22}{section*.36}%
-\contentsline {subsection}{\numberline {8.11}The co-occurrence failure, and eleven attempts on it}{22}{subsection.8.11}%
-\contentsline {paragraph}{Cause 1: the wrong level.}{22}{section*.37}%
-\contentsline {paragraph}{Cause 2: dilution.}{22}{section*.38}%
-\contentsline {paragraph}{Cause 3: tied embeddings encode similarity.}{22}{section*.39}%
-\contentsline {subsection}{\numberline {8.12}SHOPPER's asymmetric interaction and sequential likelihood}{23}{subsection.8.12}%
-\contentsline {subsection}{\numberline {8.13}The resolution: harder negatives}{23}{subsection.8.13}%
-\contentsline {paragraph}{Recommendation.}{23}{section*.40}%
-\contentsline {section}{\numberline {9}Related work}{24}{section.9}%
-\contentsline {section}{\numberline {10}Discussion}{24}{section.10}%
-\contentsline {paragraph}{What the model does well.}{24}{section*.41}%
-\contentsline {paragraph}{What it does not do.}{24}{section*.42}%
-\contentsline {paragraph}{A methodological lesson.}{25}{section*.43}%
+\contentsline {paragraph}{One conclusion reversed.}{18}{section*.32}%
+\contentsline {subsection}{\numberline {8.4}Against learned baselines}{18}{subsection.8.4}%
+\contentsline {paragraph}{This is a floor, not a fair fight.}{18}{section*.33}%
+\contentsline {subsection}{\numberline {8.5}Is the price response causal?}{19}{subsection.8.5}%
+\contentsline {paragraph}{What this does and does not show.}{19}{section*.34}%
+\contentsline {subsection}{\numberline {8.6}Where a price cut goes}{19}{subsection.8.6}%
+\contentsline {subsection}{\numberline {8.7}Generation}{19}{subsection.8.7}%
+\contentsline {paragraph}{A joint test.}{19}{section*.35}%
+\contentsline {paragraph}{Two negative results.}{20}{section*.36}%
+\contentsline {subsection}{\numberline {8.8}What the representations learned}{20}{subsection.8.8}%
+\contentsline {paragraph}{Products.}{20}{section*.37}%
+\contentsline {paragraph}{Households --- a negative result.}{20}{section*.38}%
+\contentsline {paragraph}{Price sensitivity.}{20}{section*.39}%
+\contentsline {section}{\numberline {9}Related work}{20}{section.9}%
+\contentsline {section}{\numberline {10}Discussion}{21}{section.10}%
+\contentsline {paragraph}{What the model does well.}{21}{section*.40}%
+\contentsline {paragraph}{What it does not do.}{21}{section*.41}%
+\contentsline {paragraph}{A methodological lesson.}{21}{section*.42}%

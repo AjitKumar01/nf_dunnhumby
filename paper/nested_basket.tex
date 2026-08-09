@@ -986,31 +986,44 @@ Promotion weeks are $3.4\times$ steeper than ordinary variation &
 
 %======================================================================
 \section{Empirical study}
-\label{sec:exp}
+\label{sec:emp}
+
+Everything here is fitted to the specification of Section~\ref{sec:model}: the item
+conditional is summed exactly over the purchased product's category, so no number depends
+on a negative-sampling scheme.
 
 \subsection{Protocol, and what is comparable}
 \label{sec:protocol}
 
-All numbers are on held-out test weeks. The seed spread on item log-likelihood is
-\textbf{0.0032} nats, so gaps larger than about $0.01$ are real.
+All numbers are on held-out test weeks. The item score is the exact conditional: a softmax
+over the category's stocked products minus whatever else the basket holds from that
+category. The choice set averages \textbf{47} products, so \emph{chance is
+$-\log 47 = -3.85$ and $2.1\%$ top-1}.
 
-Two comparability rules are applied throughout, because breaking them silently is the
-easiest way to report a false gain. \textbf{Item log-likelihood is conditional on the
-rest of the basket} --- it is a fill-in-the-blank score, not ``predict the basket''.
-And \textbf{it is only comparable across models scored against the same negative
-distribution}; where a variant changes that distribution we omit the column and rely on
-the generator checks, which use no negatives at all.
+Two sources of uncertainty are reported. The \textbf{seed spread} is 0.0095 nats over two
+seeds differing only in initialisation. Beyond that, every gap carries a \textbf{household
+block bootstrap}: each basket is scored once per model, then households are resampled with
+replacement (400 draws, 1{,}664 households, 6{,}000 baskets). Households are the unit
+because trips repeat within one and are not independent. Gaps are \emph{paired} --- the
+same resampled households score both models --- so the interval is on the difference. This
+covers evaluation sampling only; refitting variability would need a refit per replicate and
+is not included.
+
+\paragraph{Superseded numbers.} Earlier versions of this paper reported item
+log-likelihoods against 20 or 200 sampled decoys. The optimal scorer for that metric is
+$\log p - \log q$ rather than $\log p$, so it flatters a model that has absorbed the
+proposal into its intercept --- which the fitted $\lambda_j$ measurably had, at
+$\mathrm{corr}(\lambda_j,\log q) = -0.51$. Those numbers are not comparable to anything the
+code now computes and have been removed rather than rescaled.
 
 \subsection{Do the equations match the code?}
 \label{sec:verify}
 
-Fifteen checks compare each printed formula against the fitted model, exactly where the
-paper states an identity and by finite difference where it states a derivative
-(\code{scripts/33\_verify\_equations.py}). All pass: Eq.~\ref{eq:util} term by term; the
-context formula; the swap identity Eq.~\ref{eq:swap}; the Poisson likelihood;
-$\kappa=\mathrm{softplus}$; the implied breadth $\lambda/p$; the three elasticity
-derivatives of Section~\ref{sec:decomp}; and both claims about the sampled inclusive
-value in Section~\ref{sec:iv}.
+Fifteen checks compare each printed formula against the fitted model, by autograd where
+this paper states a derivative and by direct evaluation where it states an identity
+(\code{scripts/33\_verify\_equations.py}). All fifteen pass, including the three that carry
+the argument: the swap identity Eq.~\ref{eq:swap}, the unbiasedness of the sampled
+inclusive value, and the price derivatives of Section~\ref{sec:decomp}.
 
 \subsection{Ablations}
 \label{sec:ablate}
@@ -1020,408 +1033,160 @@ value in Section~\ref{sec:iv}.
 \toprule
 model & item log-lik & top-1 & cost of removing \\
 \midrule
-full model & $-1.9927$ & 0.378 & --- \\
-seed replicate & $-1.9895$ & 0.379 & --- \\
-no store & $-2.1820$ & 0.355 & \textbf{0.189} \\
-no interaction & $-2.1074$ & 0.347 & \textbf{0.115} \\
-no household state & $-2.0684$ & 0.360 & \textbf{0.076} \\
-prices scrambled & $-2.0416$ & 0.362 & 0.049 \\
-availability mask only & $-1.9932$ & 0.375 & 0.001 \\
-no breadth & $-1.9927$ & 0.378 & 0.000 \\
-no quantity & $-1.9925$ & 0.378 & 0.000 \\
-no nest & $-1.9877$ & 0.380 & $-0.005$ \\
+full model & $\mathbf{-2.4611}$ & \textbf{0.351} & --- \\
+no quantity head & $-2.5813$ & 0.318 & $-0.0005$ \\
+no nest & $-2.6003$ & 0.318 & $+0.0185$ \\
+no household state & $-2.6305$ & 0.308 & $+0.0487$ \\
+no basket interaction & $-2.6400$ & 0.312 & $+0.0582$ \\
+no persistence term & $-2.5340$ & 0.322 & $+0.0728$ \\
+no store & $-2.9187$ & 0.286 & $+0.3369$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Three of the four terms cost nothing on item ranking and the nest is marginally better
-without. \textbf{This is the design working, not failing.} The item term ranks items; the
-nest, quantity and breadth terms answer questions it never asks, and they share only
-$u_{ijt}$. A term that improved item ranking \emph{because} it also modelled incidence
-would mean the two were entangled. Each must therefore be scored on its own quantity, and
-the breadth term is the case in point: worth $0.000$ nats here, and without it generated
-baskets hold 6.94 items against a real 8.18.
+With bootstrap intervals on the paired gaps: no persistence $+0.0728$
+$[+0.0648,+0.0816]$; prices scrambled $+0.0562$ $[+0.0489,+0.0626]$; the original
+incidence penalty $+0.0715$ $[+0.0635,+0.0804]$. Every interval excludes zero.
 
-\paragraph{Stores, split honestly.} Of the $0.189$ nats attributed to store information,
-99.7\% is the availability mask alone, which merely shrinks the choice set. Modelling
-stores was a correctness fix, not an information gain, and it makes item log-likelihood
-incomparable to models that score unstocked items as rejected alternatives.
+Store dominates. Removing the quantity head costs $0.0005$ nats, inside the seed spread
+and correctly so --- that head never enters item utility. $\kappa$ is stable at
+$0.819$--$0.849$ across every variant including the placebo, and sits below 1 throughout: a
+price cut reaches category entry at less than full strength.
 
-\subsection{Against heuristic baselines}
-\label{sec:bench}
+\paragraph{One conclusion reversed.} Under the superseded sampled metric, removing the nest
+\emph{improved} item likelihood by 0.005 and we concluded the model was ``marginally better
+without the nest''. On the exact conditional it costs $+0.0185$. The earlier finding was an
+artefact of the proposal tilt.
 
-Every model is scored through one scorer on identical candidate sets --- same positives,
-same negatives, same availability mask --- on 51,167 held-out purchases with
-20 negatives each. Baseline weights are tuned on validation.
+\subsection{Against learned baselines}
+\label{sec:strong}
+
+HPF and B-Emb are refitted and scored on identical choice sets. They bracket the model
+deliberately: HPF has the household half and no basket interaction, B-Emb the basket half
+and no household.
 
 \begin{center}
 \begin{tabular}{lrr}
 \toprule
 model & log-lik & top-1 \\
 \midrule
-\textbf{nested} & \textbf{$-2.0011$} & \textbf{0.371} \\
-nested, no interaction & $-2.1195$ & 0.342 \\
-household repeat-purchase & $-2.3428$ & 0.285 \\
-popularity & $-2.7375$ & 0.091 \\
-random & $-2.7378$ & 0.067 \\
-household $+$ co-occurrence & $-3.0526$ & 0.182 \\
-item--item co-occurrence & $-3.0655$ & 0.078 \\
+HPF, Poisson factorisation & $-3.1866$ & 0.165 \\
+B-Emb, skip-gram embeddings & $-3.0939$ & 0.187 \\
+full model, no persistence & $-2.5787$ & 0.322 \\
+full model & $\mathbf{-2.5080}$ & \textbf{0.341} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The strongest baseline is not popularity but household repeat-purchase; grocery is
-repetitive and most of what any model can predict is that people rebuy what they always
-rebuy. The real margin is \textbf{$+0.342$ nats and 8.5 points of top-1}. Two
-results cut against the model: popularity is indistinguishable from random, because
-negatives are drawn popularity-weighted, so ``we beat popularity'' is weaker than it
-sounds; and raw item--item co-occurrence scores \emph{below} random, so the signal exists
-but counting cannot exploit it against popularity-matched decoys.
+The gap over the stronger baseline is $+0.5860$ nats, 95\% CI $[+0.5628,+0.6094]$ by
+paired household bootstrap.
 
-
-\subsection{Against learned baselines, and where prices move}
-\label{sec:strong}
-
-The comparisons in Section~\ref{sec:bench} are against heuristics. Three are weak by
-construction and the fourth --- raw item--item co-occurrence --- scores \emph{below}
-random, which flatters our model: it is a counting rule standing in for what should be a
-learned item--item model. SHOPPER \cite{shopper} compares against two latent-factor
-models instead, and they are the right competitors. \textbf{HPF} \cite{hpf} factorises
-the household $\times$ item matrix: it has the household half of our model and neither
-interaction nor price. \textbf{B-Emb} \cite{bemb} is a skip-gram with negative sampling
-over within-basket pairs: the interaction half, and neither household nor price. Between
-them they bracket our specification. Both temperatures are tuned on validation.
-
-SHOPPER also runs a second evaluation we had not: scoring only those held-out purchases
-whose price sits furthest from its item's own average. That is where a model claiming to
-answer price counterfactuals has to prove itself, and it is a harder subset than an
-average trip. We report both.
-
-\begin{center}
-\begin{tabular}{lrrrrr}
-\toprule
-& \multicolumn{2}{c}{full test set} & \multicolumn{2}{c}{top 10\% price variation} & \\
-model & log-lik & top-1 & log-lik & top-1 & change \\
-\midrule
-HPF (user $\times$ item) \cite{hpf} & $-2.6028$ & 0.163 & $-2.6260$ & 0.152 & $-0.023$ \\
-B-Emb (item--item) \cite{bemb} & $-2.4684$ & 0.239 & $-2.4920$ & 0.228 & $-0.024$ \\
-\textbf{nested} & $-1.9971$ & 0.376 & $-1.8764$ & 0.429 & $+0.121$ \\
-nested\_both & $-1.9908$ & 0.380 & $-1.8705$ & 0.430 & $+0.120$ \\
-nested\_hardneg & $-2.0867$ & 0.358 & $-1.9790$ & 0.406 & $+0.108$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Two things follow, one of which corrects Section~\ref{sec:bench}.
-
-\textbf{B-Emb is the strongest baseline, at $-2.4684$.} It beats household
-repeat-purchase and it beats raw co-occurrence by more than half a nat. The margin our
-model actually earns over a serious competitor is therefore +0.471 nats, not
-the larger figure the co-occurrence comparison implied. Measuring a learned interaction
-against a counting rule was measuring against a straw man.
-
-\textbf{The model improves where prices move and the baselines degrade.} On the top
-price-variation decile the nested model gains +0.121 nats and its top-1 rises from
-0.376 to 0.429, while HPF and B-Emb each lose about $0.02$. Neither baseline has a price
-term, so on the subset where price is doing the work they fall back; ours does not. This
-is stronger evidence than the placebo of Section~\ref{sec:causal}: the placebo shows the
-coefficient dies when prices are destroyed, whereas this shows the model \emph{gaining}
-exactly where the mechanism should bite.
-
-\subsection{Deployment: recommending without a basket}
-\label{sec:deploy}
-
-Every item log-likelihood in this paper is conditional on the rest of the basket. A
-recommender does not have that. At the moment a recommendation is made the cart holds
-$0,1,2,\dots$ items, never all of them but one. So we score the held-out item given a
-random $k$-item prefix of its own basket (\code{scripts/35\_context\_ablation.py}).
-
-\begin{center}
-\begin{tabular}{lrrrrrr}
-\toprule
-& \multicolumn{5}{c}{items already in the cart} & \\
-model / repair & $k=0$ & $1$ & $2$ & $4$ & $8$ & full \\
-\midrule
-\textbf{nested}, raw & $-2.1385$ & $-2.1832$ & $-2.0823$ & $-2.0299$ & $-2.0068$ & $-1.9971$ \\
-\quad norm-matched & $-2.1385$ & $-2.0930$ & $-2.0703$ & $-2.0463$ & $-2.0261$ & $-1.9971$ \\
-nested\_both, raw & $-2.2483$ & $-3.0861$ & $-2.5009$ & $-2.2084$ & $-2.0641$ & $-1.9908$ \\
-\quad norm-matched & $-2.2483$ & $-2.2786$ & $-2.1860$ & $-2.1086$ & $-2.0387$ & $-1.9908$ \\
-nested\_hardneg, raw & $-2.3096$ & $-2.9013$ & $-2.4586$ & $-2.2481$ & $-2.1363$ & $-2.0867$ \\
-\quad norm-matched & $-2.3096$ & $-2.3105$ & $-2.2390$ & $-2.1836$ & $-2.1248$ & $-2.0867$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbf{The model is usable without a basket.} At $k=0$ it scores $-2.1385$ against
-$-2.5230$ for tuned household repeat-purchase, which needs no basket at all. Not
-knowing the basket costs 0.141 nats against the full-basket score, so the
-headline number does overstate the deployment setting, by about 7\% of the model's
-margin over popularity. A model \emph{trained} without the context reaches $-2.2483$ at
-$k=0$, so the mismatch penalty from deploying a context-trained model without context is
-only 0.020 nats: one model suffices.
-
-\textbf{One item in the cart is worse than none.} Every model degrades at $k=1$, and
-\code{nested\_both} catastrophically, to $-3.0861$ --- a full nat below cold start. The
-cause is a norm mismatch, not a modelling error. Averaging shrinks a vector, so
-$\lVert\bar\alpha\rVert$ over a full basket is much smaller than over a single item:
-
-\begin{center}
-\begin{tabular}{lrrrr}
-\toprule
-$\lVert\bar\alpha\rVert$ relative to training & $k=1$ & $k=2$ & $k=4$ & $k=8$ \\
-\midrule
-nested & 2.31$\times$ & 1.74$\times$ & 1.36$\times$ & 1.15$\times$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-At $k=1$ the context is 2.31$\times$ the norm training ever produced, and
-\code{nested\_both} multiplies that by its learnable scale of 5.52, which is
-why it fails hardest. \textbf{Rescaling $\bar\alpha$ to the training norm repairs it}
-without retraining: \code{nested\_both} recovers 0.81 nats at $k=1$, and for every
-model the repaired $k=1$ score is better than cold start rather than worse. Simply
-ignoring a small cart also avoids the failure but is strictly weaker, since it discards
-the information a one- or two-item cart carries.
-
-Two caveats. Norm-matching costs a little at large $k$ for the tied model
-($-2.0068$ raw against $-2.0261$ matched at $k=8$), because forcing a fixed
-norm discards the genuine signal that a large cart's context is legitimately smaller; a
-$k$-dependent shrinkage would likely dominate both and we have not tested it. And the
-variants recommended for \emph{generation} are the worst for \emph{recommendation}:
-plain \code{nested} leads at every cart size below 8.
+\paragraph{This is a floor, not a fair fight.} Same metric and choice sets, but one tuned
+scalar per baseline against 870{,}392 parameters and an architecture selected over many
+runs. A genuine state-of-the-art comparison would need SHOPPER, which we have not run.
 
 \subsection{Is the price response causal?}
 \label{sec:causal}
 
-We refit the whole model on a price panel scrambled before fitting, including the
-store-level deviations --- leaving those real would leak genuine prices back in.
+Refitting on a price panel scrambled before fitting, store deviations included:
 
 \begin{center}
 \begin{tabular}{lrrr}
 \toprule
-model & price coef. & quantity price coef. & $\kappa$ \\
+model & price coef. & allocation elasticity & $\kappa$ \\
 \midrule
-fitted & \textbf{$+0.794$} & $+0.134$ & 0.663 \\
-seed replicate & $+0.794$ & $+0.109$ & 0.674 \\
-prices scrambled & \textbf{$-0.000$} & \textbf{$-0.000$} & 0.675 \\
+fitted & $+0.695$ & $-0.7171$ $[-0.7646,-0.6713]$ & 0.827 \\
+seed replicate & $+0.709$ & --- & 0.827 \\
+prices scrambled & $\mathbf{+0.000}$ & $\mathbf{+0.0000}$ $[-0.0029,+0.0000]$ & 0.831 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The placebo retains 0.0\% of the coefficient and costs 0.049 nats of ranking while
-leaving $\kappa$ and the incidence likelihood untouched: prices scramble, category
-structure does not. This complements the design-based evidence in Section~\ref{sec:eda},
-where demand does not ramp in the weeks before a cut.
+The placebo retains 0.0\% of the coefficient on both margins while $\kappa$ moves
+$0.827 \to 0.831$: prices scramble, category structure does not. The elasticity interval
+contains zero and essentially nothing else.
+
+\paragraph{What this does and does not show.} Permuting a product's price series across
+days destroys the price--demand association \emph{whether it is causal or confounded}. It
+rules out a spurious constant. It cannot distinguish ``price moves demand'' from ``the
+retailer times promotions to demand'', which is the actual endogeneity concern for
+within-product price variation. There is no instrument here and no discontinuity.
 
 \subsection{Where a price cut goes}
 \label{sec:decomp}
 
-From the softmax and the Poisson--multinomial,
-\begin{align}
-\frac{\partial\log\pi_j}{\partial\log p_j}&=-(\gamma_i^{\top}\beta_j)(1-\pi_j),
-&\kappa_c\frac{\partial IV}{\partial\log p_j}&=-\kappa_c(\gamma_i^{\top}\beta_j)\pi_j,\\
-\frac{\partial\log\mathbb E[\text{units}]}{\partial\log p_j}
-&=-(\gamma^{q\top}_i\beta^q_j)\frac{\lambda}{1+\lambda},&\lambda&=e^{z_{ijt}},
-\end{align}
-where $\lambda$ is the quantity head's Poisson rate, so $\mathbb E[\text{units}]=1+\lambda$.
-The first two are exact derivatives of the same softmax, which is why they carry
-$(1-\pi_j)$ and $\pi_j$ and why they combine to $-(\gamma^{\top}\beta)[1-\pi_j(1-\kappa_c)]$.
-On 12,724 held-out purchases: allocation $-0.991$ (83\%), incidence $-0.058$
-(5\%), quantity $-0.139$ (12\%), total $-1.188$. Shares are computed from means
-because medians do not decompose additively.
+Median own-price elasticity $-1.2248$: allocation $-0.9949$ (81\%), incidence $-0.1184$
+(10\%), quantity $-0.1115$ (9\%). Mostly a price cut moves share. The quantity margin is
+unreachable for a binary-purchase model. A fourth margin exists through breadth, via
+$-c^p_c/N_c$ in the breadth rate, and has not been measured.
 
-Mostly a price cut moves share. The quantity margin is 12\% --- unreachable for a
-binary-purchase model, and corroborated by the model-free $-0.235$ of
-Section~\ref{sec:elast}. Read $\kappa$ with care: it moved with the incidence sampler
-across three versions before settling, so it is weakly identified and no argument here
-rests on its exact value.
-
-\subsection{Do the embeddings recover product structure?}
-\label{sec:embed}
-
-Sub-commodity labels are never shown to the model.
-
-\begin{center}
-\begin{tabular}{lrrr}
-\toprule
- & kNN purity & $\times$ chance & AUC \\
-\midrule
-fitted $\alpha$ & 0.2976 & 69.6$\times$ & 0.8222 \\
-no interaction & 0.2119 & 49.5$\times$ & 0.7267 \\
-random control & 0.0037 & $0.9\times$ & 0.499 \\
-popularity control & 0.0038 & $0.9\times$ & 0.510 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-The interaction is the only component besides the availability mask that materially moves
-the embedding. On a 409-item universe shared with the nested-factorization model of
-\cite{nf}, $\alpha$ reaches $12.1\times$ chance and AUC $0.805$ against $1.0\times$ and
-$0.379$; that model's below-chance AUC is a mechanism, not noise, since its
-within-category softmax makes close substitutes compete and pushes them apart.
-
-\subsection{Generation: does the distribution match?}
+\subsection{Generation}
 \label{sec:gen}
 
-Comparing three means is not enough, and comparing $\alpha^{\top}\alpha$ would be
-circular --- the model is trained to make co-purchased items have large
-$\alpha^{\top}\alpha$. Every check below is \textbf{model-free} (item ids and counts only)
-and \textbf{distributional}. Generated trips are matched to real ones on household, day,
-week and store, so any gap is the model's. All 24,768 test baskets;
-\code{scripts/34\_generator\_eval.py}.
-
-\paragraph{1. Shape.} Total variation distance,
-$\frac12\sum_x|P_{\text{real}}(x)-P_{\text{gen}}(x)|$.
+Basket size agrees with real data to within 2\% on the mean and sits 0.34 away in total
+variation: \textbf{matching means is not matching distributions}. Item marginals correlate
+$+0.891$ across the catalogue with 0.1\% of real products never generated. Price response
+re-estimated from generated data recovers 76--78\% of the real elasticity.
 
 \begin{center}
 \begin{tabular}{lrrr}
 \toprule
- & real & generated & TVD \\
+ & novel category & novel product & new product, familiar category \\
 \midrule
-items per basket & 8.18 & 9.11 & \textbf{0.30} \\
-categories per basket & 6.38 & 6.85 & \textbf{0.30} \\
-units per basket & 11.06 & 12.16 & \textbf{0.29} \\
-distinct items per category & 1.28 & 1.33 & 0.06 \\
-units per line & 1.35 & 1.34 & 0.02 \\
+real & 6.58\% & 41.48\% & 37.36\% \\
+original penalty & 15.82\% & 63.34\% & 56.45\% \\
+$+$ corrected incidence penalty & 9.89\% & 58.17\% & 53.58\% \\
+$+$ persistence term & \textbf{8.38\%} & \textbf{49.26\%} & \textbf{44.62\%} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The means agree and the distributions do not; real baskets are far more skewed. The two
-quantities the model addresses \emph{directly} --- breadth and units per line --- match
-closely, while the three that emerge from composing them do not.
+The generator over-produces novelty by roughly 20\%. Two changes account for most of the
+improvement: separating the incidence penalty closed 64\% of the novel-category gap, and
+the persistence term 55\% of the novel-product gap.
 
-\paragraph{2. Item marginals.} Per-item purchase rate across all 5,455 items: Spearman
-$+0.406$, with 0.1\% of real items never generated. No mode collapse.
+\paragraph{A joint test.} Every likelihood above is a conditional, and comparing summary
+statistics one at a time cannot detect a joint mismatch. A classifier two-sample test can:
+a discriminator separates real from generated baskets at \textbf{AUC 0.81} on eight
+basket-level features, giving itself away chiefly on category count (6.02 real against
+6.56 generated) and product count (7.69 against 8.58). Each gap is small; together they are
+decisive.
 
-\paragraph{3. Co-occurrence lift.} $\mathrm{lift}(j,k)=P(j,k\text{ together})/(P(j)P(k))$
-for the commonest items: real 3.48, generated 1.61, per-pair Spearman
-\textbf{$-0.003$}.
+\paragraph{Two negative results.} Persistent contrastive divergence, which trains directly
+against the model's own samples, moved the novel-product rate by nothing at either weight
+tested while costing 0.03--0.04 nats. So did an explicit household--category habit feature.
+Both were re-measured after a trip-attribution bug was found and corrected, and both nulls
+stand.
 
-\paragraph{4. Held-out labels.} Share of within-basket pairs sharing a sub-commodity:
-real 0.0646, generated 0.0593.
+\subsection{What the representations learned}
+\label{sec:repr}
 
-\paragraph{5. Price response from generated data.} Rebuilding the item $\times$ week panel
-from synthetic baskets and applying Eq.~\ref{eq:within}: real $-0.6480$, generated
-$-0.5669$, i.e.\ \textbf{87\%} of the real response. This is the property a pricing
-policy would be learned from and it is the best of the five checks.
+\paragraph{Products.} $\alpha$ recovers sub-commodity structure at 25$\times$ chance on
+nearest-neighbour purity, and the lift \emph{grows} as labels get finer: $1.3\times$ at
+department, $22.7\times$ at category, $66.8\times$ at sub-commodity. But all-pairs AUC is
+at or below chance for the coarse levels and silhouette is negative throughout. Restricting
+to pairs that actually co-occur, cosine separates same-sub-commodity pairs at AUC 0.917.
+$\alpha$ is organised where the data is dense and unstructured where it is sparse.
 
-\subsection{The co-occurrence failure, and eleven attempts on it}
-\label{sec:cooc}
+\paragraph{Households --- a negative result.} A linear probe on $\theta$, $c^u$ or $\gamma$
+predicts none of income, household size, age, children or home ownership above the majority
+class; $\theta$ sits at the shuffled-label level on income. The household parameters encode
+purchase behaviour, not who the household is. With 655 households and a linear probe this
+rules out a linear low-sample relationship, not any relationship.
 
-Check 3 is the failure. Three causes were identified by measurement.
+\paragraph{Price sensitivity.} $g_{ij} = \gamma_i^\top\beta_j$ has 46.2\% of its variance
+between products and 17.4\% between households: price sensitivity is mostly a property of
+the product. The category ordering was never supplied and is economically sensible ---
+least elastic \textsc{baby foods} $+0.115$ and \textsc{cigarettes} $+0.177$, most elastic
+\textsc{bath tissues} $+2.024$ and \textsc{cold cereal} $+1.829$. Household price
+sensitivity is unrelated to income (Spearman $+0.005$, $p=0.91$).
 
-\paragraph{Cause 1: the wrong level.} The item-level Gibbs sweep resamples within a
-category, because that is the move Eq.~\ref{eq:swap} defines. Splitting generated pairs
-by whether the sweep can reach them: same-category pairs reach a per-pair Spearman of
-$+0.290$, cross-category pairs $-0.094$. \textbf{95\% of item pairs are cross-category},
-and category choice was $C$ independent Bernoulli draws.
+For 21\% of pairs $g_{ij}$ has the ``wrong'' sign. Held-out data says the model is right to
+flag them: those pairs show a real slope of $+0.003$, against $-0.188$ for the rest. Used as
+a binary screen the coefficient is informative; used as a graded score it is weak
+(Spearman $-0.125$).
 
-\paragraph{Cause 2: dilution.} $\bar\alpha$ divides by $n-1$, so a partner worth
-$\alpha_j^{\top}\alpha_k=6$ contributes $6/7$ in an eight-item basket. Given a free scalar
-the model sets it to $5.5$, close to the average $n-1$.
 
-\paragraph{Cause 3: tied embeddings encode similarity.} $\alpha^{\top}\alpha$ averages
-$4.34$ within a sub-commodity and $0.47$ across categories. A \emph{tied} category-level
-context fitted its scale to $-3.0$: the model used it for basket-size competition because
-it could not use it for complementarity. At category level the escape is arithmetic ---
-$C=188$ makes a full pairwise matrix 17,578 parameters, impossible at item level
-($J^2\approx30$M).
-
-\begin{center}
-\begin{tabular}{lrrrrrr}
-\toprule
-variant & item log-lik & inc NLL & $\kappa$ & lift & same-sub & price \\
-\midrule
-base & $-1.9927$ & 0.1104 & 0.663 & 43\% & 57\% & 82\% \\
-$+$ learnable scale & $-1.9966$ & 0.1116 & 0.658 & 44\% & 80\% & 80\% \\
-$+$ category context & $-1.9970$ & 0.1075 & 0.828 & 44\% & 89\% & 84\% \\
-$+$ pair matrix, weak $L_2$ & $-1.9971$ & 0.0987 & 0.597 & 49\% & 121\% & 70\% \\
-$+$ pair matrix, $L_2{=}0.3$ & $-1.9966$ & 0.1051 & 0.665 & 44\% & 86\% & 81\% \\
-\textbf{both, regularised} & $-1.9970$ & 0.1012 & 0.815 & 46\% & 92\% & 87\% \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Unregularised, the pair matrix is the best model of category co-occurrence and drags the
-price response to 70\%, with $\kappa$ falling to 0.597 --- price reaches incidence
-only through $\kappa\cdot IV$, so anything explaining co-occurrence more cheaply takes
-that job. Penalising it separately restores both. Stacking the tied context, which pushes
-$\kappa$ up, with the matrix, which pushes it down, holds $\kappa$ at 0.815 and improves
-four of five checks at a cost inside the seed spread.
-
-\subsection{SHOPPER's asymmetric interaction and sequential likelihood}
-\label{sec:rho}
-
-Cause 3 above says complementarity is not representable by a symmetric tied form. SHOPPER
-is built on exactly the mechanism that diagnosis calls for: $\rho$ untied from $\alpha$,
-asymmetric, free to go negative. We fitted it, and also its sequential likelihood.
-
-\begin{center}
-\begin{tabular}{lrrrr}
-\toprule
-variant & item log-lik & lift & Spearman & same-sub \\
-\midrule
-\textbf{tied (default)} & $-1.9970$ & 46\% & $-0.003$ & 92\% \\
-untied $\rho$ & $-2.0550$ & 47\% & $-0.005$ & 62\% \\
-untied $\rho$, sequential & $-2.0645$ & 47\% & $+0.010$ & 57\% \\
-one-vs-each loss & $-2.9677$ & 47\% & $+0.001$ & 86\% \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbf{Neither moved the number they were built for.} The freedom was used ---
-$\cos(\rho_j,\alpha_j)=+0.31$, so $\rho$ found a substantially different direction ---
-but it did not find real complements. Both cost item ranking and both lose the same-sub
-gain, which follows: with $\rho$ carrying the interaction, $\alpha$ no longer has to
-encode co-purchase structure. \textbf{This refutes the Cause 3 diagnosis}: the geometry
-was never the binding constraint.
-
-We also fitted SHOPPER's one-vs-each bound
-($\log\mathrm{softmax}_i\ge\sum_{i'}\log\sigma(u_i-u_{i'})$), its default objective, at 50
-negatives. Spearman $+0.001$, and item log-likelihood $-2.9677$ --- a full nat worse
-than baseline on a comparable measure. Changing the loss functional form did not help
-either.
-
-\subsection{The resolution: harder negatives}
-\label{sec:negfix}
-
-Eleven changes to the model left the per-pair correlation at zero. One change to the
-\emph{negative distribution} moved it. Replacing a fraction $f$ of negatives with items
-from the true item's own category removes popularity and broad taste as discriminators
-and leaves the basket context as the only signal that can separate them.
-
-\begin{center}
-\begin{tabular}{lrrrrrrr}
-\toprule
-in-category $f$ & inc NLL & $\kappa$ & lift & Spearman & $z$ & same-sub & price \\
-\midrule
-$0$ & 0.1012 & 0.815 & 46\% & $-0.003$ & $-0.4$ & 92\% & 87\% \\
-$0.25$ & 0.1044 & 0.850 & 50\% & $+0.028$ & $+4.1$ & 84\% & 88\% \\
-$\mathbf{0.50}$ & 0.1037 & 0.825 & 54\% & $+0.087$ & $+13.1$ & 81\% & 89\% \\
-$\mathbf{0.75}$ & 0.1068 & 0.781 & 54\% & $+0.091$ & $+14.1$ & 88\% & 85\% \\
-$1.00$ & 0.1062 & 0.626 & 56\% & $+0.081$ & $+13.4$ & 75\% & 76\% \\
-$0.50$, 50 neg. & 0.1043 & 0.827 & 52\% & $+0.063$ & $+9.5$ & 81\% & 84\% \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbf{It is a dose-response curve}, which is what distinguishes a mechanism from a
-lucky setting: Spearman rises monotonically to $f=0.75$ and reaches $z=+14.1$ on roughly
-22{,}000 pairs, against $z=-0.4$ at $f=0$. Co-occurrence lift rises 46\% to 54\%,
-and per-item marginals improve monotonically throughout.
-
-Two limits. \emph{Past $0.75$ it costs more than it buys}: at $f=1$ the model never sees
-an implausible decoy, $\kappa$ collapses to 0.626 and the generated price response falls
-to 76\% --- the crowding-out signature again. And \emph{more negatives is not harder
-negatives}: at the same $f=0.5$, going from 20 to 50 negatives loses on every measure,
-although SHOPPER defaults to 50.
-
-\paragraph{Recommendation.} $f=0.5$ if the generator is for pricing policy (price
-response 89\%, the best in this paper); $f=0.75$ if it is for basket composition (best
-pairwise ranking and same-sub 88\%).
-
-%======================================================================
 \section{Related work}
 \label{sec:related}
 

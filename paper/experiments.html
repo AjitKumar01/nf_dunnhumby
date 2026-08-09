@@ -190,37 +190,48 @@
     artefact of a proposal-tilted metric, not a property of the model.</p>
   </div>
 
-  <h2 id="s4"><span class="num">4</span>Against baselines, on one candidate set</h2>
+  <h2 id="s4"><span class="num">4</span>Against baselines, on identical choice sets</h2>
+
+  <p>Every model below is scored where ours is scored: a softmax over the purchased
+  product's category minus whatever else the basket holds from it, averaging
+  <strong>47 admissible products</strong>, so chance is −3.85. Heuristic weights and
+  baseline scales are tuned on validation before scoring on test.</p>
 
   <div class="scroll">
   <table>
-    <thead><tr><th>model</th><th>log-lik</th><th>top-1</th><th>vs popularity</th></tr></thead>
+    <thead><tr><th>model</th><th>log-lik</th><th>top-1</th><th>what it has</th></tr></thead>
     <tbody>
-      <tr><td>random</td><td>−3.3624</td><td>0.081</td><td>−0.1759</td></tr>
-      <tr><td>co-occurrence</td><td>−3.2641</td><td>0.141</td><td>−0.0776</td></tr>
-      <tr><td>popularity</td><td>−3.1865</td><td>0.174</td><td>+0.0000</td></tr>
-      <tr><td>household + co-occurrence</td><td>−3.0781</td><td>0.275</td><td>+0.1085</td></tr>
-      <tr><td>household repeat-purchase</td><td>−2.7826</td><td>0.310</td><td>+0.4039</td></tr>
-      <tr><td>full model, no interaction</td><td>−2.6625</td><td>0.309</td><td>+0.5241</td></tr>
-      <tr class="hi"><td>full model</td><td>−2.5972</td><td>0.314</td><td>+0.5893</td></tr>
+      <tr><td>HPF — Poisson factorisation</td><td>−3.1866</td><td>0.165</td><td>the household half, no basket</td></tr>
+      <tr><td>B-Emb — skip-gram embeddings</td><td>−3.0939</td><td>0.187</td><td>the basket half, no household</td></tr>
+      <tr><td>full model, no persistence</td><td>−2.5787</td><td>0.322</td><td>—</td></tr>
+      <tr class="hi"><td>full model</td><td><strong>−2.5080</strong></td><td><strong>0.341</strong></td><td>—</td></tr>
     </tbody>
-    <caption>49,845 held-out purchases, identical candidate sets for every model, heuristic
-    weights tuned on validation before scoring on test.</caption>
+    <caption>4,000 held-out baskets. HPF and B-Emb refitted for this comparison; K = 64 for
+    all three.</caption>
   </table>
   </div>
 
-  <p>The model beats popularity by 0.589 nats and the strongest heuristic — household
-  repeat-purchase — by <strong>0.185 nats</strong>. That last gap is the one worth quoting:
-  repeat-purchase needs no model at all, and closing 0.185 nats above it is the whole
-  contribution of the learned representation on this task.</p>
+  <div class="key">
+    <p class="label">+0.5860 nats over the strongest learned baseline</p>
+    <p>95% CI <strong>[+0.5628, +0.6094]</strong>, paired household bootstrap. HPF and
+    B-Emb bracket the model deliberately: HPF has the household half and no basket
+    interaction, B-Emb has the basket half and no household. Neither alone gets close, and
+    combining them is what the model does.</p>
+  </div>
 
   <div class="flag">
-    <p class="label">Unequal tuning budget</p>
-    <p>The heuristics have one tuned weight each. The fitted model has 870,392 parameters
-    and its architecture was chosen across many configurations. This comparison is not
-    like-for-like and should not be read as one; the learned baselines that would make it
-    fair (HPF, B-Emb) have not been refitted against the current specification.</p>
+    <p class="label">Not a fair fight, and it should not be read as one</p>
+    <p>Same metric and same choice sets, but <strong>not</strong> the same tuning budget:
+    one tuned scalar per baseline against 870,392 parameters and an architecture selected
+    over many runs. Read this as a floor. A genuine state-of-the-art comparison would need
+    SHOPPER, which has never been run here — its source is CUDA C++ and porting it is a
+    project in itself.</p>
   </div>
+
+  <p class="note">An earlier version of this section compared against heuristics only
+  (popularity, co-occurrence, household repeat-purchase) and scored everything on a 21-way
+  sampled metric whose optimal scorer is log p − log q rather than log p. Those numbers
+  were not comparable to anything the code now computes and have been replaced.</p>
 
   <h2 id="s5"><span class="num">5</span>Is the price response causal?</h2>
 
@@ -707,9 +718,10 @@
     <li><strong>The test set has been used repeatedly.</strong> Eight models are compared on
     it here, on top of the iteration that produced the specification. Nothing reserves it
     for a single final evaluation.</li>
-    <li><strong>Learned baselines are stale.</strong> HPF and B-Emb were fitted against the
-    old sampled-softmax code and have not been refitted, so §4 compares against heuristics
-    only.</li>
+    <li><strong>No state-of-the-art comparison.</strong> §4 now includes refitted HPF and
+    B-Emb on the exact conditional, but SHOPPER has never been run — its source is CUDA
+    C++. The +0.586 nats is a floor against two deliberately partial baselines with a far
+    smaller tuning budget.</li>
     <li><strong>Identification is unaddressed.</strong> §18 of the specification lists a
     2,016-dimensional rotational invariance in α and θ, an unconstrained sign on
     γ<sup>⊤</sup>β — now measured at 24.28% negative — and the fact that the pseudo-likelihood
