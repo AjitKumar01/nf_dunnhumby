@@ -212,6 +212,83 @@ Current fitted labels: `ps_nested` (main), `ps_off` (no persistence), `ps_pl` (p
 
 ---
 
+## 8. How good is this, against what it was for?
+
+The goal was a retail simulator plus a model that answers counterfactual questions about
+price. Scored against that, not against effort.
+
+### Counterfactual price model — 7/10
+
+**Holds up.** Price coefficient +0.695, refit sd 0.0104 over seven fits. The placebo
+retains **exactly 0.0%** on both margins with an elasticity interval of
+`[−0.0029, +0.0000]` — it contains zero and essentially nothing else. The three-margin
+decomposition (allocation 81% / incidence 10% / quantity 9%) is an exact derivative of the
+fitted model, autograd-verified, and the quantity margin is unreachable by any
+binary-purchase model. Beats SHOPPER by 0.310 nats on SHOPPER's own normalisation.
+
+**Does not hold up.** The causal claim is weaker than the framing suggests. **Permuting a
+price series destroys the price–demand association whether it is causal or confounded.** It
+rules out a spurious constant; it cannot separate "price moves demand" from "the retailer
+times promotions to demand", which is the actual endogeneity concern for within-product
+price variation. There is no instrument and no discontinuity anywhere in this work.
+
+Three further cracks: the elasticity runs **−0.61 to 0.00** as the assortment threshold
+tightens and nobody has justified the threshold; prices are reconstructed from the very
+transactions being scored, with 41% of held-out rows the sole observation of their
+item-day; and 21% of `γ·β` pairs carry the economically wrong sign, unconstrained.
+
+*A well-specified demand model whose price parameter is stable and better than the
+published alternative. Calling it causal is a stretch the design does not support.*
+
+### Retail simulator — 4/10
+
+Marginals match — basket size to 2%, item marginals +0.891, price response recovered at
+76–78%. But a discriminator separates real from generated baskets at **AUC 0.81**, which is
+the test that matters. Basket-size TVD is 0.34 despite the means agreeing. Co-occurrence
+rank correlation tops out at **+0.082**. Fine substitution is 40% under-produced. Novelty
+runs ~20% high and compounds to **1.26× over twelve trips**.
+
+For learning a pricing policy it fails on structure, not just fit: prices are exogenous so
+a policy gets no feedback; `Δlog p` is centred on the training window so a level shift
+leaves support; there is no budget constraint. Single-step counterfactuals are supported.
+Multi-step rollouts are not.
+
+### What is genuinely defensible
+
+The process more than either deliverable. The specification is coherent and the code
+conforms to it, checked fifteen ways. Every headline number carries two kinds of
+uncertainty, separated. Claims are tested against nulls — the product-embedding result
+survives a permutation null, the household negative survives a non-linear probe. Four
+negative results are recorded rather than buried (§7). Reversals are on the page: the nest
+changed sign once the metric was fixed.
+
+### What not to put in front of a reviewer
+
+- "Is the price response causal?" as a section title.
+- The simulator as policy-ready.
+- Anything resting on the test set, which has been looked at roughly thirty times.
+- The `γ·β` sign and the 2,016-dimensional rotation — both stated, neither tested.
+
+### Overall — 6/10, and the highest-value next step
+
+A solid demand model with an honest audit trail, and a simulator that isn't one yet. The
+single highest-value next step is **not more modelling — it is finding real price variation
+to identify against.**
+
+dunnhumby ships `causal_data.csv` (664 MB): `PRODUCT_ID × STORE_ID × WEEK_NO` with
+**`display`** (in-store placement, codes 0–7) and **`mailer`** (weekly circular placement,
+codes 0/A/C/D/F/H/J/L), covering 115 stores over weeks 9–101. Promotional placement is
+plausibly excludable from a household's product preference while strongly shifting the
+price it faces — the shape of an instrument, or at minimum the basis for a
+difference-in-differences on placement rather than on price.
+
+It is read by `04_extras.py` but **never reaches the basket model**: `basket_input/` has no
+display or mailer field, so stages 22 and 27 have never seen it. Wiring it in and using it
+for identification would move the price model from 7 to something defensible far faster
+than another architecture change.
+
+---
+
 ## 7. Negative results worth not repeating
 
 - **Persistent contrastive divergence** moved generation by nothing at either weight tested
