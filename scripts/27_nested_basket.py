@@ -157,6 +157,32 @@ class NestedData:
         # directly.  Train-only, so it is a past lookup and not a leak.
         self.hh_cat = None
 
+        # Per-(household, product) persistence, from TRAINING purchases only.
+        #
+        # theta_i . alpha_j is a rank-K bilinear form standing in for a 2,066 x 5,455
+        # table, so it can say "this household likes this kind of product" but not "this
+        # household buys THIS product and no other".  Real shoppers are far more
+        # deterministic than that: within a category they re-buy the same item 63% of the
+        # time, while the fitted conditional puts 0.54 on the previously-bought set and
+        # generation delivers 0.19.  Fixing the rank collapse moved that a quarter and PCD
+        # moved it not at all, so what is missing is structure, not capacity or objective.
+        #
+        # Two scalars per pair, both past lookups on the training window:
+        #   share  = how often, WITHIN this category, the household picks this product.
+        #            Exactly the quantity a within-category softmax needs; 1.0 for a
+        #            perfectly loyal shopper.
+        #   freq   = log1p(count) / log 100, the absolute strength of the habit.
+        _t = bk[bk.split == "train"]
+        _u = _t.user_id.to_numpy(); _i = _t.item_id.to_numpy()
+        pc = np.zeros((self.N, self.J), dtype=np.float32)
+        np.add.at(pc, (_u, _i), 1.0)
+        cc_ = np.zeros((self.N, self.C), dtype=np.float32)
+        np.add.at(cc_, (_u, it_cat[_i]), 1.0)
+        self.loyal = torch.as_tensor(
+            pc / np.maximum(cc_[:, it_cat], 1.0), device=device)
+        self.freq = torch.as_tensor(
+            (np.log1p(pc) / np.log(100.0)).astype(np.float32), device=device)
+
         hc = np.zeros((self.N, self.C), dtype=np.float32)
         _tr = bk[bk.split == "train"]
         np.add.at(hc, (_tr.user_id.to_numpy(), it_cat[_tr.item_id.to_numpy()]), 1.0)
@@ -247,7 +273,7 @@ class NestedModel(nn.Module):
                  use_breadth=True, use_context=True, ctx_agg="mean",
                  learn_ctx_scale=False, use_cat_context=False,
                  use_cat_pair=False, untie_rho=False, prefix_context=False,
-                 neg_in_cat=0.0, item_loss="softmax"):
+                 neg_in_cat=0.0, item_loss="softmax", use_persist=True):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -324,6 +350,10 @@ class NestedModel(nn.Module):
         self.gamma = emb(N, Kp, 0.1); self.beta = emb(J, Kp, 0.1)
         self.use_state = use_state
         self.eta = emb(J, N_STATE_FEATURES, 0.01) if use_state else None
+        # loadings on the two persistence scalars; per product, so the model can learn
+        # that loyalty matters for coffee and not for tinned tomatoes
+        self.w_loyal = nn.Parameter(torch.zeros(J)) if use_persist else None
+        self.w_freq = nn.Parameter(torch.zeros(J)) if use_persist else None
         self.mu = emb(J, Kt, 0.02); self.delta = emb(n_weeks, Kt, 0.02)
         # store x item affinity: format and assortment differ, and a low-rank term
         # keeps it to 115*Ks + J*Ks parameters instead of 115*5455
@@ -383,6 +413,9 @@ class NestedModel(nn.Module):
         s = s - (self.gamma[users].unsqueeze(1) * self.beta[items]).sum(-1) * dlogp
         if self.eta is not None:
             s = s + (self.eta[items] * state).sum(-1)
+        if self.w_loyal is not None:
+            s = s + (self.w_loyal[items] * self.d.loyal[users.unsqueeze(1), items]
+                     + self.w_freq[items] * self.d.freq[users.unsqueeze(1), items])
         s = s + (self.mu[items] * self.delta[weeks].unsqueeze(1)).sum(-1)
         if self.store_vec is not None:
             s = s + (self.item_store[items] * self.store_vec[stores].unsqueeze(1)).sum(-1)
@@ -403,6 +436,9 @@ class NestedModel(nn.Module):
             st = torch.as_tensor(self.d.state(np.asarray(users), np.asarray(items), dy),
                                  device=device)
             s = s + (self.eta[it] * st).sum(-1)
+        if self.w_loyal is not None:
+            s = s + (self.w_loyal[it] * self.d.loyal[us, it]
+                     + self.w_freq[it] * self.d.freq[us, it])
         s = s + (self.mu[it] * self.delta[torch.as_tensor(weeks, device=device)]).sum(-1)
         if self.store_vec is not None:
             s = s + (self.item_store[it]
@@ -431,7 +467,7 @@ class NestedModel(nn.Module):
 
     def l2_repr(self):
         ps = [self.alpha, self.theta, self.eta, self.mu, self.delta,
-              self.store_vec, self.item_store]
+              self.store_vec, self.item_store, self.w_loyal, self.w_freq]
         if self.use_quantity:
             ps += [self.q_state]
         return sum((p ** 2).sum() for p in ps if p is not None)
@@ -1019,7 +1055,8 @@ def main(a):
                         use_cat_context=a.cat_context,
                         use_cat_pair=a.cat_pair, untie_rho=a.untie_rho,
                         prefix_context=a.prefix_context,
-                        neg_in_cat=a.neg_in_cat, item_loss=a.item_loss).to(dev)
+                        neg_in_cat=a.neg_in_cat, item_loss=a.item_loss,
+                        use_persist=not a.no_persist).to(dev)
     model.use_logq = not a.no_logq
     # A FIXED validation subsample, so the selection score is comparable across
     # iterations and across models rather than moving with the draw.
@@ -1176,6 +1213,8 @@ if __name__ == "__main__":
     p.add_argument("--eval-every", type=int, default=1000)
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--l2", type=float, default=1e-2)
+    p.add_argument("--no-persist", action="store_true",
+                   help="drop the per-(household, product) persistence term")
     p.add_argument("--pcd", type=float, default=0.0,
                    help="weight on the persistent-contrastive-divergence term for the "
                         "contents factor.  0 disables it and the objective is the "

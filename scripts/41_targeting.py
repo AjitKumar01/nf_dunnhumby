@@ -163,10 +163,14 @@ def main(a):
                                 for i in range(min(4000, sp["n_baskets"]))])
     t_real = d.state(sp["user"][real_rows], sp["item"][real_rows],
                      sp["day"][real_rows])[:, 3]
+    # gen.trips[k] is the trip the k-th generated basket came from.  Indexing by k
+    # instead compares a generated basket against a DIFFERENT household's history, which
+    # makes an accurate generator look badly wrong.
+    tp = gen.trips
     gi = np.concatenate([np.asarray(b) for b in gen if len(b)])
-    gu = np.concatenate([np.full(len(b), int(sp["user"][sp["starts"][k]]))
+    gu = np.concatenate([np.full(len(b), int(sp["user"][sp["starts"][tp[k]]]))
                          for k, b in enumerate(gen) if len(b)])
-    gd = np.concatenate([np.full(len(b), int(sp["day"][sp["starts"][k]]))
+    gd = np.concatenate([np.full(len(b), int(sp["day"][sp["starts"][tp[k]]]))
                          for k, b in enumerate(gen) if len(b)])
     t_gen = d.state(gu, gi, gd)[:, 3]
     qs = [0, .1, .25, .5, .75, .9, 1.0]

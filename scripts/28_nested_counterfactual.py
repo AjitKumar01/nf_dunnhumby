@@ -52,6 +52,16 @@ PAL = {"blue": "#2d6cdf", "grey": "#9aa5b1", "red": "#d1495b",
        "green": "#2a9d8f", "amber": "#e9c46a"}
 
 
+class _Baskets(list):
+    """Generated baskets, carrying the trip index each one came from."""
+    def __init__(self, items, trips):
+        super().__init__(items)
+        self.trips = np.asarray(trips)
+
+
+DEBUG_PASS1 = None
+
+
 def log(m):
     print(f"[28] {m}", flush=True)
 
@@ -262,7 +272,12 @@ def generate(m, d, dev, n_trips=4000, seed=0, n_cat_eval=24):
             # Recovering picks from P(buy) alone via -log(1-p) implies
             # E[picks | bought] of ~1.01-1.10 for realistic incidence rates, against a
             # real 1.284.  That single line was the whole generation shortfall.
-            p_buy = torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)
+            # cloglog, matching Eq. 9 of the specification.  This was sigmoid, left
+            # behind when the incidence link changed: at the 3.25% base rate the two
+            # agree to 2%, so the NUMBER of categories looked right, but for a category
+            # the household uses heavily eta is high and cloglog is up to 1.3x sigmoid --
+            # so generation systematically under-picked exactly the familiar categories.
+            p_buy = (-torch.expm1(-torch.exp(lin.clamp(-12.0, 4.0)))).clamp(1e-6, 1 - 1e-6)
             bought = (torch.rand(T, device=dev) < p_buy) & ok
             pi = torch.softmax(u, dim=1) * (msk > 0).float()
             pi = pi / pi.sum(1, keepdim=True).clamp_min(1e-9)
@@ -359,6 +374,11 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
     sp = d.splits["test"]
     rng = np.random.default_rng(seed)
     g = torch.Generator(device="cpu").manual_seed(seed)
+    # NOTE: when `trips` is None this is a RANDOM subset, so the k-th returned basket
+    # belongs to trip bsel[k], NOT to trip k.  Attributing them positionally compares a
+    # generated basket against a different household's history, which makes an accurate
+    # generator look badly wrong -- it cost a long investigation before being caught.
+    # `.trips` is attached to the returned list so callers cannot get this wrong.
     bsel = (rng.choice(sp["n_baskets"], size=min(n_trips, sp["n_baskets"]), replace=False)
             if trips is None else np.asarray(trips))
     A = m.alpha.detach()
@@ -398,13 +418,19 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
         lin = (m.c0 + (m.c_user[user].unsqueeze(0) * m.c_cat).sum(-1)
                + (m.c_state * torch.as_tensor(cst, device=dev)).sum(-1)
                + m.kappa() * iv)
+        # the household-category habit term, added to the incidence head in training and
+        # previously missing here -- a second train/generate mismatch alongside the link
+        if getattr(m, "c_hab", None) is not None:
+            lin = lin + m.c_hab * d.hh_cat[user]
         # Pass 0 -- WHICH CATEGORIES.  Independent Bernoulli draws leave every
         # cross-category pair at lift ~1, and 95% of item pairs are cross-category
         # (NESTED_MODEL.md 8.6e).  With a category context the indicator vector is a
         # C-dimensional binary field whose single-site conditionals the incidence head
         # supplies, so Gibbs over it is the same move used for items, one level up.
+        # cloglog, matching Eq. 9 of the specification (see the note above).
         bought = (torch.rand(d.C, generator=g)
-                  < torch.sigmoid(lin).clamp(1e-6, 1 - 1e-6)) & ok
+                  < (-torch.expm1(-torch.exp(lin.clamp(-12.0, 4.0)))
+                     ).clamp(1e-6, 1 - 1e-6)) & ok
         has_pair = getattr(m, "cat_pair", None) is not None
         if (has_pair or getattr(m, "cat_ctx_scale", None) is not None) and cat_sweeps:
             W = m.cat_pair_sym() if has_pair else None
@@ -424,7 +450,9 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                         lg = lg + m.cat_ctx_scale * (cc[c] * ctx).sum()
                     if W is not None:
                         lg = lg + (W[c] * bought.float()).sum() - W[c, c] * inb
-                    new_b = bool(torch.rand(1, generator=g) < torch.sigmoid(lg).clamp(1e-6, 1 - 1e-6))
+                    pb = (-torch.expm1(-torch.exp(lg.clamp(-12.0, 4.0)))
+                          ).clamp(1e-6, 1 - 1e-6)
+                    new_b = bool(torch.rand(1, generator=g) < pb)
                     if new_b != bool(bought[c]):
                         S = S + cc[c] if new_b else S - cc[c]
                         nB = nB + 1 if new_b else nB - 1
@@ -475,6 +503,10 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
                     continue
                 pick = torch.multinomial(pi / pi.sum(), int(k[c]), replacement=False,
                                          generator=g)
+                if DEBUG_PASS1 is not None:
+                    DEBUG_PASS1.append((user, c, (pi / pi.sum()).detach().cpu().numpy(),
+                                        [int(blk[c, q]) for q in pick.tolist()],
+                                        int(k[c])))
                 slots += [(c, int(blk[c, q])) for q in pick.tolist()]
 
         # ---- pass 2: Gibbs sweeps with the context recomputed from the draft
@@ -537,7 +569,7 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
               + (m.q_state[jt] * stq).sum(-1)).clamp(-6, 4)
         u_units = (1 + torch.poisson(torch.exp(zq), generator=g)).long().tolist()
         out.append((ids, u_units))
-    return out
+    return _Baskets(out, bsel)
 
 
 @torch.no_grad()
