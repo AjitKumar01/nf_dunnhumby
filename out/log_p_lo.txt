@@ -1,0 +1,8 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[27]   PCD on: 192 persistent chains, 2 sweeps/iter, weight 0.05
+[27] model pcd_lo: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,580 parameters
+[27]   froze IV reference at iteration 500: mean 0.309, 188 of 188 categories observed
+[27]   it  1000  item -2.7219  top1 0.279  qNLL 0.6855  cNLL 0.1181  bNLL 0.6251  kappa 0.873  breadth 1.499  price +0.135 *
+[27]   it  2000  item -2.6133  top1 0.311  qNLL 0.6571  cNLL 0.1146  bNLL 0.6054  kappa 0.871  breadth 1.435  price +0.444 *
+[27]   it  3000  item -2.5763  top1 0.322  qNLL 0.6727  cNLL 0.1222  bNLL 0.6003  kappa 0.869  breadth 1.412  price +0.581 *

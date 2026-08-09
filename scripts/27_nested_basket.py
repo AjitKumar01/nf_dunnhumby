@@ -388,11 +388,50 @@ class NestedModel(nn.Module):
             s = s + (self.item_store[items] * self.store_vec[stores].unsqueeze(1)).sum(-1)
         return s
 
+    def solo_value(self, users, items, days, weeks, stores, device, rw=None):
+        """b_ijt for a flat list of (user, product, trip) -- Eq. 4, no basket context."""
+        it = torch.as_tensor(items, device=device)
+        us = torch.as_tensor(users, device=device)
+        dy = np.asarray(days)
+        s = self.lam[it] + (self.theta[us] * self.alpha[it]).sum(-1)
+        dl = self.d.log_price_dev[it, torch.as_tensor(dy, device=device)]
+        if self.use_store and self.use_store_price and rw is not None:
+            dl = dl + self.d.store_dev(np.asarray(items), np.asarray(stores),
+                                       np.asarray(rw))
+        s = s - (self.gamma[us] * self.beta[it]).sum(-1) * dl
+        if self.eta is not None:
+            st = torch.as_tensor(self.d.state(np.asarray(users), np.asarray(items), dy),
+                                 device=device)
+            s = s + (self.eta[it] * st).sum(-1)
+        s = s + (self.mu[it] * self.delta[torch.as_tensor(weeks, device=device)]).sum(-1)
+        if self.store_vec is not None:
+            s = s + (self.item_store[it]
+                     * self.store_vec[torch.as_tensor(stores, device=device)]).sum(-1)
+        return s
+
+    def slot_value(self, cand, user, day, week, store, rw, ctx, d, device):
+        """u for every candidate in one slot: b + alpha_m . ctx  (Eq. 5)."""
+        n = len(cand)
+        b = self.solo_value(np.full(n, user), cand, np.full(n, day),
+                            np.full(n, week), np.full(n, store), device,
+                            rw=np.full(n, rw))
+        if self.use_context:
+            b = b + (self.alpha[torch.as_tensor(cand, device=device)] * ctx).sum(-1)
+        return b
+
+    def l2_incidence(self):
+        """c_user and c_cat collapsed to effective rank 1 (top singular direction held
+        90% of c_cat's variance) while carrying 144,512 parameters.  Averaged over all
+        dimensions the data gradient beats the L2 gradient 5.8-17x, but that average is
+        dominated by the one direction that is learning: on the other 61 the data
+        gradient is near zero and the penalty is the only force, which is what drives a
+        low-rank solution.  Penalised separately so the weak directions can survive."""
+        ps = [self.c_user, self.c_cat, self.c_state]
+        return sum((p ** 2).sum() for p in ps if p is not None)
+
     def l2_repr(self):
         ps = [self.alpha, self.theta, self.eta, self.mu, self.delta,
               self.store_vec, self.item_store]
-        if self.use_nest:
-            ps += [self.c_user, self.c_cat, self.c_state]
         if self.use_quantity:
             ps += [self.q_state]
         return sum((p ** 2).sum() for p in ps if p is not None)
@@ -515,6 +554,144 @@ def make_batch(d, model, split, bidx, rng, device):
         store=torch.as_tensor(store, device=device),
         lens=lens, owner=ow, target=tgt,
         units=torch.as_tensor(units, device=device), avail=avail)
+
+
+# ---------------------------------------------------------------------------
+# Persistent contrastive divergence for the contents factor P(S | K).
+#
+# Pseudo-likelihood asks "given the other n-1 products, is this one right?".
+# Generation asks "are all n right at once?".  A model can answer the first well and
+# the second badly, and this one does: the conditional puts 0.54 on previously-bought
+# products while the joint it implies generates 0.19.
+#
+# The exact gradient of the joint log-likelihood is
+#
+#     grad log P(S) = grad E(S_data) - E_{S ~ model}[ grad E(S) ]
+#
+# The intractable normaliser never appears -- only samples from the model, which the
+# Gibbs sampler already produces.  So the loss to MINIMISE is
+#
+#     L_pcd = -E(S_data) + E(S_chain)
+#
+# with S_chain held in a persistent pool, advanced a few sweeps per iteration.  The
+# chains are conditioned on the SAME composition K as their data basket, because
+# P(S | K) is a conditional: each chain keeps the real basket's category counts.
+# ---------------------------------------------------------------------------
+
+
+def basket_energy(model, d, owner, item, user, day, week, store, rw, n_per, device):
+    """E(S) per basket, differentiable.
+
+    E(S) = sum_j b_ijt + ( ||sum_j alpha_j||^2 - sum_j ||alpha_j||^2 ) / (2(n-1))
+
+    The pairwise sum is O(n) in this closed form rather than O(n^2); verified against
+    the explicit double sum.  n = 1 contributes no pair term (spec Eq. 11).
+    """
+    it = torch.as_tensor(item, device=device)
+    ow = torch.as_tensor(owner, device=device)
+    B = len(n_per)
+    b = model.solo_value(user, item, day, week, store, device, rw=rw)   # [rows]
+    solo = torch.zeros(B, device=device).index_add_(0, ow, b)
+    A = model.alpha[it]
+    ssum = torch.zeros(B, model.K, device=device).index_add_(0, ow, A)
+    sq = torch.zeros(B, device=device).index_add_(0, ow, (A * A).sum(-1))
+    n = torch.as_tensor(n_per, device=device, dtype=torch.float32)
+    denom = (2.0 * (n - 1.0)).clamp_min(1e-9)
+    pair = torch.where(n > 1, ((ssum * ssum).sum(-1) - sq) / denom,
+                       torch.zeros_like(sq))
+    return solo + pair
+
+
+class Chains:
+    """A persistent pool of basket states, one per trip, matching its composition."""
+
+    def __init__(self, d, split, bidx):
+        sp = d.splits[split]
+        self.split, self.bidx = split, bidx
+        rows = np.concatenate([np.arange(sp["starts"][i], sp["ends"][i]) for i in bidx])
+        self.owner = np.concatenate([[k] * (sp["ends"][i] - sp["starts"][i])
+                                     for k, i in enumerate(bidx)])
+        self.user = sp["user"][rows]
+        self.day, self.week = sp["day"][rows], sp["week"][rows]
+        self.store, self.rw = sp["store"][rows], sp["raw_week"][rows]
+        self.cat = d.item_cat_np[sp["item"][rows]]
+        self.item = sp["item"][rows].copy()          # start from the data basket
+        self.n_per = np.array([sp["ends"][i] - sp["starts"][i] for i in bidx])
+        self.data_item = sp["item"][rows].copy()
+        # colour = position within the basket, so one colour holds at most one slot per
+        # chain and its members are conditionally independent
+        pos = np.zeros(len(rows), dtype=np.int64)
+        for k in range(len(bidx)):
+            msk = self.owner == k
+            pos[msk] = np.arange(msk.sum())
+        self.ncol = int(pos.max()) + 1
+        self.by_colour = [np.flatnonzero(pos == c) for c in range(self.ncol)]
+
+    @torch.no_grad()
+    def sweep(self, model, d, device, rng, sweeps=1):
+        """Block Gibbs on S(K).
+
+        Slots belonging to DIFFERENT chains are conditionally independent given their own
+        chain's state, so they can be resampled simultaneously.  Colour each slot by its
+        position within its basket: a colour then holds at most one slot per chain, and
+        one batched forward updates all of them.  That is `max basket size` forwards per
+        sweep instead of one per slot -- 77 instead of 1466 here -- which matters because
+        the per-call overhead, not the arithmetic, dominates a 47-candidate softmax.
+        """
+        Mx = d.cat_items_np.shape[1]
+        for _ in range(sweeps):
+            for col in rng.permutation(self.ncol):
+                sl = self.by_colour[col]
+                if len(sl) == 0:
+                    continue
+                cand = d.cat_items_np[self.cat[sl]]                     # [S, Mx]
+                ok = d.cat_mask_np[self.cat[sl]] > 0
+                ok &= d.carried[torch.as_tensor(cand),
+                                torch.as_tensor(self.store[sl]).unsqueeze(1)
+                                ].cpu().numpy()
+                # exclude whatever else this chain holds in the same category
+                key_have = self.owner.astype(np.int64) * d.J + self.item
+                key_cand = self.owner[sl][:, None].astype(np.int64) * d.J + cand
+                ok &= ~np.isin(key_cand, key_have)
+                ok[np.arange(len(sl)), d.item_pos_np[self.item[sl]]] = True
+
+                ctx = self._ctx_batch(model, sl, device)
+                n = len(sl)
+                u = model.solo_value(
+                    np.repeat(self.user[sl], Mx), cand.ravel(),
+                    np.repeat(self.day[sl], Mx), np.repeat(self.week[sl], Mx),
+                    np.repeat(self.store[sl], Mx), device,
+                    rw=np.repeat(self.rw[sl], Mx)).view(n, Mx)
+                if model.use_context:
+                    u = u + (model.alpha[torch.as_tensor(cand, device=device)]
+                             * ctx.unsqueeze(1)).sum(-1)
+                u = u.masked_fill(~torch.as_tensor(ok, device=device), -1e9)
+                pick = torch.multinomial(torch.softmax(u, 1), 1).squeeze(1).cpu().numpy()
+                self.item[sl] = cand[np.arange(n), pick]
+
+    def _ctx_batch(self, model, sl, device):
+        """Leave-one-out mean of alpha over each slot's chain-mates."""
+        A = model.alpha.detach()
+        tot = torch.zeros(len(self.n_per), model.K, device=device).index_add_(
+            0, torch.as_tensor(self.owner, device=device),
+            A[torch.as_tensor(self.item, device=device)])
+        own = torch.as_tensor(self.owner[sl], device=device)
+        n = torch.as_tensor(self.n_per, device=device, dtype=torch.float32)[own]
+        out = tot[own] - A[torch.as_tensor(self.item[sl], device=device)]
+        return torch.where((n > 1).unsqueeze(1), out / (n - 1).clamp_min(1).unsqueeze(1),
+                           torch.zeros_like(out))
+
+    def _ctx(self, model, r, same, device):
+        oth = self.item[same[same != r]]
+        if len(oth) == 0:
+            return torch.zeros(model.K, device=device)
+        A = model.alpha.detach()[torch.as_tensor(oth, device=device)]
+        return A.mean(0)
+
+    def energy(self, model, d, device, which="chain"):
+        it = self.item if which == "chain" else self.data_item
+        return basket_energy(model, d, self.owner, it, self.user, self.day,
+                             self.week, self.store, self.rw, self.n_per, device)
 
 
 def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
@@ -846,6 +1023,14 @@ def main(a):
     model.use_logq = not a.no_logq
     # A FIXED validation subsample, so the selection score is comparable across
     # iterations and across models rather than moving with the draw.
+    chains = None
+    if a.pcd > 0:
+        pool = np.random.default_rng(4242).choice(
+            d.splits["train"]["n_baskets"], size=a.pcd_pool, replace=False)
+        chains = Chains(d, "train", pool)
+        log(f"  PCD on: {a.pcd_pool} persistent chains, {a.pcd_sweeps} sweeps/iter, "
+            f"weight {a.pcd}")
+
     sel_bidx = (np.random.default_rng(12345).choice(
         d.splits["validation"]["n_baskets"],
         size=min(a.select_baskets, d.splits["validation"]["n_baskets"]),
@@ -903,10 +1088,21 @@ def main(a):
                 # divided by a FIXED constant, not bt["cand"].shape[0]: the row count
                 # varies 1157-1797 between batches, which made the effective weight
                 # decay fluctuate by 1.55x within a single run.
-                + (a.l2 * model.l2_repr() + a.l2_price * model.l2_price()
+                + (a.l2 * model.l2_repr()
+                   + a.l2_incidence * (model.l2_incidence() if model.use_nest else 0.0)
+                   + a.l2_price * model.l2_price()
                    + a.l2_cat_pair * model.l2_cat_pair()
                    + a.l2_rho * model.l2_rho())
                 / a.l2_denom)
+        if chains is not None:
+            # negative phase: advance the pool under the CURRENT parameters, then push
+            # the energy of real baskets up and of model samples down.  The normaliser
+            # never appears; only samples do.
+            chains.sweep(model, d, dev, rng, a.pcd_sweeps)
+            e_data = chains.energy(model, d, dev, "data").mean()
+            e_chain = chains.energy(model, d, dev, "chain").mean()
+            loss = loss + a.pcd * (e_chain - e_data)
+
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
 
         if it % a.eval_every == 0 or it == a.iters:
@@ -980,6 +1176,14 @@ if __name__ == "__main__":
     p.add_argument("--eval-every", type=int, default=1000)
     p.add_argument("--lr", type=float, default=0.005)
     p.add_argument("--l2", type=float, default=1e-2)
+    p.add_argument("--pcd", type=float, default=0.0,
+                   help="weight on the persistent-contrastive-divergence term for the "
+                        "contents factor.  0 disables it and the objective is the "
+                        "pseudo-likelihood alone.")
+    p.add_argument("--pcd-sweeps", type=int, default=2,
+                   help="Gibbs sweeps applied to the persistent pool each iteration")
+    p.add_argument("--pcd-pool", type=int, default=192,
+                   help="number of persistent chains (one per trip)")
     p.add_argument("--no-logq", action="store_true",
                    help="disable the logQ correction on sampled negatives")
     p.add_argument("--select-baskets", type=int, default=300,
@@ -989,6 +1193,9 @@ if __name__ == "__main__":
                    help="fixed divisor for the L2 terms; was the batch row count, "
                         "which fluctuates 1.55x and made regularisation batch-dependent")
     p.add_argument("--l2-price", type=float, default=1e-4)
+    p.add_argument("--l2-incidence", type=float, default=1e-2,
+                   help="penalty on c_user/c_cat/c_state; separate from --l2 because "
+                        "they receive a 4x weaker data gradient than alpha/theta")
     p.add_argument("--l2-cat-pair", type=float, default=1e-2,
                    help="L2 on the category-pair matrix, separated from the "
                         "representation block: too weak and it crowds out kappa*IV, "
