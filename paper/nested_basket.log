@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.11.18)  9 AUG 2026 14:47
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.11.18)  9 AUG 2026 21:56
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -468,16 +468,6 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 
 [2]
 
-LaTeX Warning: Reference `sec:deploy' on page 3 undefined on input line 92.
-
-
-LaTeX Warning: Reference `sec:negfix' on page 3 undefined on input line 100.
-
-
-LaTeX Warning: Reference `sec:negfix' on page 3 undefined on input line 108.
-
-
-
 [3]
 
 [4]
@@ -496,107 +486,45 @@ LaTeX Warning: Reference `sec:negfix' on page 3 undefined on input line 108.
 
 [11]
 
-LaTeX Warning: Reference `sec:embed' on page 12 undefined on input line 706.
-
-
-LaTeX Warning: Reference `sec:rho' on page 12 undefined on input line 708.
-
-
-
 [12]
-
-LaTeX Warning: Reference `sec:negfix' on page 13 undefined on input line 779.
-
-
 
 [13]
 
-LaTeX Warning: Reference `sec:cooc' on page 14 undefined on input line 817.
-
-
-LaTeX Warning: Reference `sec:negfix' on page 14 undefined on input line 837.
-
-
-
 [14]
+
+[15]
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
 
-LaTeX Warning: Reference `sec:rho' on page 15 undefined on input line 950.
-
-
-
-[15]
-
-LaTeX Warning: Reference `sec:cooc' on page 16 undefined on input line 954.
-
-
 
 [16]
-Overfull \hbox (36.5339pt too wide) in paragraph at lines 1022--1027
-\OT1/cmr/m/n/10.95 states a deriva-tive and by di-rect eval-u-a-tion where it s
-tates an iden-tity (\OT1/cmtt/m/n/10.95 scripts/33[]verify[]equations.py\OT1/cm
-r/m/n/10.95 ).
- []
-
-
 
 [17]
 
 [18]
-Overfull \hbox (3.07512pt too wide) in paragraph at lines 1132--1142
- [] 
- []
-
-
-Overfull \hbox (4.89977pt too wide) in paragraph at lines 1155--1160
- []\OT1/cmr/bx/n/10.95 Two neg-a-tive re-sults.[] \OT1/cmr/m/n/10.95 Per-sis-te
-nt con-trastive di-ver-gence, which trains di-rectly against the model's
- []
-
-
 
 [19]
 
-LaTeX Warning: Reference `sec:rho' on page 20 undefined on input line 1200.
-
-
-LaTeX Warning: Reference `sec:negfix' on page 20 undefined on input line 1201.
-
-
-LaTeX Warning: Reference `sec:embed' on page 20 undefined on input line 1210.
-
-
-
 [20]
-
-LaTeX Warning: Reference `sec:negfix' on page 21 undefined on input line 1242.
-
-
-LaTeX Warning: Reference `sec:deploy' on page 21 undefined on input line 1249.
-
-
 
 [21]
 
-[22] (./nested_basket.aux)
+[22]
+
+[23] (./nested_basket.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
  ***********
-
-
-LaTeX Warning: There were undefined references.
-
 Package rerunfilecheck Info: File `nested_basket.out' has not changed.
-(rerunfilecheck)             Checksum: 9737089C76DE1F5F5D6EF20DF7E25658;7566.
+(rerunfilecheck)             Checksum: ED69F470CBC5E664E6BF68D0364B4911;7655.
  ) 
 Here is how much of TeX's memory you used:
- 11366 strings out of 474662
- 173731 string characters out of 5751108
- 592485 words of memory out of 5000000
- 34117 multiletter control sequences out of 15000+600000
+ 11371 strings out of 474662
+ 173781 string characters out of 5751108
+ 592578 words of memory out of 5000000
+ 34114 multiletter control sequences out of 15000+600000
  570674 words of font info for 82 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
  75i,15n,79p,484b,564s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -620,10 +548,10 @@ sic/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive/202
 5basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive
 /2025basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/tex
 live/2025basic/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on nested_basket.pdf (22 pages, 344802 bytes).
+Output written on nested_basket.pdf (23 pages, 355155 bytes).
 PDF statistics:
- 619 PDF objects out of 1000 (max. 8388607)
- 539 compressed objects within 6 object streams
- 159 named destinations out of 1000 (max. 500000)
+ 645 PDF objects out of 1000 (max. 8388607)
+ 564 compressed objects within 6 object streams
+ 167 named destinations out of 1000 (max. 500000)
  321 words of extra memory for PDF output out of 10000 (max. 10000000)
 
