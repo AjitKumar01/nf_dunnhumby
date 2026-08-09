@@ -219,6 +219,44 @@
     combining them is what the model does.</p>
   </div>
 
+  <h3>SHOPPER, on both metrics</h3>
+
+  <p>SHOPPER ships as CUDA C++ and this machine has no NVIDIA GPU, so the released code
+  cannot be run. It is reimplemented in PyTorch from the paper and the parameter names in
+  its source — untied ρ, sequential prefix context, catalogue-wide softmax. Its choice set
+  is the whole catalogue while ours is a category, so scoring only on ours would flatter
+  us. Both are therefore scored on <strong>both</strong>, exactly.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>model</th><th>within-category (chance −3.85)</th><th>full catalogue (chance −8.04)</th></tr></thead>
+    <tbody>
+      <tr><td>SHOPPER</td><td>−2.8262</td><td>−7.0501</td></tr>
+      <tr><td>full model, no persistence</td><td>−2.5745</td><td>−6.8695</td></tr>
+      <tr class="hi"><td>full model</td><td><strong>−2.5058</strong></td><td><strong>−6.7402</strong></td></tr>
+    </tbody>
+    <caption>23,998 held-out purchases; 45.8 admissible products within category, 3,065 in
+    the catalogue. Each model uses its own context construction — prefix for SHOPPER,
+    leave-one-out for ours.</caption>
+  </table>
+  </div>
+
+  <p>Our model is ahead by <strong>+0.320 nats within category and +0.310 on the full
+  catalogue</strong> — the margin survives on SHOPPER's own home ground, which is the
+  result that matters. The three modelling differences are the plausible sources: a
+  category-restricted choice set that matches how the basket is actually composed, purchase
+  recency, and store conditioning, none of which SHOPPER has.</p>
+
+  <div class="flag">
+    <p class="label">What this comparison is not</p>
+    <p>SHOPPER is Bayesian and maximises an ELBO with per-parameter variational means and
+    standard deviations. This fits <em>the same model</em> by MAP with an L2 penalty — the
+    mode of the same posterior. So this compares <strong>models, not inference
+    procedures</strong>, and the SHOPPER column carries no uncertainty of its own. A
+    reimplementation is also not the authors' tuned code; treat the gap as indicative
+    rather than as a benchmark result.</p>
+  </div>
+
   <div class="flag">
     <p class="label">Not a fair fight, and it should not be read as one</p>
     <p>Same metric and same choice sets, but <strong>not</strong> the same tuning budget:
@@ -718,10 +756,10 @@
     <li><strong>The test set has been used repeatedly.</strong> Eight models are compared on
     it here, on top of the iteration that produced the specification. Nothing reserves it
     for a single final evaluation.</li>
-    <li><strong>No state-of-the-art comparison.</strong> §4 now includes refitted HPF and
-    B-Emb on the exact conditional, but SHOPPER has never been run — its source is CUDA
-    C++. The +0.586 nats is a floor against two deliberately partial baselines with a far
-    smaller tuning budget.</li>
+    <li><strong>The SHOPPER comparison is a reimplementation, not the authors' code</strong>,
+    and fits their model by MAP rather than their variational inference. The margin holds on
+    both metrics, but a benchmark-grade claim would need their released implementation on
+    hardware that can run it.</li>
     <li><strong>Identification is unaddressed.</strong> §18 of the specification lists a
     2,016-dimensional rotational invariance in α and θ, an unconstrained sign on
     γ<sup>⊤</sup>β — now measured at 24.28% negative — and the fact that the pseudo-likelihood

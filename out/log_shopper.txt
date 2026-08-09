@@ -1,0 +1,23 @@
+[27] data: 2,066 households, 5,455 items, 188 categories, 115 stores; test 202,703 rows, train 1,228,695 rows, validation 134,665 rows
+[27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
+[45] SHOPPER reimplementation: K=64, untied rho, prefix context, catalogue-wide softmax with 20 sampled negatives
+/Users/ajit/Projects/Causal/nf_dunnhumby/scripts/45_shopper.py:139: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
+  log(f"  it {it:5d}  train loss {float(loss):.4f}")
+[45]   it  1000  train loss 2.2841
+[45]   it  2000  train loss 2.2469
+[45]   it  3000  train loss 2.2430
+[45]   it  4000  train loss 2.2186
+[45]   it  5000  train loss 2.2113
+[45]   it  6000  train loss 2.1829
+[45] 
+[45] scoring both models on BOTH metrics, identical rows
+[45]   23,998 rows; within-category 45.8 products, full catalogue 3065
+[45]   SHOPPER      within-category  -2.8262
+[45]   SHOPPER      full catalogue   -7.0501
+[45]   ps_nested    within-category  -2.5058
+[45]   ps_nested    full catalogue   -6.7402
+[45]   ps_off       within-category  -2.5745
+[45]   ps_off       full catalogue   -6.8695
+[45] 
+[45] wrote out/shopper.json

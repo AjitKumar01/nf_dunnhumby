@@ -1,0 +1,17 @@
+{
+  "n_rows": 23998,
+  "models": {
+    "SHOPPER": {
+      "within-category": -2.8262341022491455,
+      "full catalogue": -7.050078392028809
+    },
+    "ps_nested": {
+      "within-category": -2.505772590637207,
+      "full catalogue": -6.740156173706055
+    },
+    "ps_off": {
+      "within-category": -2.5745387077331543,
+      "full catalogue": -6.869487285614014
+    }
+  }
+}
