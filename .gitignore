@@ -38,3 +38,9 @@ scripts/emb
 
 # rebuilt by 22_basket_data.py (~120 MB, derived from dunnhumby transaction data)
 basket_input/
+
+# Third-party material: not ours to redistribute.  The SHOPPER paper is on arXiv
+# (1711.03560) and its source is released by its authors; 45_shopper.py is a from-scratch
+# reimplementation and reads neither file.
+1711.03560v3.pdf
+shopper-src-master.zip
