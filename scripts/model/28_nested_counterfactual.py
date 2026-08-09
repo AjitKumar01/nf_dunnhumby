@@ -93,7 +93,9 @@ def load(label, d, dev):
                        untie_rho=cfg.get("untie_rho", False),
                        prefix_context=cfg.get("prefix_context", False),
                        neg_in_cat=cfg.get("neg_in_cat", 0.0),
-                       item_loss=cfg.get("item_loss", "softmax")).to(dev)
+                       item_loss=cfg.get("item_loss", "softmax"),
+                       use_persist=not cfg.get("no_persist", False),
+                       use_promo=cfg.get("use_promo", False)).to(dev)
     # strict=False so checkpoints predating a newly added parameter still load.  Any
     # such parameter is initialised at zero, so the loaded model reproduces the older one
     # exactly rather than silently inheriting a random value.

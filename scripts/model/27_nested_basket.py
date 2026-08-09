@@ -123,6 +123,16 @@ class NestedData:
             dev_arr = np.random.default_rng(placebo_seed + 1).permutation(dev_arr)
         self.sp_dev = torch.as_tensor(dev_arr, device=device)
 
+        # Promotional placement, if stage 23 has been run.  Optional so that every model
+        # fitted before it still loads.
+        self.promo_keys = self.promo_disp = self.promo_mail = None
+        _pf = os.path.join(indir, "promo.npz")
+        if os.path.exists(_pf):
+            _pz = np.load(_pf)
+            self.promo_keys = _pz["keys"]
+            self.promo_disp = _pz["disp"].astype(np.float32)
+            self.promo_mail = _pz["mail"].astype(np.float32)
+
         it_cat = self.items.sort_values("item_id").cat_id.to_numpy()
         self.item_cat = torch.as_tensor(it_cat, device=device)
         # padded [C, Mmax] item block per category, for the inclusive value
@@ -215,6 +225,25 @@ class NestedData:
             f"{self.meta['share_units_in_multi_rows']:.1%} of units; "
             f"assortment {self.meta['assortment_share']:.1%} of the item x store grid")
 
+    def promo(self, item, store, week):
+        """[n, 2] of (on display, in the weekly circular), 0 where not promoted.
+
+        causal_data.csv records only promoted cells, so a miss is a genuine zero rather
+        than a missing value -- which is why this returns 0 rather than a mask.
+        """
+        out = np.zeros((len(item), 2), dtype=np.float32)
+        if self.promo_keys is None:
+            return out
+        k = (item.astype(np.int64) * self.n_stores + store) * 128 + week
+        idx = np.searchsorted(self.promo_keys, k)
+        ok = idx < len(self.promo_keys)
+        idx = np.clip(idx, 0, max(len(self.promo_keys) - 1, 0))
+        hit = ok & (self.promo_keys[idx] == k)
+        if hit.any():
+            out[hit, 0] = self.promo_disp[idx[hit]]
+            out[hit, 1] = self.promo_mail[idx[hit]]
+        return out
+
     def store_dev(self, item, store, week):
         """Store-level log price deviation; 0 where that store-week was not observed."""
         k = (item * self.n_stores + store) * 128 + week
@@ -273,7 +302,8 @@ class NestedModel(nn.Module):
                  use_breadth=True, use_context=True, ctx_agg="mean",
                  learn_ctx_scale=False, use_cat_context=False,
                  use_cat_pair=False, untie_rho=False, prefix_context=False,
-                 neg_in_cat=0.0, item_loss="softmax", use_persist=True):
+                 neg_in_cat=0.0, item_loss="softmax", use_persist=True,
+                 use_promo=False):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -354,6 +384,10 @@ class NestedModel(nn.Module):
         # that loyalty matters for coffee and not for tinned tomatoes
         self.w_loyal = nn.Parameter(torch.zeros(J)) if use_persist else None
         self.w_freq = nn.Parameter(torch.zeros(J)) if use_persist else None
+        # per-product loadings on (display, mailer).  Per product because an end cap
+        # matters for crisps and not for tinned tomatoes.
+        self.use_promo = use_promo
+        self.w_promo = nn.Parameter(torch.zeros(J, 2)) if use_promo else None
         self.mu = emb(J, Kt, 0.02); self.delta = emb(n_weeks, Kt, 0.02)
         # store x item affinity: format and assortment differ, and a low-rank term
         # keeps it to 115*Ks + J*Ks parameters instead of 115*5455
@@ -402,7 +436,7 @@ class NestedModel(nn.Module):
         w = 0.5 * (self.cat_pair + self.cat_pair.T)
         return w - torch.diag_embed(torch.diagonal(w))
 
-    def item_utility(self, users, items, ctx, dlogp, state, weeks, stores):
+    def item_utility(self, users, items, ctx, dlogp, state, weeks, stores, promo=None):
         s = self.lam[items]
         a = self.alpha[items]
         s = s + torch.einsum("bk,bmk->bm", self.theta[users], a)
@@ -416,6 +450,8 @@ class NestedModel(nn.Module):
         if self.w_loyal is not None:
             s = s + (self.w_loyal[items] * self.d.loyal[users.unsqueeze(1), items]
                      + self.w_freq[items] * self.d.freq[users.unsqueeze(1), items])
+        if self.w_promo is not None and promo is not None:
+            s = s + (self.w_promo[items] * promo).sum(-1)
         s = s + (self.mu[items] * self.delta[weeks].unsqueeze(1)).sum(-1)
         if self.store_vec is not None:
             s = s + (self.item_store[items] * self.store_vec[stores].unsqueeze(1)).sum(-1)
@@ -439,6 +475,10 @@ class NestedModel(nn.Module):
         if self.w_loyal is not None:
             s = s + (self.w_loyal[it] * self.d.loyal[us, it]
                      + self.w_freq[it] * self.d.freq[us, it])
+        if self.w_promo is not None and rw is not None:
+            pm = torch.as_tensor(self.d.promo(np.asarray(items), np.asarray(stores),
+                                              np.asarray(rw)), device=device)
+            s = s + (self.w_promo[it] * pm).sum(-1)
         s = s + (self.mu[it] * self.delta[torch.as_tensor(weeks, device=device)]).sum(-1)
         if self.store_vec is not None:
             s = s + (self.item_store[it]
@@ -467,7 +507,7 @@ class NestedModel(nn.Module):
 
     def l2_repr(self):
         ps = [self.alpha, self.theta, self.eta, self.mu, self.delta,
-              self.store_vec, self.item_store, self.w_loyal, self.w_freq]
+              self.store_vec, self.item_store, self.w_loyal, self.w_freq, self.w_promo]
         if self.use_quantity:
             ps += [self.q_state]
         return sum((p ** 2).sum() for p in ps if p is not None)
@@ -583,7 +623,11 @@ def make_batch(d, model, split, bidx, rng, device):
     tgt = torch.as_tensor(target, device=device)
     avail[ar, tgt] = True                      # the chosen product is always admissible
 
+    pm = torch.as_tensor(
+        d.promo(cand.ravel(), store_r.ravel(), rw.ravel()).reshape(B, M, 2), device=device)
+
     return dict(
+        promo=pm,
         user=torch.as_tensor(user, device=device), cand=ci, ctx=ctx, dlogp=dlogp,
         state=torch.as_tensor(st, device=device),
         week=torch.as_tensor(week, device=device),
@@ -811,10 +855,13 @@ def incidence_batch(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
     # the incidence channel of the elasticity decomposition, which is why removing it
     # barely moves anything outside item ranking (NESTED_MODEL.md 8.1).
     ctx = torch.zeros(P, model.K, device=device)
+    pm_i = torch.as_tensor(
+        d.promo(blk_np.ravel(), store_r.ravel(), rw_r.ravel()).reshape(P, Mx, 2),
+        device=device)
     u = model.item_utility(torch.as_tensor(user, device=device), blk, ctx, dlogp,
                            torch.as_tensor(st, device=device),
                            torch.as_tensor(week, device=device),
-                           torch.as_tensor(store, device=device))
+                           torch.as_tensor(store, device=device), pm_i)
     any_stocked = msk.sum(1) > 0
     iv = torch.logsumexp(u.masked_fill(msk == 0, -1e9), dim=1) + iv_scale
     # A category the store stocks nothing from has IV = -1e9, which would dominate the
@@ -907,11 +954,14 @@ def uniform_iv(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
             dlogp = dlogp + d.store_dev(blk_np.ravel(), store_r.ravel(),
                                         rw_r.ravel()).reshape(len(cats), Mx)
         msk = msk * d.carried[blk, torch.as_tensor(store_r, device=device)].float()
+    pm_u = torch.as_tensor(
+        d.promo(blk_np.ravel(), store_r.ravel(), rw_r.ravel()).reshape(len(cats), Mx, 2),
+        device=device)
     u = model.item_utility(torch.as_tensor(user, device=device), blk,
                            torch.zeros(len(cats), model.K, device=device), dlogp,
                            torch.as_tensor(st, device=device),
                            torch.as_tensor(week, device=device),
-                           torch.as_tensor(store, device=device))
+                           torch.as_tensor(store, device=device), pm_u)
     ok = msk.sum(1) > 0
     iv = torch.logsumexp(u.masked_fill(msk == 0, -1e9), dim=1) + iv_scale
     iv = torch.where(ok, iv, torch.zeros_like(iv))
@@ -921,7 +971,7 @@ def uniform_iv(d, model, split, bidx, n_cat, rng, device, iv_cap=32):
 def losses(model, bt, ib, iv_center):
     out = {}
     u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
-                           bt["state"], bt["week"], bt["store"])
+                           bt["state"], bt["week"], bt["store"], bt.get("promo"))
     u = u.masked_fill(~bt["avail"], -1e9)
     # Eq. 20 of the spec: the pseudo-likelihood is a sum of exact one-position
     # conditionals, each a softmax over that position's admissible products.  The target
@@ -1030,7 +1080,7 @@ def evaluate(model, d, split, rng, device, iv_center, max_baskets=3000, iv_cap=3
         b_ = idx[a_:a_ + 256]
         bt = make_batch(d, model, split, b_, rng, device)
         u = model.item_utility(bt["user"], bt["cand"], bt["ctx"], bt["dlogp"],
-                               bt["state"], bt["week"], bt["store"])
+                               bt["state"], bt["week"], bt["store"], bt.get("promo"))
         u = u.masked_fill(~bt["avail"], -1e9)
         lp = torch.log_softmax(u, dim=1).gather(1, bt["target"].unsqueeze(1)).squeeze(1)
         s_item += float(lp.sum()); n_i += lp.shape[0]
@@ -1068,7 +1118,8 @@ def main(a):
                         use_cat_pair=a.cat_pair, untie_rho=a.untie_rho,
                         prefix_context=a.prefix_context,
                         neg_in_cat=a.neg_in_cat, item_loss=a.item_loss,
-                        use_persist=not a.no_persist).to(dev)
+                        use_persist=not a.no_persist,
+                        use_promo=a.use_promo).to(dev)
     model.use_logq = not a.no_logq
     model.spec_edges = a.spec_edges
     # A FIXED validation subsample, so the selection score is comparable across
@@ -1228,6 +1279,11 @@ if __name__ == "__main__":
     p.add_argument("--l2", type=float, default=1e-2)
     p.add_argument("--no-persist", action="store_true",
                    help="drop the per-(household, product) persistence term")
+    p.add_argument("--use-promo", action="store_true",
+                   help="condition on display and mailer placement from causal_data.csv "
+                        "(needs pipeline/23_promo_data.py).  Promotion is what actually "
+                        "moves price here, so this is the control that says how much of "
+                        "the price coefficient was promotion timing")
     p.add_argument("--spec-edges", action="store_true",
                    help="obey Appendix D of the specification: drop (store, category) "
                         "pairs with nothing stocked from l_inc (9.46%% of sampled pairs, "
