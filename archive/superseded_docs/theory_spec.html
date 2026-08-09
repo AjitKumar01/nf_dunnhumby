@@ -1,4 +1,4 @@
-<title>Nested Basket Model — Specification</title>
+<title>SUPERSEDED — Nested Basket Model, first specification draft</title>
 <style>
   :root{
     --paper:#fafbfc; --ink:#12171d; --muted:#5c6773; --rule:#dde3e9;
@@ -7,9 +7,11 @@
     --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     --math:"Cambria Math","STIX Two Math","Latin Modern Math","Times New Roman",Times,serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --stale:#8a5a1a; --staleband:#faf6ef;
   }
   @media (prefers-color-scheme:dark){
-    :root{--paper:#0e1216; --ink:#e6ecf2; --muted:#93a1b0; --rule:#232c35;
+    :root{--stale:#d0a15c; --staleband:#1a1610;
+          --paper:#0e1216; --ink:#e6ecf2; --muted:#93a1b0; --rule:#232c35;
           --accent:#6ba8d8; --key:#58bfa0; --band:#151b22; --keyband:#111a18;}
   }
   :root[data-theme="dark"]{--paper:#0e1216; --ink:#e6ecf2; --muted:#93a1b0; --rule:#232c35;
@@ -91,6 +93,27 @@
 </style>
 
 <div class="wrap">
+
+<div style="border-left:4px solid var(--stale); background:var(--staleband);
+     padding:1rem 0 1rem 1.25rem; margin:0 0 1.5rem; display:flex;
+     flex-direction:column; gap:.6rem; max-width:66ch">
+  <p style="font-size:.7rem; letter-spacing:.14em; text-transform:uppercase;
+     font-weight:700; color:var(--stale); margin:0">Superseded — kept for provenance</p>
+  <p style="margin:0"><strong>This is the first specification draft and it is wrong in at
+  least one load-bearing place.</strong> It appeals to Hammersley–Clifford to establish
+  that the single-position conditionals determine a unique joint. That argument does not
+  apply here: Hammersley–Clifford needs the support to be a product of coordinate supports,
+  and 𝒮(𝒦) is not — it forbids repeats and fixes category counts. The current specification
+  proves the same result by Brook's telescoping argument over swap-connectedness, which
+  needs no positivity condition.</p>
+  <p style="margin:0">It also predates the persistence terms, the habit loading, the third
+  penalty block, the truncated breadth, the n ≥ 1 conditioning, and the removal of negative
+  sampling. Every number and every equation here should be read as historical.</p>
+  <p style="margin:0"><strong>The current specification is
+  <code>paper/model_spec.html</code></strong>, and the results that accompany it are in
+  <code>paper/experiments.html</code>.</p>
+</div>
+
 
   <p class="eyebrow">Specification</p>
   <h1>The nested basket model</h1>

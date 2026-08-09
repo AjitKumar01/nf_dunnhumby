@@ -75,6 +75,7 @@ anything runs.
 | `flat_basket/` | stage 23's flat basket model and its evaluation, superseded by `model/27` |
 | `superseded_eval/` | EDA and evaluation stages replaced by `eval/` — sampled-metric benchmarks, context ablations, the earlier exact-likelihood check |
 | `runners/` | old shell drivers |
+| `superseded_docs/` | `theory_spec.html`, the first specification draft — its uniqueness argument appeals to Hammersley–Clifford, which does not apply on this support; kept for provenance and clearly banner-marked |
 
 `normalizing_flow/04_extras.py` is the one archived script worth knowing about: it is the
 only code that reads dunnhumby's `causal_data.csv` (display and mailer placement per
