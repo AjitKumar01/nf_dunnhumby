@@ -2,7 +2,12 @@
 [27]       units>1 on 22.3% of rows carrying 42.6% of units; assortment 50.9% of the item x store grid
 [27]   PCD on: 192 persistent chains, 2 sweeps/iter, weight 0.05
 [27] model pcd_lo: K=64 nest=True quantity=True context=True store=True avail_only=False -> 870,580 parameters
-[27]   froze IV reference at iteration 500: mean 0.309, 188 of 188 categories observed
-[27]   it  1000  item -2.7219  top1 0.279  qNLL 0.6855  cNLL 0.1181  bNLL 0.6251  kappa 0.873  breadth 1.499  price +0.135 *
-[27]   it  2000  item -2.6133  top1 0.311  qNLL 0.6571  cNLL 0.1146  bNLL 0.6054  kappa 0.871  breadth 1.435  price +0.444 *
-[27]   it  3000  item -2.5763  top1 0.322  qNLL 0.6727  cNLL 0.1222  bNLL 0.6003  kappa 0.869  breadth 1.412  price +0.581 *
+[27]   froze IV reference at iteration 500: mean 0.313, 188 of 188 categories observed
+[27]   it  1000  item -2.7235  top1 0.277  qNLL 0.6841  cNLL 0.1177  bNLL 0.6235  kappa 0.874  breadth 1.503  price +0.130 *
+[27]   it  2000  item -2.6170  top1 0.309  qNLL 0.6580  cNLL 0.1139  bNLL 0.6081  kappa 0.873  breadth 1.436  price +0.455 *
+[27]   it  3000  item -2.5787  top1 0.319  qNLL 0.6732  cNLL 0.1221  bNLL 0.5973  kappa 0.871  breadth 1.412  price +0.597 *
+[27]   it  4000  item -2.5721  top1 0.320  qNLL 0.6784  cNLL 0.1161  bNLL 0.6013  kappa 0.870  breadth 1.405  price +0.651 *
+[27]   it  5000  item -2.5860  top1 0.317  qNLL 0.6670  cNLL 0.1157  bNLL 0.5776  kappa 0.869  breadth 1.400  price +0.674 *
+[27]   it  6000  item -2.5746  top1 0.320  qNLL 0.6572  cNLL 0.1192  bNLL 0.5637  kappa 0.869  breadth 1.399  price +0.681 *
+[27] best at 6000; TEST item -2.6108 top1 0.313 qNLL 0.6603 cNLL 0.1213 bNLL 0.5692
+[27] saved pcd_lo_nested.pt
