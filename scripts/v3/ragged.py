@@ -294,6 +294,59 @@ class RaggedModel(torch.nn.Module):
         ll = self.energy(line_item, line_trip, line_cat, ix.B, line_ctx) - lz1
         return (ll, ess) if return_ess else ll
 
+    def lambda_max(self, ix):
+        """Top eigenvalue of Lambda = sum_j pi_j(1-pi_j) phi_j phi_j' at the mode.
+
+        Section 14 makes lambda_max < 1 the condition under which the mode is unique, the
+        fixed-point map contracts and the Laplace proposal is sound.  Capping ||phi|| bounds
+        it only loosely, so the quantity itself is measured.  pi_j = d log f / d b_j comes
+        from autograd, which is exact rather than an approximation of the inclusion
+        probability."""
+        zh = torch.zeros(ix.B, 1, self.Kz, dtype=self.lam.dtype, device=self.lam.device)
+        for _ in range(8):
+            zz = zh.detach().requires_grad_(True)
+            with torch.enable_grad():
+                zh = torch.autograd.grad(log_f_ragged(self, zz, ix, True).sum(), zz)[0]
+        b0 = self.b_flat(ix).detach().requires_grad_(True)
+        old, self.ctx = self.ctx, None
+        lam0 = self.lam
+        try:
+            with torch.enable_grad():
+                # re-express log f as a function of the slot values directly
+                phi_i = self.phi[ix.item].detach()
+                bt = b0 - 0.5 * (phi_i ** 2).sum(-1)
+                proj = (zh.detach()[ix.item_trip] * phi_i.unsqueeze(1)).sum(-1)
+                logw = (bt.unsqueeze(1) + proj).transpose(0, 1)
+                M = seg_max(logw, ix.item_trip, ix.B)
+                w = torch.exp(logw - M.index_select(-1, ix.item_trip))
+                e = esp_newton(w, ix.row_of, ix.n_rows, self.R, ix.row_size)
+                r = torch.arange(self.R + 1, dtype=w.dtype)
+                a_ = torch.exp(-self.rho_c[ix.row_cat].detach().unsqueeze(-1)
+                               * r * (r - 1) / 2.0)
+                G = a_.unsqueeze(0) * e
+                Gp = torch.zeros(1, ix.B * ix.Cpad, self.R + 1, dtype=w.dtype)
+                Gp[:, :, 0] = 1.0
+                Gp = Gp.index_copy(1, ix.flat_slot, G).view(1, ix.B, ix.Cpad, self.R + 1)
+                A = Gp[:, :, 0, :]
+                for c in range(1, ix.Cpad):
+                    A = poly_mul_trunc(A, Gp[:, :, c, :], self.nmax)
+                n_ax = torch.arange(A.shape[-1], dtype=w.dtype)
+                lg = (torch.log(A.clamp_min(1e-300))
+                      - self.rho_0().detach()[: A.shape[-1]] + n_ax * M.unsqueeze(-1))
+                lf = torch.logsumexp(lg[..., 1:], dim=-1).sum()
+            pi = torch.autograd.grad(lf, b0)[0].clamp(0, 1)
+        finally:
+            self.ctx = old
+        v = (pi * (1 - pi)).detach()
+        out = 0.0
+        with torch.no_grad():
+            for b in range(ix.B):
+                msk = ix.item_trip == b
+                P = self.phi[ix.item[msk]]
+                L = (P * v[msk].unsqueeze(-1)).T @ P
+                out = max(out, float(torch.linalg.eigvalsh(L).max()))
+        return out
+
     @torch.no_grad()
     def project(self, phi_max):
         """Hard cap on ||phi_j||.  The diverged run reached a mean norm of 2.94 from an

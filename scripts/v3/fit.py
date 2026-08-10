@@ -70,8 +70,10 @@ class Batcher:
         week = torch.as_tensor(D["trip_week"][trips], dtype=torch.long)
         st_i, dy_i, wk_i = store[ix.item_trip], day[ix.item_trip], week[ix.item_trip]
         dlp, disp, mail = self.F.gather(ix.item, st_i, dy_i, wk_i)
+        # week-of-year, per the spec: (WEEK_NO - 1) mod 52.  Clamping instead, as an earlier
+        # version did, collapsed 54.6% of trips onto one seasonal parameter.
         ctx = dict(dlp=dlp.double(), disp=disp.double(), mail=mail.double(),
-                   week=wk_i.clamp(0, 52), store=st_i)
+                   week=(wk_i - 1) % 52, store=st_i)
         li, lt, lc = [], [], []
         for bi, t in enumerate(trips):
             a, b = int(self.lptr[t]), int(self.lptr[t + 1])
@@ -84,7 +86,7 @@ class Batcher:
         # each product identically
         dlp_l, disp_l, mail_l = self.F.gather(LI, store[LT], day[LT], week[LT])
         lctx = dict(dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
-                    week=week[LT].clamp(0, 52), store=store[LT])
+                    week=(week[LT] - 1) % 52, store=store[LT])
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
         return (ix, ctx, lctx, house,
                 LI, LT, torch.as_tensor(np.concatenate(lc), dtype=torch.long))
@@ -114,6 +116,24 @@ def main(a):
 
     tr = np.flatnonzero(D["trip_split"] == 0)
     va = np.flatnonzero(D["trip_split"] == 1)
+
+    def in_support(idx):
+        """A basket the normaliser does not sum over must not be scored by the energy.
+        Clamping n to n_max, as an earlier version did, silently relabels such a basket as
+        in-support; dropping it is the honest treatment and the count is reported."""
+        lp, lc_ = D["line_ptr"], D["line_cat"]
+        keep = np.ones(len(idx), bool)
+        for i, t in enumerate(idx):
+            lo, hi = int(lp[t]), int(lp[t + 1])
+            if hi - lo > a.nmax or (hi > lo and np.bincount(lc_[lo:hi]).max() > a.R):
+                keep[i] = False
+        return keep
+
+    kt, kv = in_support(tr), in_support(va)
+    log(f"support (n_max={a.nmax}, R={a.R}): dropping {int((~kt).sum()):,} of {len(tr):,} "
+        f"training ({(~kt).mean():.2%}) and {int((~kv).sum()):,} of {len(va):,} "
+        f"validation ({(~kv).mean():.2%}) trips that lie outside it")
+    tr, va = tr[kt], va[kv]
     log(f"{len(tr):,} training trips, {len(va):,} validation")
 
     m = RaggedModel(J=J, N=N, C=C, K=a.K, Kz=a.Kz, nmax=a.nmax, R=a.R, seed=a.seed,
@@ -121,7 +141,7 @@ def main(a):
     npar = sum(p.numel() for p in m.parameters())
     log(f"parameters: {npar:,}  (K={a.K}, Kz={a.Kz}, Kp={a.Kp}, nmax={a.nmax}, R={a.R})")
 
-    opt = torch.optim.Adam(m.parameters(), lr=a.lr)
+    opt = torch.optim.Adam(m.parameters(), lr=a.lr, weight_decay=a.wd)
     rng = np.random.default_rng(a.seed)
     gen = torch.Generator().manual_seed(a.seed)
 
@@ -172,11 +192,12 @@ def main(a):
                 return
         if it % a.eval_every == 0:
             vb, vl = evaluate(m, B, va[:a.n_val], a.draws * 2, gen)
+            lam_max = m.lambda_max(ix)
             log(f"  it {it:5d}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
                 f"val/basket {vb:8.3f}  val/line {vl:7.4f}  "
                 f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f}  "
-                f"|phi| {float(m.phi.norm(dim=1).mean()):.3f}  skip {n_skip}  "
-                f"{(time.time()-t0)/60:.1f} min")
+                f"|phi| {float(m.phi.norm(dim=1).mean()):.3f}  "
+                f"lam_max {lam_max:.3f}  skip {n_skip}  {(time.time()-t0)/60:.1f} min")
             if vb > 0:
                 log("  ABORT: held-out log-likelihood is positive, which is impossible. "
                     "The objective is being maximised through a defect, not a fit.")
@@ -206,6 +227,7 @@ if __name__ == "__main__":
     p.add_argument("--n-val", type=int, default=768)
     p.add_argument("--probe", type=int, default=25)
     p.add_argument("--probe-only", action="store_true")
+    p.add_argument("--wd", type=float, default=1e-5)
     p.add_argument("--phi-max", type=float, default=0.35)
     p.add_argument("--ess-floor", type=float, default=0.30)
     p.add_argument("--clip", type=float, default=2.0)
