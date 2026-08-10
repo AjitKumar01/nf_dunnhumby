@@ -294,6 +294,67 @@ about measurement.
 
 ---
 
+## 5. κ is robust in sign and spuriously precise in value
+
+§17.1 of the specification says κ̂ is attenuated toward zero by roughly
+`Var(IV)/(Var(IV)+Var(e))` because the inclusive value is estimated from `m = 32` samples
+against categories of up to 225 products, and then says the attenuation "is not currently
+measured". κ is the interpretive centrepiece and the paper's claim is that **no category
+exceeds 1**, so if the attenuation were 25% that sentence would invert.
+
+### The prediction, made before the refits
+
+Measuring the estimator directly on 394 (trip, category) cells: within-category
+Var(IV) = 0.293, and Var(e) = 0.0945 / 0.0475 / 0.0224 at m = 32 / 64 / 128 — halving with
+m exactly as the spec predicts, with the Jensen bias doing the same (−0.043 / −0.020 /
+−0.014). The classical formula then gives attenuation 0.756 / 0.861 / 0.929, implying a
+true κ ≈ 1.15 and predicting κ̂ ≈ 0.99 at m = 64 and ≈ 1.07 at m = 128.
+
+### What the refits actually gave
+
+| | m | κ median | % categories > 1 | item |
+|---|---|---|---|---|
+| `ps_nested` | 32 | 0.8723 | 0.0% | −2.5118 |
+| `iv64` | 64 | 0.8693 | 0.0% | −2.4992 |
+| `iv128` | 128 | **0.8276** | **0.0%** | −2.4932 |
+
+Predicted 0.872 → 0.99 → 1.07; observed 0.872 → 0.869 → **0.828**. The prediction is
+refuted with the wrong sign — a 4× noise reduction moves κ *down* by 0.045.
+
+The classical result does not transfer, and the reason was flagged before the runs: `e` is
+not classical measurement error. It is correlated with the true IV, because the sampling
+error of a log-sum-exp depends on how concentrated that category's `b` values are, and it
+is biased rather than mean-zero. Non-classical error can bias a coefficient in either
+direction, and here it goes the other way.
+
+### Two conclusions, one reassuring and one not
+
+**The qualitative claim is robust.** κ < 1 at every m tested, with **0.0% of categories
+above 1** in all three fits. §17.1's concern is overstated: the attenuation does not
+threaten the conclusion the paper draws from κ.
+
+**The reported precision is spurious.** The experiments page states κ's refit sd as
+**0.0011** and calls it "extraordinarily stable across fits, which matters because it is
+the interpretive centrepiece". That stability is real across *seeds* and meaningless as a
+measure of how well κ is pinned: changing a nuisance constant nobody varies — the number of
+products sampled for the inclusive value — moves it by **0.045**, forty times the quoted sd.
+Any interval on κ built from seed variation understates its true uncertainty by that factor.
+
+Per-category κ is worse: the correlation between κ_c at m = 32 and at m = 128 is **+0.73**,
+with a maximum absolute difference of **0.157**. The paper never quotes a per-category κ,
+and on this evidence it should not start.
+
+### The question this opens
+
+If a 4× reduction in IV noise leaves κ essentially where it was, κ is not being identified
+by the IV variation §18 says identifies it. The identification story routes κ entirely
+through `κ_c(IV − IV̄_c)`; the fit appears to be pinning it substantially through `c0_c` and
+the frozen reference instead — the same pair that §2 showed absorbs a 9.5% base-rate shift
+with no change in predictions. That is now the open question about κ, and it is a different
+and more interesting one than the attenuation was.
+
+---
+
 ## Reproducing
 
 ```bash
