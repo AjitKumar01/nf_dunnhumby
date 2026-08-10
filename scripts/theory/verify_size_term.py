@@ -113,6 +113,46 @@ def Z_quadrature(T, n_node):
 # ----------------------------------------------------------------------- sampling
 
 
+def inclusion_given_z(T, z):
+    """P(j in S | z) under the COUPLED law, i.e. with the size term active.
+
+    With rho_0 = 0 this is d log G_c / d log w_j, a per-category quantity.  With rho_0
+    active the categories are no longer conditionally independent given z, and the count
+    law of category c is its LEAVE-ONE-OUT marginal:
+
+        P(n_c = r | z)  proportional to  G_c[r] * sum_m exp(-rho_0(r+m)) B^(-c)[m]
+
+    where B^(-c) convolves every category except c.  Prefix and suffix products give all
+    C of those in two passes.
+    """
+    w, polys = cat_polys(T, z)
+    nmax, C = T["J"], len(polys)
+    pre = [np.array([1.0])] * (C + 1)
+    suf = [np.array([1.0])] * (C + 1)
+    for c in range(C):
+        pre[c + 1] = np.convolve(pre[c], polys[c])[:nmax + 1]
+    for c in range(C - 1, -1, -1):
+        suf[c] = np.convolve(polys[c], suf[c + 1])[:nmax + 1]
+    pi = np.zeros(T["J"])
+    e0 = np.exp(-T["rho0"])
+    for c, idx in enumerate(T["cats"]):
+        B = np.convolve(pre[c], suf[c + 1])[:nmax + 1]          # everything except c
+        B = np.pad(B, (0, nmax + 1 - len(B)))                   # degrees above it are 0
+        N = len(idx)
+        pr = np.zeros(N + 1)
+        for r in range(min(N, nmax) + 1):
+            m = np.arange(0, nmax + 1 - r)
+            pr[r] = polys[c][r] * float(e0[r + m] @ B[m]) if len(m) else 0.0
+        pr = pr / pr.sum()
+        wc = w[idx]
+        e = esp(wc, N)
+        for pos in range(N):
+            e_m = esp(np.delete(wc, pos), N - 1)
+            pi[idx[pos]] = sum(pr[r] * wc[pos] * e_m[r - 1] / e[r]
+                               for r in range(1, N + 1) if e[r] > 0)
+    return pi
+
+
 def sample_exactly_r(w, r, rng):
     N = len(w)
     if r == 0:
@@ -196,6 +236,27 @@ def run_case(name, T, n_node, rng, n_draws):
         law_f += post[i] * q / q.sum()
     log(f"    size law P(n=k): max abs err {np.abs(law_f - law_bf).max():.3e}"
         f"   mean size {float(law_bf @ np.arange(T['J'] + 1)):.4f}")
+
+    # inclusion probabilities under the coupled law, two ways
+    pi_bf = (p[:, None] * masks).sum(0)
+    pi_f = np.zeros(T["J"])
+    for i, z in enumerate(gz):
+        pi_f += post[i] * inclusion_given_z(T, z)
+    # and a finite-difference check that it really is d log f / d log w_j at fixed z
+    z0 = gz[int(np.argmax(post))]
+    h, fd = 1e-5, np.zeros(T["J"])
+    for j in range(T["J"]):
+        U = dict(T)
+        U["b"] = T["b"].copy()
+        U["b"][j] += h
+        f1 = integrand(U, z0)
+        U["b"][j] -= 2 * h
+        f0 = integrand(U, z0)
+        fd[j] = (np.log(f1) - np.log(f0)) / (2 * h)
+    log(f"    inclusion P(j in S): max abs err vs enumeration "
+        f"{np.abs(pi_f - pi_bf).max():.3e}   (mean level {pi_bf.mean():.4f})")
+    log(f"    d log f / d log w_j at the modal z: max abs err "
+        f"{np.abs(fd - inclusion_given_z(T, z0)).max():.3e}")
 
     key = {tuple(np.flatnonzero(m)): k for k, m in enumerate(masks)}
     emp = np.zeros(len(masks))

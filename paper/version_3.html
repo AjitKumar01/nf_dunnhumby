@@ -800,6 +800,58 @@ discretised on the quadrature grid, not by SIR from a Laplace proposal. Step 1 i
 that can fail and it is the one not yet checked.</p>
 </div>
 
+<h2><span class="num">9.2</span>The nesting, written out</h2>
+
+<p>Theorem 1 is usually read as a computational device. It is also the statement that the
+model <em>is</em> a nested model, and the nesting is worth writing explicitly because it is
+derived rather than assumed. Conditional on <span class="v">z</span>, Eq. 9 factorises
+exactly into three levels:</p>
+
+<div class="eq hero key"><div class="body">
+P( S | z ) = P( n | z ) &nbsp;·&nbsp; P( (r<sub>c</sub>) | n, z )
+&nbsp;·&nbsp; ∏<sub>c</sub> P( S<sub>c</sub> | r<sub>c</sub>, z )
+</div><div class="tag">(18b)</div></div>
+
+<div class="scroll"><table>
+<thead><tr><th>level</th><th>what is chosen</th><th>law</th><th>its inclusive value</th></tr></thead>
+<tbody>
+<tr><td><strong>1 — size</strong></td><td>how many lines in total</td><td><span class="v">P(n | z) = e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z) / f(z)</span></td><td><span class="v">log f(z)</span></td></tr>
+<tr><td><strong>2 — allocation</strong></td><td>how those <span class="v">n</span> lines split across categories</td><td><span class="v">P((r<sub>c</sub>) | n, z) = ∏<sub>c</sub> a<sub>r<sub>c</sub></sub>e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>) / A<sub>n</sub>(z)</span></td><td><span class="v">log A<sub>n</sub>(z)</span></td></tr>
+<tr><td><strong>3 — selection</strong></td><td>which <span class="v">r<sub>c</sub></span> products from category <span class="v">c</span></td><td><span class="v">P(S<sub>c</sub> | r<sub>c</sub>, z) = ∏<sub>j∈S<sub>c</sub></sub>w<sub>j</sub> / e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span></td><td><span class="v">log e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span></td></tr>
+</tbody></table></div>
+
+<p>with <span class="v">a<sub>r</sub> = e<sup>−ρ<sub>c</sub>r(r−1)/2</sup></span>. This is
+exactly the shape of a nested choice model — an upper level over totals, a middle level
+allocating across nests, a lower level choosing within a nest, each linked upward by a
+log-sum — and it is what Corollary 3's sampler walks down, in that order.</p>
+
+<div class="flag">
+<p class="label">Three differences from a nested logit, and they are the point</p>
+<ul>
+  <li><strong>No dissimilarity parameters.</strong> A nested logit attaches a free
+  coefficient to each inclusive value. Here the coefficients are all 1, because the three
+  levels are a factorisation of one joint rather than three models joined by hand. §16 shows
+  what that costs: the category-entry response becomes an identity, not a fitted number.</li>
+  <li><strong>The nests are not a partition of a single choice.</strong> A basket takes
+  several products from several categories, so level 3 is a subset choice
+  (<span class="v">e<sub>r</sub></span>, the elementary symmetric polynomial) rather than a
+  softmax. Setting <span class="v">R</span> = 1 collapses
+  <span class="v">e<sub>1</sub></span> to <span class="v">∑<sub>j</sub>w<sub>j</sub></span>
+  and recovers the familiar log-sum-exp.</li>
+  <li><strong>The correlation lives in <span class="v">z</span>, and it is integrated out.</strong>
+  A nested logit gets within-nest correlation from correlated errors. Here it comes from
+  <span class="v">ρ<sub>c</sub></span> at level 2 and from the shared
+  <span class="v">z</span> across all levels, and Eq. 12 integrates
+  <span class="v">z</span> exactly rather than approximating the resulting dependence.</li>
+</ul>
+</div>
+
+<p>Everything upstream of Eq. 18b is a single unconditional statement:
+<span class="v">P(S) = 𝔼<sub>z</sub>[P(S|z)f(z)]/Z</span>. The hierarchy exists conditionally
+on <span class="v">z</span> and is integrated away in the marginal, which is why the model has
+a nested <em>structure</em> without a nested <em>factorisation</em> of the kind §16
+discusses.</p>
+
 <h2><span class="num">10</span>Units</h2>
 
 <p>Eq. 9 gives the set. Units are a separate factor, and version 3 says exactly what that
@@ -1385,6 +1437,78 @@ restriction is real, and §13 states exactly what it costs. This is a judgement,
 theorem, and it is falsifiable: fit both, compare held-out set log-likelihood computed the
 same way for each, and compare generated basket-size distributions. That comparison has not
 been run.</p>
+
+<h2><span class="num">16</span>Where the nesting went</h2>
+
+<p>The category level is not abandoned — it is the organising structure of Eqs. 8 and 11, it
+carries a free parameter <span class="v">ρ<sub>c</sub></span>, and the within-category count is
+enumerated exactly rather than approximated. What is abandoned is the <em>nested
+factorisation</em>: a separate law for which categories are entered, linked to product values
+by an estimated coefficient.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>nested-model element</th><th>in version 3</th></tr></thead>
+<tbody>
+<tr><td>categories as a level</td><td><strong>kept</strong> — <span class="v">ρ<sub>c</sub></span>, the per-category polynomial <span class="v">G<sub>c</sub></span>, the count enumeration</td></tr>
+<tr><td>within-category correlation</td><td><strong>kept</strong>, produced by an explicit interaction <span class="v">ρ<sub>c</sub></span> rather than by correlated Gumbel shocks</td></tr>
+<tr><td>inclusive value</td><td><strong>kept as a derived quantity</strong>: <span class="v">log ∑<sub>j∈𝒞(c)</sub>w<sub>j</sub>(z)</span> appears inside <span class="v">G<sub>c</sub></span>. It is not estimated and has no frozen reference</td></tr>
+<tr><td>"at most one product per category"</td><td><strong>a special case</strong> — cap <span class="v">R</span> = 1, or let <span class="v">ρ<sub>c</sub> → ∞</span></td></tr>
+<tr><td>separate <span class="v">P(𝒦)</span>: cloglog entry × truncated shifted Poisson breadth</td><td><strong>gone</strong> — both are consequences of <span class="v">E</span></td></tr>
+<tr><td>the nesting coefficient <span class="v">κ<sub>c</sub></span></td><td><strong>gone, and replaced by an identity</strong></td></tr>
+</tbody></table></div>
+
+<div class="lemma">
+<p class="label">Proposition 5 — the category-entry response is not a free parameter</p>
+<p>Conditional on <span class="v">z</span>, shift every product value in category
+<span class="v">c</span> by <span class="v">δ</span>. Then</p>
+<div class="eq key"><div class="body">
+<span class="frac"><span>d log P( n<sub>c</sub> ≥ 1 )</span><span>d δ</span></span>
+= 𝔼[ r | r ≥ 1 ] − 𝔼[ r ]
+= 𝔼[ r | r ≥ 1 ] · ( 1 − P(n<sub>c</sub> ≥ 1) )
+</div><div class="tag">(36)</div></div>
+<p><em>Proof.</em> The category's count law is
+<span class="v">P(r) ∝ a<sub>r</sub>e<sub>r</sub>(w)</span> with
+<span class="v">a<sub>r</sub> = e<sup>−ρ<sub>c</sub>C(r,2)</sup></span>, and
+<span class="v">e<sub>r</sub></span> is homogeneous of degree <span class="v">r</span>, so a
+shift <span class="v">δ</span> multiplies the weight at <span class="v">r</span> by
+<span class="v">e<sup>rδ</sup></span>. Differentiating
+<span class="v">log ∑<sub>r≥1</sub> − log ∑<sub>r≥0</sub></span> gives the two means. ∎</p>
+<p><em>Verified</em> against direct enumeration on five configurations spanning
+<span class="v">N</span> = 6 to 20 and both signs of <span class="v">ρ<sub>c</sub></span>:
+relative error 1 × 10<sup>−11</sup> to 4 × 10<sup>−11</sup>, at the finite-difference floor.</p>
+</div>
+
+<div class="flag neg">
+<p class="label">This is the sharpest bet the architecture makes, and it conflicts with the fitted predecessor</p>
+<p>Both quantities in Eq. 36 are <strong>measured, not fitted</strong>:
+<span class="v">𝔼[r | r ≥ 1]</span> = 1.2844 and the per-category entry rate is
+6.075/188 = 0.0323. So version 3 <strong>pins the category-entry response at 1.243</strong>,
+with no parameter free to move it — <span class="v">ρ<sub>c</sub></span> and
+<span class="v">ρ<sub>0</sub></span> can only move it by moving those two observable moments.</p>
+<p>Version 2 <em>estimated</em> the same quantity as
+<span class="v">κ̂<sub>c</sub> · G(η)</span> = 0.8723 × 0.983 = <strong>0.858</strong>, and
+found <span class="v">κ &lt; 1</span> robustly — 0% of categories above 1 at
+<span class="v">m</span> = 32, 64 and 128 alike.</p>
+<p><strong>1.243 against 0.858 is a 45% disagreement on the same quantity, and version 3
+cannot absorb it.</strong> That is the price of removing a free parameter: the model is more
+falsifiable and more fragile. Two readings, and the evidence does not yet choose between
+them.</p>
+<ul>
+  <li><em>Version 2 was wrong.</em> Its own §17 records that <span class="v">κ</span> does not
+  respond as its identification story predicts — a fourfold reduction in inclusive-value noise
+  moved it by −0.045 when attenuation theory predicted +0.28 — and that changing a nuisance
+  constant moves it forty times its seed spread. A badly identified parameter can absorb
+  misspecification and settle anywhere.</li>
+  <li><em>Version 3 is wrong.</em> Eq. 36 forces the entry response to be governed entirely by
+  how many products a category yields when entered. If category entry genuinely responds more
+  weakly than that — because a shopper decides on the aisle before the shelf — the architecture
+  has no way to say so.</li>
+</ul>
+<p>The test is held-out fit, and it is decisive in a way neither argument is: fit version 3,
+and compare its category-incidence likelihood with version 2's on the same held-out weeks. If
+version 3 loses there specifically, Eq. 36 is the reason. This is test 9 in §32 and it should
+be run early, because a failure here is architectural rather than a matter of tuning.</p>
+</div>
 
 <div class="part"><div class="pn">Part III</div><div class="pt">Estimation</div></div>
 
@@ -2064,6 +2188,7 @@ falsifiers run before anything expensive is built.</p>
 <tr><td class="num">5</td><td>Free coupon versus shelf-price coefficients, tested for equality (§23)</td><td>they differ enough that neither disciplines the other</td><td>one fit</td></tr>
 <tr><td class="num">6</td><td>Held-out whole-basket log-likelihood, version 3 against version 2, both computed as exact set probabilities</td><td>version 3 does not win, having removed a stage version 2 needed</td><td>two fits</td></tr>
 <tr><td class="num">7</td><td>Co-occurrence lift and its rank correlation against real, the quantity <span class="v">ρ<sub>0</sub></span> cannot fit</td><td>no improvement on version 2's rank correlation of +0.099</td><td>generation</td></tr>
+<tr><td class="num">9</td><td>Held-out <em>category-incidence</em> likelihood, version 3 against version 2 (§16)</td><td>version 3 loses specifically on incidence — then Eq. 36's forced entry response is refuted and the architecture needs a free damping channel</td><td>two fits</td></tr>
 <tr><td class="num">8</td><td><strong>Run.</strong> Does <span class="v">Q<sub>ic</sub></span> predict the next purchase given its timing? (§5.1)</td><td><strong>Survives, weakly.</strong> β = +0.0097 (t = +8.2) in the forward-buying direction, but only +0.000387 nats held out</td><td>done</td></tr>
 </tbody></table></div>
 
@@ -2199,6 +2324,7 @@ enumeration of the full subset space. The scripts are in
 <tr><td>Dispersion bound <span class="v">Var(n) ≤ Λ<sub>0</sub>/(1−λ<sub>max</sub>)</span></td><td>Prop. 3b</td><td><code>verify_dispersion_bound.py</code></td><td class="num">0 of 12 violated</td></tr>
 <tr><td>Mixture sizing</td><td>§14.3</td><td><code>size_decomposition.py</code></td><td class="num">table in §14.3</td></tr>
 <tr><td>Aligned worst case <strong>with <span class="v">ρ<sub>0</sub></span> active</strong></td><td>§14.5</td><td><code>verify_aligned_worstcase.py</code></td><td class="num">table in §14.5</td></tr>
+<tr><td>Proposition 5, the entry-response identity</td><td>§16</td><td>inline, five configurations</td><td class="num">4 × 10<sup>−11</sup></td></tr>
 <tr><td>Test 8, forward-buying in the real data</td><td>§5.1</td><td><code>test8_forward_buying.py</code></td><td class="num">β = +0.0097, t = +8.2</td></tr>
 <tr><td>Mode, <span class="v">λ<sub>max</sub></span> and ESS <strong>with <span class="v">ρ<sub>0</sub></span> active</strong></td><td>Prop. 3, §18</td><td><code>verify_estimator.py</code></td><td class="num">log Z within 0.005 nats, ESS ≥ 0.955</td></tr>
 <tr><td>The SIR step of Corollary 3, actually run</td><td>Cor. 3</td><td><code>verify_estimator.py</code></td><td class="num">TV at the noise floor, 12 of 12</td></tr>
