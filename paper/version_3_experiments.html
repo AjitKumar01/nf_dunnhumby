@@ -1,0 +1,318 @@
+<title>Version 3 — Experiments</title>
+<style>
+  :root{--paper:#fafbfc;--ink:#12171d;--muted:#5c6773;--rule:#dde3e9;--accent:#1a5276;
+    --key:#1c6b56;--warn:#8a5a1a;--bad:#8b2f3d;--band:#f2f5f8;--keyband:#f1f7f5;
+    --warnband:#faf6ef;--badband:#faf3f4;
+    --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    --math:"Cambria Math","STIX Two Math","Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
+  @media (prefers-color-scheme:dark){:root{--paper:#0e1216;--ink:#e6ecf2;--muted:#93a1b0;
+    --rule:#232c35;--accent:#6ba8d8;--key:#58bfa0;--warn:#d0a15c;--bad:#d98692;
+    --band:#151b22;--keyband:#111a18;--warnband:#1a1610;--badband:#1c1417;}}
+  :root[data-theme="dark"]{--paper:#0e1216;--ink:#e6ecf2;--muted:#93a1b0;--rule:#232c35;
+    --accent:#6ba8d8;--key:#58bfa0;--warn:#d0a15c;--bad:#d98692;--band:#151b22;
+    --keyband:#111a18;--warnband:#1a1610;--badband:#1c1417;}
+  :root[data-theme="light"]{--paper:#fafbfc;--ink:#12171d;--muted:#5c6773;--rule:#dde3e9;
+    --accent:#1a5276;--key:#1c6b56;--warn:#8a5a1a;--bad:#8b2f3d;--band:#f2f5f8;
+    --keyband:#f1f7f5;--warnband:#faf6ef;--badband:#faf3f4;}
+  body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16.5px;
+       line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:52rem;margin:0 auto;padding:3.5rem 1.5rem 7rem;display:flex;
+        flex-direction:column;gap:1rem;}
+  p{margin:0;max-width:66ch;}
+  .lede{font-size:1.06rem;color:var(--muted);max-width:64ch;}
+  .eyebrow{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--accent);font-weight:700;margin:0;}
+  h1{font-size:2rem;line-height:1.18;margin:.3rem 0 0;font-weight:600;
+     letter-spacing:-.012em;max-width:26ch;}
+  .part{margin:2.8rem 0 0;padding:.75rem 0 .75rem 1rem;border-left:4px solid var(--key);
+        background:var(--keyband);display:flex;flex-direction:column;gap:.15rem;}
+  .part .pn{font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;
+            color:var(--key);font-weight:700;}
+  .part .pt{font-size:1.15rem;font-weight:600;}
+  h2{font-size:1.14rem;margin:1.8rem 0 0;font-weight:600;padding-top:.9rem;
+     border-top:1px solid var(--rule);}
+  h2 .num{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:.5rem;}
+  h3{font-size:.98rem;margin:1.15rem 0 0;font-weight:600;}
+  h3 .num{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:.4rem;
+          font-weight:500;}
+  var,.v{font-style:italic;font-family:var(--math);font-size:1.06em;}
+  code{font-family:var(--mono);font-size:.84em;color:var(--accent);background:var(--band);
+       padding:.08em .34em;border-radius:2px;}
+  .flag{border-left:2px solid var(--warn);background:var(--warnband);
+        padding:.7rem 0 .7rem 1rem;display:flex;flex-direction:column;gap:.5rem;}
+  .flag.neg{border-left-color:var(--bad);background:var(--badband);}
+  .flag.good{border-left-color:var(--key);background:var(--keyband);}
+  .flag .label{font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+               font-weight:700;color:var(--warn);margin:0;}
+  .flag.neg .label{color:var(--bad);} .flag.good .label{color:var(--key);}
+  .scroll{overflow-x:auto;margin:.3rem 0;}
+  table{border-collapse:collapse;font-size:.88rem;min-width:100%;
+        font-variant-numeric:tabular-nums;}
+  th,td{text-align:left;padding:.42rem .8rem .42rem 0;border-bottom:1px solid var(--rule);
+        vertical-align:top;}
+  th{font-size:.69rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);
+     font-weight:700;border-bottom:1px solid var(--ink);}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  ol,ul{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.4rem;
+        max-width:66ch;}
+  li::marker{color:var(--accent);}
+  .note{font-size:.88rem;color:var(--muted);max-width:64ch;}
+  strong{font-weight:600;} a{color:var(--accent);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+</style>
+
+<div class="wrap">
+
+<p class="eyebrow">Version 3 · experiments</p>
+<h1>What has been run, and what it establishes</h1>
+
+<p class="lede">The companion to the version-3 specification. Every number here comes from a
+named script in this repository. The model is implemented and validated; it recovers its own
+parameters; two of its design claims are now tested and one of those tests reversed a result
+I had already reported. It has not been fitted to dunnhumby, and this page says exactly what
+stands between here and there.</p>
+
+<h3>Status at a glance</h3>
+
+<div class="scroll"><table>
+<thead><tr><th>claim</th><th>status</th><th>evidence</th></tr></thead>
+<tbody>
+<tr><td>The normaliser is exactly computable</td><td><strong>established</strong></td><td>4 × 10<sup>−15</sup> against enumeration, 9 configurations</td></tr>
+<tr><td>The implementation computes what the paper says</td><td><strong>established</strong></td><td>6 checks against enumeration, §1</td></tr>
+<tr><td>Parameters are recoverable</td><td><strong>established</strong></td><td>φ Gram +0.85, ρ<sub>c</sub> +0.96, §2</td></tr>
+<tr><td>The size potential earns its place</td><td><strong>established, conditionally</strong></td><td>+0.54 nats where dispersion &gt; 1, +0.003 where it is not, §3</td></tr>
+<tr><td>Forward-buying is representable</td><td><strong>yes, weakly</strong></td><td>β = +0.0097, t = +8.2, §4</td></tr>
+<tr><td>ρ<sub>0</sub> prevents the phase transition</td><td><strong>partly — it delays it</strong></td><td>critical loading 0.60 → 0.75, §5</td></tr>
+<tr><td>It beats version 2 on dunnhumby</td><td><strong>untested</strong></td><td>needs the ragged rewrite, §7</td></tr>
+<tr><td>The causal layer identifies anything</td><td><strong>untested</strong></td><td>needs a fit, §7</td></tr>
+</tbody></table></div>
+
+<div class="part"><div class="pn">Part I</div><div class="pt">The estimator works</div></div>
+
+<h2><span class="num">1</span>The implementation, against brute force</h2>
+
+<p><code>scripts/v3/validate.py</code> enumerates all <span class="v">2<sup>J</sup></span>
+subsets of a 9-product catalogue in 3 categories and checks six separate claims. The energy
+is recomputed from the definition in a from-scratch loop rather than from the model's own
+method, so a bug there shows up instead of cancelling.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>check</th><th>what it tests</th><th class="num">residual</th></tr></thead>
+<tbody>
+<tr><td>energy <span class="v">E(S)</span></td><td>the four terms of the energy</td><td class="num">3.6 × 10<sup>−15</sup></td></tr>
+<tr><td><span class="v">P(∅) = 1/Z</span></td><td>the exactness of conditioning on a non-empty basket</td><td class="num">4.0 × 10<sup>−16</sup></td></tr>
+<tr><td><span class="v">log Z</span></td><td>Theorem 1, by importance sampling at the mode</td><td class="num">1.2 × 10<sup>−3</sup> nats, ESS 0.987</td></tr>
+<tr><td>likelihood normalises</td><td>sum over all non-empty subsets of <span class="v">exp(ℓ)</span></td><td class="num">1.00017</td></tr>
+<tr><td>the three-level sampler</td><td>size → allocation → selection</td><td class="num">TV 0.0959 vs floor 0.0938</td></tr>
+<tr><td><span class="v">∂ log Z/∂b<sub>j</sub> = P(j ∈ S)</span></td><td>that the gradient is the model expectation</td><td class="num">2.7 × 10<sup>−3</sup></td></tr>
+</tbody></table></div>
+
+<p>The first two are at double-precision round-off. The other four are limited by Monte Carlo
+draws, not by bias: they tighten as draws rise, and the likelihood's 1.7 × 10<sup>−4</sup>
+excess is exactly the propagated <span class="v">log Z</span> error.</p>
+
+<h2><span class="num">2</span>Parameter recovery</h2>
+
+<p><code>scripts/v3/recover.py</code> generates baskets from known parameters using the exact
+sampler, so any failure to recover belongs to the estimator and not to misspecification.
+48 products in 8 categories, 40 households, <span class="v">K<sub>z</sub></span> = 2,
+2,500 baskets, 400 iterations, 80/20 split.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>parameter</th><th>how scored</th><th class="num">result</th></tr></thead>
+<tbody>
+<tr><td><span class="v">φ</span> (co-purchase)</td><td>correlation of the off-diagonal Gram entries — rotation-invariant, as it must be</td><td class="num">+0.8515</td></tr>
+<tr><td><span class="v">ρ<sub>c</sub></span> (within-category)</td><td>correlation against truth</td><td class="num">+0.9634</td></tr>
+<tr><td><span class="v">ρ<sub>0</sub></span> (size potential)</td><td>correlation against truth</td><td class="num">+0.5713</td></tr>
+<tr><td><span class="v">λ</span> (product intercepts)</td><td>correlation against truth</td><td class="num">+0.9052</td></tr>
+</tbody></table></div>
+
+<p><span class="v">ρ<sub>c</sub></span> recovers nearly perfectly, which is the expected
+result and worth saying why: it is a coefficient on a directly observable count, unlike
+version 2's <span class="v">κ</span>, which was identified only through a noisy estimated
+inclusive value and was measured there to move the wrong way when its own identification
+story was tested. <span class="v">ρ<sub>0</sub></span> recovers worst, at +0.57 — the size
+potential has the most parameters and the least data per parameter.</p>
+
+<div class="part"><div class="pn">Part II</div><div class="pt">The design claims, tested</div></div>
+
+<h2><span class="num">3</span>The size potential, and a result that reversed</h2>
+
+<p>Section 14 of the specification argues that basket-size dispersion must be carried by a
+free size potential rather than by the Gaussian latent, because a latent reaching dunnhumby's
+dispersion must operate where the estimator measurably breaks. The test is an ablation:
+hold <span class="v">ρ<sub>0</sub></span> at zero and see what is lost.</p>
+
+<div class="flag neg">
+<p class="label">The first run said the size potential was worthless, and the first run was under-powered</p>
+<p>Generated truth with dispersion <strong>0.525</strong>. Ablating
+<span class="v">ρ<sub>0</sub></span> cost <strong>+0.0033 nats</strong> per basket — nothing —
+and the no-size fit actually produced a <em>better</em> basket-size distribution
+(TVD 0.0376 against 0.0499).</p>
+<p>That is not evidence against the size potential. It is a test run in the regime where
+section 14 says the term is not needed. A dispersion of 0.525 is below the Poisson-binomial
+ceiling of 1, so the latent alone can reproduce it and the extra parameters only add variance.
+<strong>Reporting that number as an ablation result would have been wrong, and I nearly
+did.</strong></p>
+</div>
+
+<p>Reaching a higher-dispersion truth took three failed attempts. A quadratic
+<span class="v">ρ<sub>0</sub></span> tops out near 0.93 whatever its coefficients: it cannot
+make the size law bimodal, and conditioning on a non-empty basket removes the low mode that
+would supply the spread. The fix is to stop guessing the shape and <em>solve</em> for it —
+since <span class="v">P(n|z) ∝ e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>, setting
+<span class="v">ρ<sub>0</sub>(n) = log A<sub>n</sub>(0) − log target(n)</span> makes the size
+law equal any chosen target at <span class="v">z</span> = 0. Targeting a two-humped law — a
+small top-up trip or a large stock-up one — gives dispersion <strong>1.335</strong>, above the
+ceiling a latent-only model can reach.</p>
+
+<div class="flag good">
+<p class="label">At dispersion above 1, the result reverses completely</p>
+<div class="scroll"><table>
+<thead><tr><th>fit</th><th class="num">held-out</th><th class="num">size TVD</th><th class="num">φ Gram corr</th><th class="num">ρ<sub>c</sub> corr</th></tr></thead>
+<tbody>
+<tr><td><strong>full</strong></td><td class="num"><strong>−20.6675</strong></td><td class="num">0.0968</td><td class="num"><strong>+0.8515</strong></td><td class="num">+0.9634</td></tr>
+<tr><td>no size potential</td><td class="num">−21.2044</td><td class="num">0.1721</td><td class="num">+0.7549</td><td class="num">+0.9867</td></tr>
+<tr><td>no co-purchase <span class="v">φ</span></td><td class="num">−21.0280</td><td class="num">0.0607</td><td class="num">—</td><td class="num">+0.9315</td></tr>
+</tbody></table></div>
+<ul>
+  <li>The size potential is worth <strong>+0.5369 nats</strong> per basket held out, against
+  +0.0033 in the under-dispersed run. <strong>Its value is monotone in dispersion, which is
+  precisely what the theory predicts.</strong></li>
+  <li>Co-purchase <span class="v">φ</span> is worth <strong>+0.3605 nats</strong>.</li>
+  <li>The mechanism is visible, and it is the one section 14 names: without a free size
+  potential the co-purchase embedding is <em>corrupted</em> trying to carry the dispersion —
+  φ Gram recovery falls from <strong>+0.8515 to +0.7549</strong>. The latent does not simply
+  fail to represent size; it distorts the parameter that has to represent something else.</li>
+  <li>Basket-size TVD nearly doubles without it, 0.097 → 0.172.</li>
+</ul>
+</div>
+
+<p class="note">Honest limit: dispersion 1.335 is still far below dunnhumby's 4.35. The
+direction and the mechanism are established; the magnitude at realistic dispersion is not.</p>
+
+<h2><span class="num">4</span>Forward-buying, in the real data</h2>
+
+<p>The specification removed an inventory state because dunnhumby records no inventory, and
+replaced it with a days-of-supply proxy whose only new content beyond recency is
+<em>how much</em> was bought last time. <code>scripts/theory/test8_forward_buying.py</code>
+asks whether that content exists: 797,533 category purchase occasions, within
+(household, category), household-clustered standard errors.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>design</th><th>result</th></tr></thead>
+<tbody>
+<tr><td>gap to next purchase on units taken, within (household, category)</td><td>β = <strong>+0.01596</strong> (se 0.00126, t = +12.65)</td></tr>
+<tr><td>… also controlling for the trip's total size</td><td>β = <strong>+0.00973</strong> (se 0.00119, t = <strong>+8.17</strong>)</td></tr>
+<tr><td>held-out prediction of category incidence, timing alone</td><td>log-loss 0.234803</td></tr>
+<tr><td>… adding units</td><td>log-loss 0.234416, a gain of <strong>0.000387 nats</strong></td></tr>
+</tbody></table></div>
+
+<p>The sign is unambiguous and in the forward-buying direction; the size is small — one extra
+unit lengthens the next gap by 0.97%, or 0.41 days against a mean of 41.8. Held out, the gain
+is about a seventieth of the 0.028-nat effect this project has treated as evidence elsewhere.</p>
+
+<div class="flag">
+<p class="label">Why the two designs disagree about importance</p>
+<p>By a predictive standard the term does not earn its place. By a policy standard it does,
+and the distinction is not special pleading: <strong>a counterfactual uses the coefficient,
+not the log-loss.</strong> Units barely vary exogenously in observational data, so the
+predictive gain is small; a promotion deliberately moves them, and the same coefficient then
+applies to much larger variation.</p>
+<p>The consequence for the environment is directional and should be stated plainly: promotional
+pull-forward <em>is</em> representable, and it is <em>weak</em>. A markdown policy evaluated
+here will see most of the sales lift and only a little of the payback.</p>
+</div>
+
+<h2><span class="num">5</span>The phase transition, with the size potential active</h2>
+
+<p><code>scripts/theory/verify_aligned_worstcase.py</code> runs the worst case for stability —
+every product loading the latent identically — over all 65,536 subsets, sweeping the loading
+<span class="v">a</span> against a convex
+<span class="v">ρ<sub>0</sub>(n) = ρ n(n−1)/2</span>.</p>
+
+<div class="scroll"><table>
+<thead><tr><th class="num">ρ</th><th>first <span class="v">a</span> with two modes</th><th>at <span class="v">a</span> = 0.60: modes</th><th class="num">ESS</th><th class="num">log Z error</th></tr></thead>
+<tbody>
+<tr><td class="num">0.00</td><td>0.60</td><td>2</td><td class="num">0.058</td><td class="num">−0.678</td></tr>
+<tr><td class="num">0.02</td><td>0.60</td><td>2</td><td class="num">0.414</td><td class="num">−0.206</td></tr>
+<tr><td class="num">0.05</td><td>0.65</td><td>1</td><td class="num">0.718</td><td class="num">−0.034</td></tr>
+<tr><td class="num">0.10</td><td><strong>0.75</strong></td><td>1</td><td class="num"><strong>0.891</strong></td><td class="num"><strong>−0.003</strong></td></tr>
+</tbody></table></div>
+
+<p><strong>It delays the transition; it does not abolish it.</strong> At a fixed loading the
+improvement is large — two modes and 0.68 nats of error become one mode and 0.003 — but push
+<span class="v">a</span> far enough and it returns, and worse: at
+<span class="v">ρ</span> = 0.10, <span class="v">a</span> = 0.75 multi-start finds
+<strong>six</strong> modes, ESS 0.006, and <span class="v">log Z</span> 10.3 nats out. A strong
+size penalty makes the failure rarer and more severe.</p>
+
+<p>Two findings transfer regardless of the toy's small catalogue. The Laplace variance
+formula <strong>understates</strong> <span class="v">Var(n)</span> at every sub-critical
+<span class="v">λ</span> — so the loading needed to reach a given dispersion is lower than the
+formula says, not higher, which is the opposite of what an earlier draft asserted from a table
+of unsigned errors. And <strong>ESS can collapse without a bifurcation</strong>: at
+<span class="v">ρ</span> = 0.10, <span class="v">a</span> = 0.65 it falls to 0.065 with a
+single mode, so multi-start alone is not a sufficient diagnostic and both must be logged.</p>
+
+<h2><span class="num">6</span>Everything checked against enumeration</h2>
+
+<div class="scroll"><table>
+<thead><tr><th>claim</th><th>script</th><th class="num">residual</th></tr></thead>
+<tbody>
+<tr><td>Theorem 1, no size term</td><td><code>verify_normaliser.py</code></td><td class="num">3.9 × 10<sup>−15</sup></td></tr>
+<tr><td>Theorem 1, free-form <span class="v">ρ<sub>0</sub></span></td><td><code>verify_size_term.py</code></td><td class="num">2.0 × 10<sup>−15</sup></td></tr>
+<tr><td>Inclusion probabilities, coupled law</td><td><code>verify_size_term.py</code></td><td class="num">3.7 × 10<sup>−15</sup></td></tr>
+<tr><td><span class="v">d𝔼[n]/dδ = Var(n)</span></td><td><code>verify_response.py</code></td><td class="num">1.5 × 10<sup>−10</sup></td></tr>
+<tr><td>Dispersion bound, <span class="v">ρ<sub>0</sub></span> active</td><td><code>verify_dispersion_bound.py</code></td><td class="num">0 of 9 violated</td></tr>
+<tr><td>Entry-response identity (Prop. 5)</td><td>inline, 5 configurations</td><td class="num">4 × 10<sup>−11</sup></td></tr>
+<tr><td>Exact samplers</td><td>three scripts</td><td class="num">TV at the noise floor, 21 of 21</td></tr>
+<tr><td>The full implementation</td><td><code>v3/validate.py</code></td><td class="num">6 checks, §1</td></tr>
+</tbody></table></div>
+
+<div class="part"><div class="pn">Part III</div><div class="pt">What is not done</div></div>
+
+<h2><span class="num">7</span>The gap between here and a dunnhumby result</h2>
+
+<p>Stated as work, not as caveats.</p>
+
+<div class="scroll"><table>
+<thead><tr><th class="num">#</th><th>what</th><th>why it is not done</th><th>cost</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><strong>The ragged rewrite.</strong> <code>v3/core.py</code> assumes a dense assortment — every trip sees the same categories with the same number of products.</td><td>dunnhumby assortments are store-specific, median 3,041 products, with category sizes from 1 to 182. Padding to the maximum is what made an earlier branch cost 17.8 hours instead of 1.68.</td><td>the main engineering job</td></tr>
+<tr><td class="num">2</td><td><strong>The conditioning terms.</strong> <code>b</code> currently carries only intercept and taste.</td><td>price, promotion, coupon, recency, seasonality and store all need wiring, and each is already built in version 2's pipeline.</td><td>mechanical</td></tr>
+<tr><td class="num">3</td><td><strong>The dunnhumby fit</strong>, and a held-out comparison with version 2.</td><td>needs 1 and 2.</td><td>2–8 hours per fit, projected, and the last such projection was out by 18×</td></tr>
+<tr><td class="num">4</td><td><strong>Test 9: held-out category-incidence likelihood against version 2.</strong></td><td>this is the architectural bet. Version 3 pins the category-entry response at 1.243 by an identity; version 2 fitted 0.858. Version 3 cannot absorb the difference.</td><td>two fits</td></tr>
+<tr><td class="num">5</td><td><strong>The causal layer</strong> — the coupon design, the tier separation, the sensitivity band.</td><td>every causal claim in the specification is untested. The coupon panel is built and the design is stated; nothing has been estimated.</td><td>needs 3</td></tr>
+<tr><td class="num">6</td><td><strong>Trip timing and the environment.</strong></td><td>the hazard is specified and unimplemented.</td><td>needs 3</td></tr>
+</tbody></table></div>
+
+<div class="flag neg">
+<p class="label">What this page does not claim</p>
+<p>That version 3 is better than version 2 on real data. Nothing here compares them on
+dunnhumby, and the one place they make conflicting predictions — the category-entry response,
+1.243 against 0.858 — is untested and is the kind of disagreement that an architecture cannot
+tune its way out of.</p>
+<p>What is established is narrower and worth having on its own: <strong>the mathematics is
+right, the implementation computes it, the estimator recovers what generated the data, and
+two of the design's own claims have been tested rather than asserted — one of which reversed
+a result already reported here.</strong></p>
+</div>
+
+<h2><span class="num">8</span>Reproducing</h2>
+
+<p>All scripts are self-contained and take under five minutes each except where noted.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>section</th><th>command</th></tr></thead>
+<tbody>
+<tr><td>§1</td><td><code>cd scripts/v3 &amp;&amp; python3 validate.py</code></td></tr>
+<tr><td>§2, §3</td><td><code>python3 recover.py --rho0 bimodal --nmax 24</code> (≈ 6 min)</td></tr>
+<tr><td>§3, first run</td><td><code>python3 recover.py --rho0 quadratic --nmax 15</code></td></tr>
+<tr><td>§4</td><td><code>cd scripts/theory &amp;&amp; python3 test8_forward_buying.py</code></td></tr>
+<tr><td>§5</td><td><code>python3 verify_aligned_worstcase.py</code> (38 s)</td></tr>
+<tr><td>§6</td><td><code>python3 verify_normaliser.py; python3 verify_size_term.py; python3 verify_response.py; python3 verify_dispersion_bound.py</code></td></tr>
+</tbody></table></div>
+
+</div>

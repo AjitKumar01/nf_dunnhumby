@@ -34,6 +34,8 @@ import json
 import os
 import time
 
+import math
+
 import numpy as np
 import torch
 
@@ -47,6 +49,42 @@ def log(m):
     print(f"[rec] {m}", flush=True)
 
 
+def size_coeffs_at_zero(T, house):
+    """log A_n at z = 0, the combinatorial part of the size law before rho_0 tilts it.
+
+    Needed to CALIBRATE rho_0 rather than guess it: since P(n|z) is proportional to
+    exp(-rho_0(n)) A_n(z), setting rho_0(n) = log A_n(0) - log target(n) makes the size law
+    equal `target` at z = 0, up to the z-mixture.  Three earlier attempts to reach a
+    dunnhumby-like dispersion by guessing a quadratic rho_0 topped out near 0.93, because a
+    quadratic cannot make the size law bimodal and conditioning on a non-empty basket
+    removes the low mode.  Solving for rho_0 instead is the fix.
+    """
+    from core import esp_dense, poly_mul_trunc
+    with torch.no_grad():
+        bt = T.b_tilde(house)
+        M = bt.amax(dim=-1, keepdim=True)
+        w = torch.exp(bt - M).view(-1, T.C, T.P)
+        e = esp_dense(w, T.R)
+        r = torch.arange(T.R + 1, dtype=w.dtype)
+        G = torch.exp(-T.rho_c.view(1, T.C, 1) * r * (r - 1) / 2.0) * e
+        A = G[:, 0, :]
+        for c in range(1, T.C):
+            A = poly_mul_trunc(A, G[:, c, :], T.nmax)
+        n = torch.arange(A.shape[-1], dtype=w.dtype)
+        return (torch.log(A.clamp_min(1e-300)) + n * M).mean(0)
+
+
+def bimodal_target(nmax, w_lo=0.55, lo=2.0, hi=14.0):
+    """A deliberately two-humped size law: a small top-up trip or a large stock-up one.
+    This is the shape section 14 says a Gaussian latent cannot reach without going
+    critical, so it is the shape the size potential has to be tested against."""
+    n = torch.arange(nmax + 1, dtype=torch.float64)
+    lg = torch.lgamma(n + 1)
+    p = (w_lo * torch.exp(-lo + n * math.log(lo) - lg)
+         + (1 - w_lo) * torch.exp(-hi + n * math.log(hi) - lg))
+    return p / p.sum()
+
+
 def make_truth(a, g):
     T = Model(J=a.C * a.P, N=a.N, C=a.C, P=a.P, K=a.K, Kz=a.Kz, nmax=a.nmax,
               R=a.R, seed=a.seed)
@@ -56,10 +94,18 @@ def make_truth(a, g):
         T.theta.normal_(0.0, 0.6, generator=g)
         T.phi.normal_(0.0, a.phi_scale, generator=g)
         T.rho_c.normal_(0.4, 0.5, generator=g)          # mostly substitution, both signs
-        n = torch.arange(1, a.nmax + 1, dtype=torch.float64)
-        # a genuinely non-trivial size potential: mildly concave then convex, so the
-        # implied size law is neither Poisson-binomial nor anything the latent could make
-        T.rho_0_free.copy_(-0.55 * torch.log1p(n) + 0.035 * n * (n - 1) / 2.0)
+        if a.rho0 == "quadratic":
+            n = torch.arange(1, a.nmax + 1, dtype=torch.float64)
+            T.rho_0_free.copy_(-0.55 * torch.log1p(n) + 0.035 * n * (n - 1) / 2.0)
+        elif a.rho0 == "bimodal":
+            h = torch.arange(min(a.N, 64))
+            logA = size_coeffs_at_zero(T, h)
+            tgt = torch.log(bimodal_target(a.nmax).clamp_min(1e-12))
+            r0 = logA[: a.nmax + 1] - tgt
+            r0 = r0 - r0[0]                       # rho_0(0) = 0 fixes the scale
+            T.rho_0_free.copy_(r0[1:])
+        elif a.rho0 == "zero":
+            T.rho_0_free.zero_()
     return T
 
 
@@ -202,5 +248,6 @@ if __name__ == "__main__":
     p.add_argument("--batch", type=int, default=96)
     p.add_argument("--draws", type=int, default=32)
     p.add_argument("--lr", type=float, default=0.05)
+    p.add_argument("--rho0", choices=("bimodal", "quadratic", "zero"), default="bimodal")
     p.add_argument("--seed", type=int, default=0)
     main(p.parse_args())
