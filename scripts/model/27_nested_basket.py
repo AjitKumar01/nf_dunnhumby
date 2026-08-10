@@ -303,7 +303,7 @@ class NestedModel(nn.Module):
                  learn_ctx_scale=False, use_cat_context=False,
                  use_cat_pair=False, untie_rho=False, prefix_context=False,
                  neg_in_cat=0.0, item_loss="softmax", use_persist=True,
-                 use_promo=False):
+                 use_promo=False, use_nb=False):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         J, N, C = d.J, d.N, d.C
@@ -400,6 +400,14 @@ class NestedModel(nn.Module):
         # quantity margin is not forced to share the incidence one
         if use_quantity:
             self.q0 = nn.Parameter(torch.zeros(J))
+            # Negative-binomial dispersion for the units head, off by default.
+            # Var(q-1) = Lambda + Lambda^2 / r, so r -> inf recovers the Poisson of
+            # Eq. 14 exactly and the flag nests the current model.  ONE scalar: the
+            # binned diagnostic in eval/51 gives r = 1.07 / 0.94 / 1.25 / 1.12 across the
+            # upper four quintiles of Lambda, so a single value near 1 covers the range.
+            # Initialised at softplus(0.5413) = 1.0.
+            self.use_nb = use_nb
+            self.q_disp = nn.Parameter(torch.full((1,), 0.5413)) if use_nb else None
             self.q_gamma = emb(N, Kp, 0.05); self.q_beta = emb(J, Kp, 0.05)
             self.q_state = emb(J, N_STATE_FEATURES, 0.01)
 
@@ -993,7 +1001,18 @@ def losses(model, bt, ib, iv_center):
              - (model.q_gamma[bt["user"]] * model.q_beta[j]).sum(-1) * bt["dlogp"][ar_, tg_]
              + (model.q_state[j] * bt["state"][ar_, tg_, :]).sum(-1)).clamp(-6.0, 4.0)
         k = (bt["units"] - 1.0).clamp_min(0)
-        out["quantity"] = (torch.exp(z) - k * z + torch.lgamma(k + 1)).mean()
+        if getattr(model, "q_disp", None) is not None:
+            # NB2:  P(k) = G(k+r)/(G(r) k!) (r/(r+L))^r (L/(r+L))^k,  mean L, var L + L^2/r
+            # Written with lgamma so it is stable at small r, and with logs of the two
+            # mixing probabilities so nothing is exponentiated twice.
+            lam_ = torch.exp(z)
+            r_ = nn.functional.softplus(model.q_disp)
+            out["quantity"] = -(torch.lgamma(k + r_) - torch.lgamma(r_)
+                                - torch.lgamma(k + 1.0)
+                                + r_ * (torch.log(r_) - torch.log(r_ + lam_))
+                                + k * (z - torch.log(r_ + lam_))).mean()
+        else:
+            out["quantity"] = (torch.exp(z) - k * z + torch.lgamma(k + 1)).mean()
 
     if model.use_nest and ib is not None:
         kap = model.kappa()[ib["cat"]]
@@ -1119,7 +1138,7 @@ def main(a):
                         prefix_context=a.prefix_context,
                         neg_in_cat=a.neg_in_cat, item_loss=a.item_loss,
                         use_persist=not a.no_persist,
-                        use_promo=a.use_promo).to(dev)
+                        use_promo=a.use_promo, use_nb=a.nb_units).to(dev)
     model.use_logq = not a.no_logq
     model.spec_edges = a.spec_edges
     # A FIXED validation subsample, so the selection score is comparable across
@@ -1279,6 +1298,12 @@ if __name__ == "__main__":
     p.add_argument("--l2", type=float, default=1e-2)
     p.add_argument("--no-persist", action="store_true",
                    help="drop the per-(household, product) persistence term")
+    p.add_argument("--nb-units", action="store_true",
+                   help="negative-binomial units head instead of the Poisson of Eq. 14. "
+                        "Adds ONE parameter and leaves E[q] unchanged, so the quantity "
+                        "elasticity is unaffected; it changes only the variance, which "
+                        "eval/51 measures as 1.29-1.96x the Poisson value and rising in "
+                        "Lambda")
     p.add_argument("--use-promo", action="store_true",
                    help="condition on display and mailer placement from causal_data.csv "
                         "(needs pipeline/23_promo_data.py).  Promotion is what actually "

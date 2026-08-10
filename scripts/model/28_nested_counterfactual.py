@@ -95,7 +95,8 @@ def load(label, d, dev):
                        neg_in_cat=cfg.get("neg_in_cat", 0.0),
                        item_loss=cfg.get("item_loss", "softmax"),
                        use_persist=not cfg.get("no_persist", False),
-                       use_promo=cfg.get("use_promo", False)).to(dev)
+                       use_promo=cfg.get("use_promo", False),
+                       use_nb=cfg.get("nb_units", False)).to(dev)
     # strict=False so checkpoints predating a newly added parameter still load.  Any
     # such parameter is initialised at zero, so the loaded model reproduces the older one
     # exactly rather than silently inheriting a random value.
@@ -594,7 +595,16 @@ def generate_baskets(m, d, dev, n_trips=300, seed=0, sweeps=2, use_ctx=True,
         zq = (m.q0[jt]
               - (m.q_gamma[user].unsqueeze(0) * m.q_beta[jt]).sum(-1) * dpq
               + (m.q_state[jt] * stq).sum(-1)).clamp(-6, 4)
-        u_units = (1 + torch.poisson(torch.exp(zq), generator=g)).long().tolist()
+        lam_q = torch.exp(zq)
+        if getattr(m, "q_disp", None) is not None:
+            # NB2 as a gamma-Poisson mixture: draw the rate from Gamma(r, r/L), then a
+            # Poisson at that rate.  Same mean L, variance L + L^2/r, and it reduces to
+            # the Poisson branch as r grows.
+            r_ = torch.nn.functional.softplus(m.q_disp)
+            gam = torch.distributions.Gamma(r_.expand_as(lam_q),
+                                            (r_ / lam_q.clamp_min(1e-9)))
+            lam_q = gam.sample()
+        u_units = (1 + torch.poisson(lam_q, generator=g)).long().tolist()
         out.append((ids, u_units))
     return _Baskets(out, bsel)
 

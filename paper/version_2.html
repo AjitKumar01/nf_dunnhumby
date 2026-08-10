@@ -296,6 +296,31 @@
   <code>eval/33_verify_equations.py</code>. The denominator counts purchase <em>lines</em>,
   not trips, which is what makes it a proper share.</p>
 
+  <h3><span class="num">4.4</span>Which of the two is computed where</h3>
+
+  <p>Eq. 4a defines <var>b</var> and <var>u</var> as two evaluations of one function.
+  Every place either is used, and which one:</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Where</th><th>Context passed</th><th>Quantity</th><th>What it feeds</th></tr></thead>
+    <tbody>
+      <tr><td><code>losses()</code></td><td>leave-one-out mean over basket-mates</td><td><strong>u</strong></td><td>ℒ<sub>item</sub>, the pseudo-likelihood being maximised</td></tr>
+      <tr><td><code>evaluate()</code></td><td>the same</td><td><strong>u</strong></td><td>every reported item log-likelihood</td></tr>
+      <tr><td>generation, Gibbs sweeps</td><td>running mean over the current draft</td><td><strong>u</strong></td><td>stage 3 of §14</td></tr>
+      <tr><td><code>incidence_batch()</code></td><td><strong>0</strong></td><td><var>b</var></td><td>ÎV, hence category entry</td></tr>
+      <tr><td><code>uniform_iv()</code></td><td><strong>0</strong></td><td><var>b</var></td><td>the frozen reference of §11.4</td></tr>
+      <tr><td>generation, stages 1–2</td><td><strong>0</strong></td><td><var>b</var></td><td>entry, breadth, initial placement</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p><strong>u is not decorative: it is the item conditional.</strong> The rule is that
+  <var>b</var> appears wherever no basket exists yet — entry and initial placement — and
+  <var>u</var> wherever one does. Removing the interaction term costs <strong>+0.0700
+  nats</strong> of held-out item likelihood, the second-largest ablation after store, so the
+  distinction is load-bearing rather than notational.</p>
+
   <h3><span class="num">4.2</span>Category value</h3>
 
   <div class="eq key"><div class="body">
@@ -459,10 +484,108 @@
     &nbsp;&nbsp; ν = 1, 2, …
   </div><div class="tag">(14)</div></div>
 
-  <p>Independent across j ∈ S, and imposed rather than derived (§14). Note the support is
-  unbounded here while the data is censored at 12 (§3): the likelihood is that of an
-  untruncated shifted Poisson evaluated on censored observations, which is a
-  misspecification of known direction — it inflates Λ<sup>qty</sup> — and unmeasured size.</p>
+  <p>Independent across j ∈ S, and imposed rather than derived (§16). The support is
+  unbounded here while the data is censored at 12 (§3), but that censoring touches 0.0934%
+  of training rows, so the misspecification it implies is negligible.</p>
+
+  <div class="flag">
+    <p class="label">Equidispersion is violated, and the fix is one parameter</p>
+    <p>Eq. 14 ties variance to mean: Var(q − 1) = Λ<sup>qty</sup> given the covariates.
+    Tested conditionally, because the <em>marginal</em> variance is not the test — under a
+    correct conditional Poisson it equals 𝔼[Λ] + Var(Λ), and by that measure the ratio is
+    1.018, which looks fine and means nothing. Binning held-out rows by fitted Λ:</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>quintile of Λ</th><th>mean Λ</th><th>mean k</th><th>Var(k)/Λ</th><th>implied r</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>0.055</td><td>0.044</td><td>1.29</td><td>0.19</td></tr>
+        <tr><td>2</td><td>0.127</td><td>0.108</td><td>1.12</td><td>1.07</td></tr>
+        <tr><td>3</td><td>0.216</td><td>0.200</td><td>1.23</td><td>0.94</td></tr>
+        <tr><td>4</td><td>0.385</td><td>0.364</td><td>1.31</td><td>1.25</td></tr>
+        <tr><td>5</td><td>1.081</td><td>1.025</td><td>1.96</td><td>1.12</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Var(k)/Λ exceeds 1 in every bin <em>and grows with Λ</em>, while mean k tracks mean Λ
+    throughout. A wrong <em>mean</em> function would show the opposite — mean k departing
+    from mean Λ, with excess only where Λ is small. Growth in Λ is instead the
+    negative-binomial signature, since Var = Λ + Λ²/r gives Var/Λ = 1 + Λ/r.</p>
+    <p>Replacing Eq. 14 with a negative binomial (<code>--nb-units</code>) adds
+    <strong>one</strong> parameter, 881,490 → 881,491, and leaves the <em>mean</em>
+    Λ<sup>qty</sup> unchanged — so Eq. 27's quantity elasticity and the whole decomposition
+    are algebraically untouched. Fitted r = 2.03. Held-out quantity NLL improves
+    0.6589 → 0.6369; item likelihood, price coefficient and κ are unchanged to four decimals.
+    In generation, <strong>units-per-line total variation falls 0.045 → 0.016</strong>, a 64%
+    reduction, which is the distribution this head governs.</p>
+    <p>It does <em>not</em> improve units per basket (TVD 0.272 → 0.271), and the reason is
+    worth stating: units per basket is dominated by how many products the basket has, and
+    that is 9% short for reasons this head has nothing to do with. Fixing a variance function
+    fixes the variance function.</p>
+  </div>
+
+  <h2 id="fwd">The forward pass, end to end</h2>
+
+  <p class="note">A synthesis of §§4–9 rather than a new definition. It states the order in
+  which the quantities above are computed, because the order is what makes some of them
+  look circular and is not deducible from the equations alone.</p>
+
+  <p><strong>Training.</strong> One trip <var>v</var> with observed basket ℬ<sub>v</sub>
+  becomes four numbers. Nothing is sampled from the model; the observed basket supplies
+  every conditioning set.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Step</th><th>Computes</th><th>Using</th><th>Feeds</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>b<sub>ijt</sub> over 16 sampled categories × 32 sampled products</td><td>Eq. 4 with ctx = <strong>0</strong></td><td>step 2</td></tr>
+      <tr><td>2</td><td>ÎV<sub>ict</sub>, then η<sub>ict</sub></td><td>Eq. 22, then Eq. 7</td><td>ℒ<sub>inc</sub>, ℒ<sub>brd</sub></td></tr>
+      <tr><td>3</td><td>ᾱ<sub>−j</sub> and A<sub>−j</sub> for each purchase row</td><td>Eq. 4b on the <em>observed</em> S<sub>v</sub></td><td>step 4</td></tr>
+      <tr><td>4</td><td>u<sup>−j</sup><sub>m</sub> for every m ∈ A<sub>−j</sub></td><td>Eq. 4 with ctx = ᾱ<sub>−j</sub></td><td>ℒ<sub>item</sub> via Eq. 16</td></tr>
+      <tr><td>5</td><td>z<sup>qty</sup><sub>ijt</sub> at the purchased product only</td><td>Eq. 8</td><td>ℒ<sub>qty</sub></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Written out, the item term for one trip is</p>
+
+  <div class="eq key"><div class="body">
+    ℒ<sup>(v)</sup><sub>item</sub> = − ∑<sub>j ∈ S<sub>v</sub></sub>
+    [ u<sup>−j</sup><sub>j</sub> − log ∑<sub>m ∈ A<sub>−j</sub></sub> e<sup>u<sup>−j</sup><sub>m</sub></sup> ],
+    &nbsp;&nbsp;&nbsp;
+    u<sup>−j</sup><sub>m</sub> = b<sub>imt</sub> + α<sub>m</sub><sup>⊤</sup>ᾱ<sub>−j</sub>
+  </div><div class="tag">(16a)</div></div>
+
+  <p>Two properties of this are easy to miss. First, <strong>step 3 uses the observed
+  basket</strong>: the context is built by removing the true product from the true basket,
+  which is exactly what makes ℒ<sub>item</sub> a pseudo-likelihood rather than a likelihood
+  — it conditions on data it is simultaneously predicting. Second, <strong>the context is
+  not detached from the gradient</strong>, so α<sub>j</sub> receives gradient by two paths:
+  once as the scored candidate in its own position, and once through ᾱ<sub>−k</sub> at every
+  other position of the same basket. The second path is what fits the interaction at all.</p>
+
+  <p><strong>Generation.</strong> The same terms in a different order, because now nothing
+  is observed:</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Step</th><th>Computes</th><th>Using</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>b<sub>ijt</sub> for <em>all</em> C categories × all stocked products</td><td>Eq. 4 with ctx = <strong>0</strong></td></tr>
+      <tr><td>2</td><td>IV<sub>ict</sub> exactly, then η<sub>ict</sub>, then y<sub>c</sub></td><td>Eq. 6 — <em>not</em> Eq. 22, see §11.3 — then Eqs. 7 and 10</td></tr>
+      <tr><td>3</td><td>k<sub>c</sub> per entered category, capped at N<sub>c</sub></td><td>Eq. 11</td></tr>
+      <tr><td>4</td><td>an initial S: k<sub>c</sub> products drawn ∝ e<sup>b</sup> without replacement</td><td>ctx still <strong>0</strong> — no basket exists yet</td></tr>
+      <tr><td>5</td><td>T Gibbs sweeps, each position redrawn from Eq. 16</td><td>ctx = ᾱ<sub>−j</sub> from the current draft</td></tr>
+      <tr><td>6</td><td>q<sub>j</sub> for each j ∈ S</td><td>Eq. 14</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Step 4 is the only place the two passes differ in <em>logic</em> rather than in inputs:
+  training never needs an initial draw because the basket is given. Step 5 is what converts
+  a draft drawn from independent within-category softmaxes into a draw from Eq. 13, and is
+  therefore the only stage at which the interaction acts during generation. A generated
+  basket at T = 0 carries no interaction at all, which is why §15's sweep count is not a
+  tuning detail.</p>
 
   <!-- ================================================ PART IV -->
   <div class="part"><span class="pn">Part IV</span><span class="pt">Why Eq. 13 is usable</span></div>
@@ -555,13 +678,73 @@
     simultaneously, which is an identification constraint (§15), not a free choice.</p>
   </div>
 
+  <h3><span class="num">10.2</span>What the embedding can and cannot express</h3>
+
+  <p>The whole interaction is one dot product per pair, α<sub>j</sub><sup>⊤</sup>α<sub>k</sub>,
+  which in the conditional collapses to α<sub>m</sub><sup>⊤</sup>ᾱ<sub>−j</sub>: a single
+  number per candidate. Three consequences follow from W = AA<sup>⊤</sup> alone.</p>
+
+  <ul>
+    <li><strong>Every product attracts itself.</strong>
+    α<sub>j</sub><sup>⊤</sup>α<sub>j</sub> = ‖α<sub>j</sub>‖² ≥ 0, with no way to make it
+    negative.</li>
+    <li><strong>Total repulsion is bounded below</strong> by
+    −½∑<sub>j∈S</sub>‖α<sub>j</sub>‖², from the identity in the box above. Two products can
+    be mildly substitutable, not arbitrarily so.</li>
+    <li><strong>Similarity and co-purchase are forced to share a sign.</strong> The form is
+    largest exactly when two products are <em>alike</em>. Two brands of the same yoghurt sit
+    close in α, so the model scores them as attracting — when in fact a shopper takes one or
+    the other.</li>
+  </ul>
+
+  <p>That last point sounds fatal and is not, because <strong>within-category substitution
+  is imposed structurally rather than learned</strong>. Eq. 3 forces exactly k<sub>c</sub>
+  products from category <var>c</var>, and A<sub>−j</sub> excludes the basket's other
+  products of that same category. "One or the other" is a property of the support, so α
+  never has to represent it. What α must represent is the residual: given the rest of the
+  basket, which member of <em>this</em> category fits.</p>
+
+  <p>And that is what it is trained on. A basket holds about 6.4 categories and 1.28 products
+  per category, so ᾱ<sub>−j</sub> is overwhelmingly composed of products from <em>other</em>
+  categories. The conditional therefore learns to discriminate <em>within</em> a category
+  using <em>cross</em>-category evidence.</p>
+
+  <div class="flag">
+    <p class="label">What that buys, and where it falls short</p>
+    <p>It is load-bearing for prediction: removing the interaction costs <strong>+0.0700
+    nats</strong> of held-out item likelihood, the second-largest ablation after store. It is
+    much weaker as a generative account of which products co-occur.</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>real</th><th>generated</th></tr></thead>
+      <tbody>
+        <tr><td>mean pairwise co-occurrence lift</td><td>3.23</td><td><strong>1.82</strong></td></tr>
+        <tr><td>rank correlation of lift against real</td><td>—</td><td>+0.099</td></tr>
+        <tr><td>within-basket pairs sharing a sub-commodity</td><td>0.0646</td><td>0.0482</td></tr>
+        <tr><td>within-basket pairs sharing a department</td><td>0.5581</td><td>0.5847</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>The pattern is what a symmetric similarity form predicts: coarse relatedness slightly
+    <em>over</em>-produced, fine structure 25% <em>under</em>-produced, and concentration far
+    too low. The embedding knows that bananas and biscuits go together; it does not know
+    which yoghurt.</p>
+  </div>
+
+  <p class="note">One scaling choice inside the interaction is unexplained rather than
+  derived. The 1/(n−1) divisor in Eq. 12 dilutes a pair's coupling as the basket grows, so
+  the same two products interact less strongly in a large basket than a small one. Removing
+  the divisor — summing rather than averaging the context — was tried and was substantially
+  worse on the metric of the time. The dilution is therefore load-bearing, and why it should
+  be is not established.</p>
+
   <p class="note">What is <em>not</em> claimed: that Eq. 13 has no random-utility
   representation. Any strictly positive distribution on a finite set is the argmax of
   {score + iid Gumbel} indexed by the elements of that set, so Eq. 13 is the argmax of
   E(S′) + ε<sub>S′</sub> over S′ ∈ 𝒮(𝒦). What fails is a representation with errors attached
   to <em>positions</em> and drawn once — which is exactly why §12 must redraw.</p>
 
-  <h2 id="s10b"><span class="num">10.2</span>The scale of κ</h2>
+  <h2 id="s10b"><span class="num">10.3</span>The scale of κ</h2>
 
   <p>Eq. 7 contains κ<sub>c</sub> without saying what value is neutral. One auxiliary
   construction fixes it. Suppose total units from category <var>c</var> were
