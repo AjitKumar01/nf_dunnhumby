@@ -149,10 +149,11 @@ def log_f_ragged(model, z, ix):
 class RaggedModel(torch.nn.Module):
     """Same parameters and the same three quantities as core.Model, ragged over items."""
 
-    def __init__(self, J, N, C, K=8, Kz=3, nmax=24, R=4, seed=0):
+    def __init__(self, J, N, C, K=8, Kz=3, nmax=24, R=4, seed=0,
+                 S=1, Kp=8, Kt=8, Ks=4, n_week=53):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
-        self.J, self.N, self.C = J, N, C
+        self.J, self.N, self.C, self.S = J, N, C, S
         self.K, self.Kz, self.nmax, self.R = K, Kz, nmax, R
         self.lam = torch.nn.Parameter(torch.zeros(J))
         self.alpha = torch.nn.Parameter(torch.randn(J, K, generator=g) * 0.3)
@@ -160,16 +161,37 @@ class RaggedModel(torch.nn.Module):
         self.phi = torch.nn.Parameter(torch.randn(J, Kz, generator=g) * 0.15)
         self.rho_c = torch.nn.Parameter(torch.zeros(C))
         self.rho_0_free = torch.nn.Parameter(torch.zeros(nmax))
-        self.house = None                     # [B] set per batch
+        # --- conditioning blocks (Eq. 7) -------------------------------------------------
+        self.gamma = torch.nn.Parameter(torch.randn(N, Kp, generator=g) * 0.1)
+        self.beta = torch.nn.Parameter(torch.randn(J, Kp, generator=g) * 0.1)
+        self.w_dsp = torch.nn.Parameter(torch.zeros(J))
+        self.w_mlr = torch.nn.Parameter(torch.zeros(J))
+        self.mu = torch.nn.Parameter(torch.randn(J, Kt, generator=g) * 0.1)
+        self.delta = torch.nn.Parameter(torch.randn(n_week, Kt, generator=g) * 0.1)
+        self.zeta = torch.nn.Parameter(torch.randn(J, Ks, generator=g) * 0.1)
+        self.xi = torch.nn.Parameter(torch.randn(S, Ks, generator=g) * 0.1)
+        self.house = None      # [B] set per batch, with .ctx below
+        self.ctx = None        # dict of per-slot features, set per batch
 
     def rho_0(self):
         z = torch.zeros(1, dtype=self.rho_0_free.dtype, device=self.rho_0_free.device)
         return torch.cat([z, self.rho_0_free])
 
     def b_flat(self, ix):
-        """b_ij at every assortment slot, [T].  Extend here for price, promotion, coupon."""
-        return (self.lam[ix.item]
-                + (self.theta[self.house[ix.item_trip]] * self.alpha[ix.item]).sum(-1))
+        """b_ij at every assortment slot, [T].  Eq. 7, restricted to the blocks that are
+        wired: taste, price, promotion, seasonality and store.  Recency, coupon and
+        days-of-supply are not in yet and features.py says so."""
+        it = ix.item
+        hh = self.house[ix.item_trip]
+        b = self.lam[it] + (self.theta[hh] * self.alpha[it]).sum(-1)
+        c = self.ctx
+        if c is None:
+            return b
+        b = b - (self.gamma[hh] * self.beta[it]).sum(-1) * c["dlp"]
+        b = b + self.w_dsp[it] * c["disp"] + self.w_mlr[it] * c["mail"]
+        b = b + (self.mu[it] * self.delta[c["week"]]).sum(-1)
+        b = b + (self.zeta[it] * self.xi[c["store"]]).sum(-1)
+        return b
 
     def log_Z(self, ix, n_draws=32, mode_steps=10, generator=None, return_ess=False):
         B = ix.B
