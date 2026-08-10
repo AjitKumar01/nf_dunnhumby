@@ -203,14 +203,17 @@ class RaggedModel(torch.nn.Module):
         z = torch.zeros(1, dtype=self.rho_0_free.dtype, device=self.rho_0_free.device)
         return torch.cat([z, self.rho_0_free])
 
-    def b_flat(self, ix):
-        """b_ij at every assortment slot, [T].  Eq. 7, restricted to the blocks that are
-        wired: taste, price, promotion, seasonality and store.  Recency, coupon and
-        days-of-supply are not in yet and features.py says so."""
-        it = ix.item
-        hh = self.house[ix.item_trip]
+    def b_at(self, it, trip, c):
+        """Eq. 7 at an arbitrary set of (product, trip) pairs.
+
+        ONE function for both the normaliser and the energy.  They previously had separate
+        code paths and drifted: b_flat applied price, promotion, seasonality and store while
+        energy() applied only taste, so E(S) and log Z scored the same product differently
+        and the difference was free reward for the optimiser.  Nothing may compute an item
+        value except through here.
+        """
+        hh = self.house[trip]
         b = self.lam[it] + (self.theta[hh] * self.alpha[it]).sum(-1)
-        c = self.ctx
         if c is None:
             return b
         b = b - (self.gamma[hh] * self.beta[it]).sum(-1) * c["dlp"]
@@ -218,6 +221,10 @@ class RaggedModel(torch.nn.Module):
         b = b + (self.mu[it] * self.delta[c["week"]]).sum(-1)
         b = b + (self.zeta[it] * self.xi[c["store"]]).sum(-1)
         return b
+
+    def b_flat(self, ix):
+        """b at every assortment slot, [T] -- the normaliser's view."""
+        return self.b_at(ix.item, ix.item_trip, self.ctx)
 
     def log_Z(self, ix, n_draws=32, mode_steps=10, generator=None, return_ess=False,
               drop_empty=False):
@@ -261,13 +268,11 @@ class RaggedModel(torch.nn.Module):
             ess = 1.0 / (ww ** 2).sum(1) / n_draws
         return lz, ess
 
-    def energy(self, line_item, line_trip, line_cat, B):
-        """E(S) from the observed lines.  No assortment needed: the energy is a function of
-        the basket alone."""
+    def energy(self, line_item, line_trip, line_cat, B, line_ctx=None):
+        """E(S) from the observed lines, using the SAME item values as the normaliser."""
         dt, dev = self.lam.dtype, self.lam.device
         lin = torch.zeros(B, dtype=dt, device=dev).index_add_(
-            0, line_trip, self.lam[line_item]
-            + (self.theta[self.house[line_trip]] * self.alpha[line_item]).sum(-1))
+            0, line_trip, self.b_at(line_item, line_trip, line_ctx))
         v = torch.zeros(B, self.Kz, dtype=dt, device=dev).index_add_(
             0, line_trip, self.phi[line_item])
         sq = torch.zeros(B, dtype=dt, device=dev).index_add_(
@@ -280,13 +285,13 @@ class RaggedModel(torch.nn.Module):
         return lin + pair - pen_c - self.rho_0()[n]
 
     def loglik(self, ix, line_item, line_trip, line_cat, n_draws=32,
-               generator=None, return_ess=False):
+               generator=None, return_ess=False, line_ctx=None):
         """log P(S | S non-empty) = E(S) - log(Z - 1), with log(Z - 1) computed directly
         rather than by subtracting 1 from Z."""
         out = self.log_Z(ix, n_draws=n_draws, generator=generator,
                          return_ess=return_ess, drop_empty=True)
         lz1, ess = out if return_ess else (out, None)
-        ll = self.energy(line_item, line_trip, line_cat, ix.B) - lz1
+        ll = self.energy(line_item, line_trip, line_cat, ix.B, line_ctx) - lz1
         return (ll, ess) if return_ess else ll
 
     @torch.no_grad()

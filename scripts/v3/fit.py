@@ -78,21 +78,26 @@ class Batcher:
             li.append(D["line_item"][a:b])
             lc.append(D["line_cat"][a:b])
             lt.append(np.full(b - a, bi, np.int64))
+        LI = torch.as_tensor(np.concatenate(li), dtype=torch.long)
+        LT = torch.as_tensor(np.concatenate(lt), dtype=torch.long)
+        # the SAME features, gathered at the purchased lines, so energy() and log_Z score
+        # each product identically
+        dlp_l, disp_l, mail_l = self.F.gather(LI, store[LT], day[LT], week[LT])
+        lctx = dict(dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
+                    week=week[LT].clamp(0, 52), store=store[LT])
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
-        return (ix, ctx, house,
-                torch.as_tensor(np.concatenate(li), dtype=torch.long),
-                torch.as_tensor(np.concatenate(lt), dtype=torch.long),
-                torch.as_tensor(np.concatenate(lc), dtype=torch.long))
+        return (ix, ctx, lctx, house,
+                LI, LT, torch.as_tensor(np.concatenate(lc), dtype=torch.long))
 
 
 def evaluate(m, B, trips, draws, gen, chunk=48):
     tot, n_b, n_l = 0.0, 0, 0
     for k in range(0, len(trips), chunk):
         sub = trips[k:k + chunk]
-        ix, ctx, hh, li, lt, lc = B.make(sub)
+        ix, ctx, lctx, hh, li, lt, lc = B.make(sub)
         m.house, m.ctx = hh, ctx
         with torch.no_grad():
-            ll = m.loglik(ix, li, lt, lc, n_draws=draws, generator=gen)
+            ll = m.loglik(ix, li, lt, lc, n_draws=draws, generator=gen, line_ctx=lctx)
         tot += float(ll.sum())
         n_b += len(sub)
         n_l += len(li)
@@ -127,10 +132,10 @@ def main(a):
     m.project(a.phi_max)
     for it in range(1, a.iters + 1):
         sub = tr[rng.choice(len(tr), size=a.batch, replace=False)]
-        ix, ctx, hh, li, lt, lc = B.make(sub)
+        ix, ctx, lctx, hh, li, lt, lc = B.make(sub)
         m.house, m.ctx = hh, ctx
         ll, ess = m.loglik(ix, li, lt, lc, n_draws=a.draws, generator=gen,
-                           return_ess=True)
+                           return_ess=True, line_ctx=lctx)
         loss = -ll.mean()
         # ESS GATE.  log Z is estimated by importance sampling; where the sampler has
         # collapsed the estimate is unreliable and biased DOWNWARD, which the objective
