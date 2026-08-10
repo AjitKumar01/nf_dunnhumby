@@ -49,8 +49,21 @@ def seg_max(vals, idx, n):
     return out.index_reduce_(-1, idx, vals, "amax", include_self=True)
 
 
-def esp_newton(w, row_of, n_rows, R):
-    """e_0..e_R per row from power sums.  w [..., T] -> [..., n_rows, R+1]."""
+def esp_newton(w, row_of, n_rows, R, row_size=None):
+    """e_0..e_R per row from power sums.  w [..., T] -> [..., n_rows, R+1].
+
+    TWO EXACTNESS GUARDS, both of which cost nothing and one of which is not optional.
+
+    An elementary symmetric polynomial of non-negative weights is non-negative, and it is
+    exactly ZERO when its degree exceeds the number of items in the row.  Newton's
+    identities do not know that: for a single-item category, e_2 = (p1^2 - p2)/2 =
+    (w^2 - w^2)/2 lands on -2.8e-17 rather than 0.  A single negative coefficient
+    propagates through the 183-step convolution across categories and corrupts A_n, and
+    since log takes a clamp afterwards the corruption is silent.  Measured on real
+    dunnhumby batches: 349 of ~8,200 rows carried a negative e_r from the first iteration.
+
+    So degrees above the row size are zeroed explicitly, and everything is clamped at zero.
+    """
     p = [seg_sum(w ** i, row_of, n_rows) for i in range(1, R + 1)]
     e = [torch.ones_like(p[0])]
     if R >= 1:
@@ -67,7 +80,11 @@ def esp_newton(w, row_of, n_rows, R):
         for i in range(1, r + 1):
             acc = acc + ((-1) ** (i - 1)) * e[r - i] * p[i - 1]
         e.append(acc / r)
-    return torch.stack(e, dim=-1)
+    out = torch.stack(e, dim=-1).clamp_min(0.0)
+    if row_size is not None:
+        deg = torch.arange(R + 1, device=out.device)
+        out = torch.where(deg <= row_size.unsqueeze(-1), out, torch.zeros_like(out))
+    return out
 
 
 def cancellation(w, row_of, n_rows):
@@ -114,6 +131,7 @@ class RaggedIndex:
         pos[order] = (torch.arange(self.n_rows, device=device)
                       - run[self.row_trip[order]])
         self.row_pos = pos
+        self.row_size = torch.bincount(self.row_of, minlength=self.n_rows)
         self.item_trip = self.row_trip[self.row_of]
         self.flat_slot = self.row_trip * self.Cpad + self.row_pos
 
@@ -135,7 +153,7 @@ def log_f_ragged(model, z, ix, drop_empty=False):
     # ONE scale per (trip, draw): a per-row scale would not survive the convolution
     M = seg_max(logw, ix.item_trip, ix.B)                          # [D, B]
     w = torch.exp(logw - M.index_select(-1, ix.item_trip))         # [D, T]
-    e = esp_newton(w, ix.row_of, ix.n_rows, model.R)               # [D, n_rows, R+1]
+    e = esp_newton(w, ix.row_of, ix.n_rows, model.R, ix.row_size)  # [D, n_rows, R+1]
     r = torch.arange(model.R + 1, dtype=w.dtype, device=w.device)
     a = torch.exp(-model.rho_c[ix.row_cat].unsqueeze(-1) * r * (r - 1) / 2.0)
     G = a.unsqueeze(0) * e                                          # [D, n_rows, R+1]
