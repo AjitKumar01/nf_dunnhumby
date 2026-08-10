@@ -72,3 +72,40 @@ fires. `cancellation_risk()` flags rows where it would.
 textbook advice.** Measured at K = 64: a factor of 1.4 drops ESS from 0.761 to 0.001, and
 2.5 puts log Z 27 nats out. In high dimension an inflated Gaussian concentrates on a shell
 away from the mode, where the integrand is negligible. Scale 1.0 is correct.
+
+## The synthetic recovery test — the result
+
+Data drawn exactly from P(S|K) by `sampler.py`, so the truth is known and there is no
+misspecification. Only the Gram matrix alpha alpha' is identified, so recovery is scored on
+that. 1,500 baskets, 96 items in 12 categories, K = 3, 60 households, 1,200 iterations,
+three data seeds.
+
+| seed | joint corr | pseudo corr | joint rel err | pseudo rel err |
+|---|---|---|---|---|
+| 0 | **0.8590** | 0.8551 | **0.5323** | 0.5541 |
+| 1 | **0.8366** | 0.8357 | **0.5625** | 0.5872 |
+| 2 | 0.8448 | **0.8609** | **0.6209** | 0.6273 |
+| mean | 0.8468 | 0.8506 | **0.5719** | 0.5895 |
+
+**Structure (correlation of the off-diagonal Gram entries): tied.** Joint wins two seeds of
+three and is marginally behind on average.
+
+**Scale (relative Frobenius error): joint wins all three**, by about 3%.
+
+### What this says about the rebuild
+
+The exact likelihood does *not* deliver the decisive advantage its theory implies. On data
+the model itself generated, with no misspecification and a validated exact sampler, Besag's
+pseudo-likelihood — the thing that looked like a hasty patch — recovers the structure
+equally well and the scale only slightly worse.
+
+**Caveat that cuts both ways.** Neither objective recovers well in absolute terms:
+correlation 0.85 and relative error 0.57 against a perfect 1.0 and 0.0. With 564 free
+parameters and roughly 6,750 item observations, most of the error is estimation noise
+common to both objectives, so this design has limited power to separate them. A larger
+synthetic sample would give a sharper comparison, and is the obvious next run.
+
+**Verified along the way:** the exact sampler reproduces enumerated whole-basket
+probabilities to within sampling noise (total variation 0.0073 against a noise floor of
+0.0074, 18 baskets, 60,000 draws), and `sample_exactly_k` matches exact subset
+probabilities on three configurations.
