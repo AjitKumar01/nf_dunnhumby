@@ -118,9 +118,15 @@ class RaggedIndex:
         self.flat_slot = self.row_trip * self.Cpad + self.row_pos
 
 
-def log_f_ragged(model, z, ix):
-    """log f(z) for a batch.  z [B, D, Kz] -> [B, D].  Identical mathematics to
-    core.Model.log_f, with the item axis unpadded."""
+def log_f_ragged(model, z, ix, drop_empty=False):
+    """log f(z) for a batch.  z [B, D, Kz] -> [B, D].
+
+    drop_empty excludes the n = 0 term, giving f(z) - 1 directly.  That matters: the model
+    conditions on a non-empty basket, so the quantity actually needed is Z - 1, and forming
+    it as exp(log Z) - 1 subtracts two nearly equal numbers whenever Z is close to 1.  The
+    empty basket contributes exactly 1 to f for every z (A_0 = 1, rho_0(0) = 0), so it can
+    be dropped from the sum instead of subtracted afterwards -- exact, and stable however
+    small Z - 1 becomes."""
     D = z.shape[1]
     phi_i = model.phi[ix.item]                                     # [T, Kz]
     bt = model.b_flat(ix) - 0.5 * (phi_i ** 2).sum(-1)             # [T]
@@ -143,6 +149,8 @@ def log_f_ragged(model, z, ix):
     n = torch.arange(A.shape[-1], dtype=w.dtype, device=w.device)
     lg = (torch.log(A.clamp_min(1e-300)) - model.rho_0()[: A.shape[-1]]
           + n * M.unsqueeze(-1))
+    if drop_empty:
+        lg = lg[..., 1:]
     return torch.logsumexp(lg, dim=-1).transpose(0, 1)              # [B, D]
 
 
@@ -193,14 +201,15 @@ class RaggedModel(torch.nn.Module):
         b = b + (self.zeta[it] * self.xi[c["store"]]).sum(-1)
         return b
 
-    def log_Z(self, ix, n_draws=32, mode_steps=10, generator=None, return_ess=False):
+    def log_Z(self, ix, n_draws=32, mode_steps=10, generator=None, return_ess=False,
+              drop_empty=False):
         B = ix.B
         with torch.no_grad():
             z = torch.zeros(B, 1, self.Kz, dtype=self.lam.dtype, device=self.lam.device)
             for _ in range(mode_steps):
                 zz = z.detach().requires_grad_(True)
                 with torch.enable_grad():
-                    lf = log_f_ragged(self, zz, ix).sum()
+                    lf = log_f_ragged(self, zz, ix, drop_empty).sum()
                 z = torch.autograd.grad(lf, zz)[0]
             zh = z.detach()
             eps = 0.15
@@ -212,7 +221,7 @@ class RaggedModel(torch.nn.Module):
                 for s in (d, -d):
                     zz = (zh + s).detach().requires_grad_(True)
                     with torch.enable_grad():
-                        lf = log_f_ragged(self, zz, ix).sum()
+                        lf = log_f_ragged(self, zz, ix, drop_empty).sum()
                     gs.append((torch.autograd.grad(lf, zz)[0] - zz.detach())[:, 0, k])
                 curv[:, k] = -(gs[0] - gs[1]) / (2 * eps)
             sd = (1.0 / curv.clamp_min(0.05)).sqrt().clamp(0.05, 5.0)
@@ -224,7 +233,7 @@ class RaggedModel(torch.nn.Module):
                      - 0.5 * self.Kz * L2P)
         L2P = float(math.log(2 * math.pi))
         log_p = (-0.5 * self.Kz * L2P - 0.5 * (zs ** 2).sum(-1)
-                 + log_f_ragged(self, zs, ix))
+                 + log_f_ragged(self, zs, ix, drop_empty))
         lw = log_p - log_q
         lz = torch.logsumexp(lw, dim=1) - math.log(n_draws)
         if not return_ess:
@@ -254,8 +263,19 @@ class RaggedModel(torch.nn.Module):
 
     def loglik(self, ix, line_item, line_trip, line_cat, n_draws=32,
                generator=None, return_ess=False):
-        out = self.log_Z(ix, n_draws=n_draws, generator=generator, return_ess=return_ess)
-        lz, ess = out if return_ess else (out, None)
-        lzm1 = lz + torch.log1p(-torch.exp(-lz.clamp_min(1e-6)))
-        ll = self.energy(line_item, line_trip, line_cat, ix.B) - lzm1
+        """log P(S | S non-empty) = E(S) - log(Z - 1), with log(Z - 1) computed directly
+        rather than by subtracting 1 from Z."""
+        out = self.log_Z(ix, n_draws=n_draws, generator=generator,
+                         return_ess=return_ess, drop_empty=True)
+        lz1, ess = out if return_ess else (out, None)
+        ll = self.energy(line_item, line_trip, line_cat, ix.B) - lz1
         return (ll, ess) if return_ess else ll
+
+    @torch.no_grad()
+    def project(self, phi_max):
+        """Hard cap on ||phi_j||.  The diverged run reached a mean norm of 2.94 from an
+        initialisation of 0.15, which drove the pair term to 15,437 on a 36-line basket.
+        Section 14 says the model must stay where lambda_max(Lambda) < 1, and Lambda scales
+        with ||phi||^2, so bounding the norm is the cheapest sufficient guard."""
+        n = self.phi.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        self.phi.mul_(torch.clamp(phi_max / n, max=1.0))

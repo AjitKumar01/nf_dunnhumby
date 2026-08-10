@@ -123,7 +123,8 @@ def main(a):
     log("")
     log(f"timing probe: {a.probe} iterations at batch {a.batch}, {a.draws} draws")
     t0 = time.time()
-    hist = []
+    hist, ess_hist, n_skip = [], [], 0
+    m.project(a.phi_max)
     for it in range(1, a.iters + 1):
         sub = tr[rng.choice(len(tr), size=a.batch, replace=False)]
         ix, ctx, hh, li, lt, lc = B.make(sub)
@@ -131,11 +132,23 @@ def main(a):
         ll, ess = m.loglik(ix, li, lt, lc, n_draws=a.draws, generator=gen,
                            return_ess=True)
         loss = -ll.mean()
-        opt.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(m.parameters(), 5.0)
-        opt.step()
+        # ESS GATE.  log Z is estimated by importance sampling; where the sampler has
+        # collapsed the estimate is unreliable and biased DOWNWARD, which the objective
+        # rewards (section 17).  The diverged run had ESS 0.016 on exactly the trips whose
+        # energy had run away.  A batch below the floor carries no usable gradient, so it
+        # is skipped rather than followed.
+        e_bar = float(ess.mean())
+        if e_bar < a.ess_floor:
+            n_skip += 1
+            opt.zero_grad()
+        else:
+            opt.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(m.parameters(), a.clip)
+            opt.step()
+            m.project(a.phi_max)           # keep lambda_max(Lambda) in the stable regime
         hist.append(float(loss))
+        ess_hist.append(e_bar)
         if it == a.probe:
             dt = time.time() - t0
             per = dt / a.probe
@@ -144,7 +157,8 @@ def main(a):
                 f"Cpad {ix.Cpad}")
             log(f"  implied wall clock: {per * a.iters / 3600:.2f} h for {a.iters:,} "
                 f"iterations")
-            log(f"  loss {np.mean(hist[-20:]):.3f}   ESS {float(ess.mean()):.3f}")
+            log(f"  loss {np.mean(hist[-20:]):.3f}   ESS {np.mean(ess_hist[-20:]):.3f}"
+                f"   |phi| {float(m.phi.norm(dim=1).mean()):.3f}   skipped {n_skip}")
             if a.probe_only:
                 json.dump(dict(sec_per_iter=per, iters=a.iters, n_par=npar,
                                slots=int(ix.item.numel()), ess=float(ess.mean())),
@@ -155,7 +169,13 @@ def main(a):
             vb, vl = evaluate(m, B, va[:a.n_val], a.draws * 2, gen)
             log(f"  it {it:5d}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
                 f"val/basket {vb:8.3f}  val/line {vl:7.4f}  "
-                f"ESS {float(ess.mean()):.3f}  {(time.time()-t0)/60:.1f} min")
+                f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f}  "
+                f"|phi| {float(m.phi.norm(dim=1).mean()):.3f}  skip {n_skip}  "
+                f"{(time.time()-t0)/60:.1f} min")
+            if vb > 0:
+                log("  ABORT: held-out log-likelihood is positive, which is impossible. "
+                    "The objective is being maximised through a defect, not a fit.")
+                return
             torch.save(m.state_dict(), os.path.join(OUT, f"v3_{a.label}.pt"))
     vb, vl = evaluate(m, B, va[:a.n_val], a.draws * 4, gen)
     log(f"final  val/basket {vb:.4f}  val/line {vl:.4f}")
@@ -181,5 +201,8 @@ if __name__ == "__main__":
     p.add_argument("--n-val", type=int, default=768)
     p.add_argument("--probe", type=int, default=25)
     p.add_argument("--probe-only", action="store_true")
+    p.add_argument("--phi-max", type=float, default=0.35)
+    p.add_argument("--ess-floor", type=float, default=0.30)
+    p.add_argument("--clip", type=float, default=2.0)
     p.add_argument("--seed", type=int, default=0)
     main(p.parse_args())
