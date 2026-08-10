@@ -44,3 +44,31 @@ the full 6x, taking a correct fit to roughly 3 hours.
 
 That is the next thing to build, and it is engineering rather than research: the mathematics
 above is verified and does not change.
+
+## After the ragged rewrite (`ragged.py`)
+
+Same mathematics, no padded dimension. Elementary symmetric polynomials come from power
+sums via Newton's identities, each a `scatter_add` over a flat item array.
+
+| batch | flat items | rows | draws | mode (s) | log Z (s) | ESS | hours per fit |
+|---|---|---|---|---|---|---|---|
+| 192 | 49,369 | 1,131 | 64 | 0.12 | 0.89 | 0.701 | **1.68** |
+| 192 | 45,598 | 1,129 | 32 | 0.11 | 0.77 | 0.715 | **1.46** |
+| 384 | 103,464 | 2,399 | 32 | 0.25 | 1.77 | 0.739 | 3.38 |
+
+**17.8 h → 1.68 h, a factor of 10.6**, and no approximation: category sizes are exact.
+
+Correctness is unchanged — the ragged and padded implementations agree to the last digit on
+identical inputs (4.745300 both), and log e_k agrees to 0.
+
+### Two things measured along the way
+
+**Newton's identities are safe here but not unconditionally.** At a top-two log-weight gap
+of 27 — a weight ratio of 1e12 — the k = 3 case carries 23% relative error from
+cancellation. On the fitted model that gap has median 0.051 and maximum 1.081, so it never
+fires. `cancellation_risk()` flags rows where it would.
+
+**Over-dispersing the proposal makes things dramatically worse, which is the opposite of the
+textbook advice.** Measured at K = 64: a factor of 1.4 drops ESS from 0.761 to 0.001, and
+2.5 puts log Z 27 nats out. In high dimension an inflated Gaussian concentrates on a shell
+away from the mode, where the integrand is negligible. Scale 1.0 is correct.
