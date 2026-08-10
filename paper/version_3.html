@@ -150,7 +150,8 @@ number would have to come from fitting this model, it says so.</p>
 Appendix D and Appendix E. They are deliberately not in the main text: the model should stand
 on its own, and a reader who has never seen the earlier work should not have to.</p>
 
-<div class="part"><div class="pn">Part I</div><div class="pt">The model, stated</div></div>
+
+<div class="part"><div class="pn">Part I</div><div class="pt">The model</div></div>
 
 <h2><span class="num">1</span>The model in one page</h2>
 
@@ -167,7 +168,7 @@ products <span class="v">S</span> drawn from the store's assortment
 <p><strong>Every product has a standalone value</strong>
 <span class="v">b<sup>(g)</sup><sub>ijt</sub></span> — a linear index in household taste,
 price, promotion, coupon, seasonality, store, and the household's own purchase history
-(Eq. 7). <span class="v">g</span> indexes a discrete trip type.</p>
+(Eq. 3). <span class="v">g</span> indexes a discrete trip type.</p>
 
 <p><strong>A basket's plausibility is one number.</strong> Products are not chosen one at a
 time and not in two stages; the whole set is scored at once by an energy, and the probability
@@ -195,17 +196,17 @@ P( S ) = exp E(S) / Z
 
 <p><strong>The normaliser <span class="v">Z</span> sums over every subset of the
 assortment</strong> — about <span class="v">10<sup>915</sup></span> of them at the median
-store. Theorem 1 (§9) shows this collapses exactly to a
+store. Theorem 1 (§6) shows this collapses exactly to a
 <span class="v">K<sub>z</sub></span>-dimensional Gaussian integral of a product of
 one-dimensional polynomials, computable to machine precision. That single fact is what makes
 the rest possible: an exact likelihood to maximise, exact sampling with no Markov chain, and
 exact derivatives of any purchase probability with respect to any price.</p>
 
-<p><strong>Units are a separate factor</strong> (§10),
+<p><strong>Units are a separate factor</strong> (§8),
 <span class="v">P(S, q) = P(S) ∏<sub>j∈S</sub> P(q<sub>j</sub>)</span>, which follows from a
 stated conditional-independence assumption rather than from an ordering of decisions.</p>
 
-<p><strong>Trips are generated too</strong> (§26), by a hazard on the household's own state,
+<p><strong>Trips are generated too</strong> (§9), by a hazard on the household's own state,
 so a promotion can change when someone shops and not only what they buy.</p>
 
 <h3><span class="num">1.1</span>What the model does not have, deliberately</h3>
@@ -220,11 +221,11 @@ so a promotion can change when someone shops and not only what they buy.</p>
   one probability, not one per order in which it might have been assembled.</li>
   <li><strong>No nesting coefficient, no inclusive value.</strong> The category-level
   quantities that would need them are derivatives of <span class="v">log Z</span>, available
-  in closed form (Eq. 17).</li>
+  in closed form (Eq. 13).</li>
   <li><strong>No latent quantity that is reconstructed and then conditioned on.</strong>
   Anything unobserved is either integrated out exactly — the basket effect
   <span class="v">z</span>, the trip type <span class="v">g</span> — or defined from
-  observables. This is Axiom O (§5.1), and it is why there is no inventory variable.</li>
+  observables. This is Axiom O (§10), and it is why there is no inventory variable.</li>
 </ul>
 
 <h3><span class="num">1.2</span>The logic, in the order it is argued</h3>
@@ -232,15 +233,15 @@ so a promotion can change when someone shops and not only what they buy.</p>
 <div class="scroll"><table>
 <thead><tr><th>question</th><th>answer</th><th>where</th></tr></thead>
 <tbody>
-<tr><td>Can <span class="v">Z</span> be computed at all?</td><td>Yes, exactly, via a Gaussian identity and elementary symmetric polynomials. Verified against brute force to 4 × 10<sup>−15</sup>.</td><td>§9</td></tr>
+<tr><td>Can <span class="v">Z</span> be computed at all?</td><td>Yes, exactly, via a Gaussian identity and elementary symmetric polynomials. Verified against brute force to 4 × 10<sup>−15</sup>.</td><td>§6</td></tr>
 <tr><td>Why does basket-size fidelity matter for price counterfactuals?</td><td>Because they are the same quantity: <span class="v">d𝔼[n]/dδ = Var(n)</span>.</td><td>§12</td></tr>
 <tr><td>Why not put all the interaction in the embedding?</td><td>A Gaussian latent yields only <span class="v">W = ΦΦ<sup>⊤</sup> ⪰ 0</span>: every product attracts itself and total repulsion is bounded. Substitution needs an indefinite block.</td><td>§13</td></tr>
-<tr><td>Why is that block enumerated rather than embedded?</td><td>Because grouping by the within-category count sums over it exactly, at <span class="v">O(N R)</span>.</td><td>§9, §13</td></tr>
+<tr><td>Why is that block enumerated rather than embedded?</td><td>Because grouping by the within-category count sums over it exactly, at <span class="v">O(N R)</span>.</td><td>§6, §13</td></tr>
 <tr><td>Why is basket size a free potential rather than emergent?</td><td>Because a latent reaching dunnhumby's dispersion must run at <span class="v">λ<sub>max</sub> ≥ 0.77</span>, where the estimator measurably breaks. A free <span class="v">ρ<sub>0</sub></span> delivers the same dispersion at <span class="v">λ<sub>max</sub> = 0</span>.</td><td>§14</td></tr>
-<tr><td>What can be estimated, and what can be believed?</td><td>An exact likelihood; but incidental parameters and Monte Carlo bias remain, and the shelf-price elasticity is not identified from this data at all.</td><td>§17–20, §21</td></tr>
+<tr><td>What can be estimated, and what can be believed?</td><td>An exact likelihood; but incidental parameters and Monte Carlo bias remain, and the shelf-price elasticity is not identified from this data at all.</td><td>§16–20, §20</td></tr>
 </tbody></table></div>
 
-<h2><span class="num">5</span>Index sets, data, and the fitted instance</h2>
+<h2><span class="num">2</span>Index sets, data, and the fitted instance</h2>
 
 <div class="scroll"><table>
 <thead><tr><th>symbol</th><th>meaning</th><th class="num">size</th></tr></thead>
@@ -257,7 +258,562 @@ so a promotion can change when someone shops and not only what they buy.</p>
 <p>Splits are by calendar week, unchanged from version 2: weeks 1–82 train, 83–90
 validation, 91–102 test.</p>
 
-<h3><span class="num">5.1</span>The state, and the one axiom this design turns on</h3>
+<h2><span class="num">3</span>What is random, and what a trip conditions on</h2>
+
+<p>A trip's outcome is a purchase-count vector over the store's assortment. Write
+<span class="v">x ∈ {0,1}<sup>𝒜<sub>s</sub></sup></span> for the purchase indicators, so
+<span class="v">S = {j : x<sub>j</sub> = 1}</span>, and
+<span class="v">q<sub>j</sub> ∈ {1,…,12}</span> for the units of a purchased product.
+Define</p>
+
+<div class="eq"><div class="body">
+n<sub>c</sub>(S) = |S ∩ 𝒞<sub>s</sub>(c)| , &nbsp;&nbsp;
+n(S) = |S| = ∑<sub>c</sub> n<sub>c</sub>(S)
+</div><div class="tag">(1)</div></div>
+
+<p>The conditioning set is</p>
+
+<div class="eq"><div class="body">
+𝒢<sub>v</sub> = ( i, s, t, w, h<sub>it</sub>,
+{Δlog p<sub>jst</sub>}<sub>j</sub>,
+{D<sub>jsw</sub>, M<sub>jsw</sub>}<sub>j</sub>,
+{d<sub>ijt</sub>}<sub>j</sub> )
+</div><div class="tag">(2)</div></div>
+
+<p>with <span class="v">Δlog p</span> the centred log price (Appendix B of version 2,
+unchanged), <span class="v">D</span> and <span class="v">M</span> display and mailer
+indicators, and <span class="v">d<sub>ijt</sub> ∈ {0,1}</span> the <em>coupon eligibility
+indicator</em> — 1 when household <span class="v">i</span> holds a live coupon covering
+product <span class="v">j</span> on day <span class="v">t</span>.
+<span class="v">d</span> is new in version 3 and §20 onward is about it.</p>
+
+<div class="flag">
+<p class="label">Why eligibility is an indicator and not a depth</p>
+<p>An earlier draft of this document made <span class="v">d<sub>ijt</sub> ∈ [0,1]</span> a
+fractional price reduction. <strong>That is not available.</strong> dunnhumby's
+<code>coupon.csv</code> carries exactly three fields —
+<code>COUPON_UPC, PRODUCT_ID, CAMPAIGN</code> — and <code>coupon_redempt.csv</code> carries
+<code>household_key, DAY, COUPON_UPC, CAMPAIGN</code>. <strong>Neither records a face
+value.</strong> The only discount amounts in the release are
+<code>COUPON_DISC</code> on transaction lines, which exist <em>only where a coupon was
+redeemed</em>: 36,422 lines of 2,595,732 (1.40%), median $1.00, median depth 26.8% of line
+value.</p>
+<p>Imputing a face value per coupon from those redeemed lines is possible but thin — 2,318
+redemption events over 1,135 coupons, about two each — and selected, because redemption is
+a choice. Version 3 therefore treats eligibility as binary and reports the effect per
+<em>coupon held</em>. §22 records what this costs: the coupon response can discipline the
+sign and existence of a price effect but cannot be rescaled to a markdown of a stated depth
+without an assumed face value.</p>
+</div>
+
+<h2><span class="num">4</span>Product value</h2>
+
+<p>One linear index per product, evaluated with no basket around it. This is version 2's
+<span class="v">b</span>, extended by the coupon channel and the trip-type shift, and with
+the co-purchase loading split off into its own embedding:</p>
+
+<div class="eq hero"><div class="body">
+b<sup>(g)</sup><sub>ijt</sub> = λ<sub>j</sub> + a<sub>g</sub>
++ θ<sub>i</sub><sup>⊤</sup>α<sub>j</sub> + ϑ<sub>g</sub><sup>⊤</sup>α<sub>j</sub>
+− ( γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub> ) Δlog p<sub>jst</sub>
++ ( γ<sup>d⊤</sup><sub>i</sub>β<sup>d</sup><sub>j</sub> ) d<sub>ijt</sub>
+<br>
++ ψ<sub>j</sub><sup>⊤</sup>x<sup>rec</sup><sub>ijt</sub>
++ w<sup>loy</sup><sub>j</sub>ω<sub>ijt</sub>
++ w<sup>frq</sup><sub>j</sub>f<sub>ijt</sub>
++ w<sup>sup</sup><sub>j</sub>x<sup>sup</sup><sub>ic(j)t</sub>
++ w<sup>dsp</sup><sub>j</sub>D<sub>jsw</sub>
++ w<sup>mlr</sup><sub>j</sub>M<sub>jsw</sub>
++ μ<sub>j</sub><sup>⊤</sup>δ<sub>w</sub>
++ ζ<sub>j</sub><sup>⊤</sup>ξ<sub>s</sub>
+</div><div class="tag">(3)</div></div>
+
+<p>Three changes from version 2's Eq. 22, each with a reason.</p>
+
+<ul>
+  <li><strong><span class="v">g</span>, the trip type.</strong> A discrete latent in
+  <span class="v">{1,…,G}</span> shifting the overall level by <span class="v">a<sub>g</sub></span>
+  and tilting toward kinds of product by <span class="v">ϑ<sub>g</sub></span>. It is discrete
+  so that it can be summed over exactly — <span class="v">G</span> extra terms, no
+  approximation. §14.4 measures how much it actually carries, which is less than one would
+  hope.</li>
+  <li><strong>The coupon term.</strong> Separate from the price term, with its own
+  household and product loadings, because §21 identifies it from different variation and it
+  must be allowed to differ. Since <span class="v">d</span> is binary,
+  <span class="v">γ<sup>d⊤</sup><sub>i</sub>β<sup>d</sup><sub>j</sub></span> is the shift in
+  product value from holding a coupon — an intent-to-treat effect on the utility scale, not
+  a price elasticity.</li>
+  <li><strong><span class="v">α</span> no longer carries co-purchase.</strong> Version 2 ties
+  the taste embedding and the interaction embedding, which section 17 of version 2 notes is what
+  pins <span class="v">α</span>'s scale, and §10.1 notes is stronger than the theory needs.
+  Version 3 unties them: <span class="v">α<sub>j</sub> ∈ ℝ<sup>K</sup></span> carries taste,
+  and a separate <span class="v">φ<sub>j</sub> ∈ ℝ<sup>K<sub>z</sub></sup></span> carries
+  co-purchase. The scale of <span class="v">φ</span> is pinned by the interaction alone,
+  which is cleaner. Nothing requires <span class="v">K<sub>z</sub></span> to match
+  <span class="v">K</span>, and §14.2 shows raising it does not buy dispersion, so it is set
+  small.</li>
+</ul>
+
+<p>There is no <span class="v">u</span> versus <span class="v">b</span> distinction in
+version 3. Version 2 needs two evaluations of one function because its item conditional is
+defined with the rest of the basket in the context; here the basket law is written directly
+as a joint, and the conditional is a <em>consequence</em> (§11), not a definition.</p>
+
+<h2><span class="num">5</span>The energy</h2>
+
+<p>The whole basket law is one exponential family over subsets of the assortment. There is
+no composition stage.</p>
+
+<div class="eq hero key"><div class="body">
+E(S) = ∑<sub>j ∈ S</sub> b<sup>(g)</sup><sub>ijt</sub>
++ ∑<sub>{j,k} ⊆ S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub>
+− ∑<sub>c</sub> ρ<sub>c</sub> <span class="frac"><span>n<sub>c</sub>(n<sub>c</sub> − 1)</span><span>2</span></span>
+− ρ<sub>0</sub>( n(S) )
+</div><div class="tag">(4)</div></div>
+
+<div class="eq key"><div class="body">
+P( S | g, 𝒢 ) = <span class="frac"><span>exp E(S)</span><span>Z(g, 𝒢)</span></span> ,
+&nbsp;&nbsp;
+Z(g, 𝒢) = ∑<sub>S ⊆ 𝒜<sub>s</sub></sub> exp E(S)
+</div><div class="tag">(5)</div></div>
+
+<p>Read term by term:</p>
+
+<ul>
+  <li><span class="v">∑<sub>j∈S</sub> b<sub>j</sub></span> — each product's standalone value.</li>
+  <li><span class="v">∑<sub>{j,k}⊆S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub></span> — a
+  pairwise interaction over <em>every</em> pair in the basket, within or across categories.
+  Positive dot product means the two products make each other more likely. This is the
+  complementarity term, and unlike version 2's it acts on whether a category is entered at
+  all, because there is no composition to condition on.</li>
+  <li><span class="v">−ρ<sub>c</sub> n<sub>c</sub>(n<sub>c</sub>−1)/2</span> — a uniform
+  extra interaction among products of the same category. Since
+  <span class="v">n<sub>c</sub>(n<sub>c</sub>−1)/2</span> counts the within-category pairs,
+  this adds <span class="v">−ρ<sub>c</sub></span> to every same-category pair.
+  <span class="v">ρ<sub>c</sub> &gt; 0</span> is substitution — the second yoghurt is worth
+  less than the first; <span class="v">ρ<sub>c</sub> &lt; 0</span> is stocking up. It is a
+  free real number, so the data decides the sign.</li>
+  <li><span class="v">−ρ<sub>0</sub>(n)</span> — a free function of total basket size, one
+  value per <span class="v">n ∈ {0,…,n<sub>max</sub>}</span>, with
+  <span class="v">ρ<sub>0</sub>(0) = 0</span> fixing the scale. §14 shows this is the term
+  that makes the model usable as a price environment, and that version 2's
+  <span class="v">1/(n−1)</span> divisor is a hard-coded special case of it.</li>
+</ul>
+
+<p>Collecting the pairwise terms, the interaction matrix is</p>
+
+<div class="eq"><div class="body">
+W<sub>jk</sub> = φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub> − ρ<sub>c(j)</sub> 1{ c(j) = c(k) }
+&nbsp;&nbsp; ( j ≠ k )
+</div><div class="tag">(6)</div></div>
+
+<p>— low rank plus block diagonal, symmetric by construction, and <strong>indefinite</strong>,
+which §13 shows is exactly what is needed and what version 2 cannot have.</p>
+
+<h2><span class="num">6</span>The normaliser</h2>
+
+<p>Eq. 5 sums over <span class="v">2<sup>|𝒜<sub>s</sub>|</sup></span> subsets — about
+<span class="v">10<sup>915</sup></span> at the median store. It is nevertheless computable
+in closed form up to a low-dimensional Gaussian integral.</p>
+
+<div class="lemma">
+<p class="label">Theorem 1 — the normaliser</p>
+<p>Write <span class="v">b̃<sub>j</sub> = b<sup>(g)</sup><sub>ijt</sub> −
+½‖φ<sub>j</sub>‖²</span> and, for <span class="v">z ∈ ℝ<sup>K<sub>z</sub></sup></span>,
+<span class="v">w<sub>j</sub>(z) = exp( b̃<sub>j</sub> + z<sup>⊤</sup>φ<sub>j</sub> )</span>.
+Let <span class="v">e<sub>r</sub></span> denote the elementary symmetric polynomial of
+degree <span class="v">r</span>, and define the per-category generating polynomial</p>
+<div class="eq"><div class="body">
+G<sub>c</sub>(u; z) = ∑<sub>r=0</sub><sup>min(N<sub>sc</sub>, R)</sup>
+exp( −ρ<sub>c</sub> <span class="frac"><span>r(r−1)</span><span>2</span></span> )
+&thinsp; e<sub>r</sub>( { w<sub>j</sub>(z) }<sub>j ∈ 𝒞<sub>s</sub>(c)</sub> ) &thinsp; u<sup>r</sup>
+</div><div class="tag">(7)</div></div>
+<p>Let <span class="v">A<sub>n</sub>(z)</span> be the coefficients of the product,
+<span class="v">∏<sub>c</sub> G<sub>c</sub>(u; z) = ∑<sub>n</sub> A<sub>n</sub>(z) u<sup>n</sup></span>.
+Then</p>
+<div class="eq key"><div class="body">
+Z = 𝔼<sub>z ~ N(0, I<sub>K<sub>z</sub></sub>)</sub>
+[ ∑<sub>n=0</sub><sup>n<sub>max</sub></sup> e<sup>−ρ<sub>0</sub>(n)</sup> A<sub>n</sub>(z) ]
+</div><div class="tag">(8)</div></div>
+</div>
+
+<p><strong>Proof.</strong> Three steps, each elementary.</p>
+
+<p><em>Step 1 — complete the square.</em> With
+<span class="v">v<sub>S</sub> = ∑<sub>j∈S</sub>φ<sub>j</sub></span>,</p>
+
+<div class="eq"><div class="body">
+∑<sub>{j,k} ⊆ S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub>
+= ½ ( ‖v<sub>S</sub>‖² − ∑<sub>j ∈ S</sub> ‖φ<sub>j</sub>‖² )
+</div><div class="tag">(9)</div></div>
+
+<p>because <span class="v">‖v<sub>S</sub>‖² = ∑<sub>j,k∈S</sub>φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub></span>
+counts each unordered pair twice and each diagonal term once. Absorbing the diagonal into
+<span class="v">b̃</span> gives
+<span class="v">exp E(S) = ( ∏<sub>j∈S</sub> e<sup>b̃<sub>j</sub></sup> ) ·
+e<sup>½‖v<sub>S</sub>‖²</sup> · e<sup>−∑<sub>c</sub>ρ<sub>c</sub>C(n<sub>c</sub>,2) − ρ<sub>0</sub>(n)</sup></span>.</p>
+
+<p><em>Step 2 — Hubbard–Stratonovich.</em> For any
+<span class="v">v ∈ ℝ<sup>K<sub>z</sub></sup></span>, the moment generating function of a
+standard Gaussian gives</p>
+
+<div class="eq"><div class="body">
+𝔼<sub>z ~ N(0,I)</sub>[ e<sup>z<sup>⊤</sup>v</sup> ] = e<sup>½‖v‖²</sup>
+</div><div class="tag">(10)</div></div>
+
+<p>Substituting and exchanging the (finite) sum over subsets with the expectation,</p>
+
+<div class="eq"><div class="body">
+Z = 𝔼<sub>z</sub> [ ∑<sub>S ⊆ 𝒜<sub>s</sub></sub>
+( ∏<sub>j ∈ S</sub> w<sub>j</sub>(z) ) ·
+e<sup>−∑<sub>c</sub>ρ<sub>c</sub>C(n<sub>c</sub>,2) − ρ<sub>0</sub>(n)</sup> ]
+</div><div class="tag">(11)</div></div>
+
+<p><strong>The step that does the work is this one.</strong> Conditionally on
+<span class="v">z</span>, the coupling between products has vanished: the summand is a
+product over <span class="v">j ∈ S</span> of per-product weights, times a factor depending on
+<span class="v">S</span> only through the counts. The interaction has been traded for a
+<span class="v">K<sub>z</sub></span>-dimensional integral.</p>
+
+<p><em>Step 3 — group by counts.</em> The set of subsets with a given count vector
+<span class="v">(r<sub>c</sub>)</span> contributes
+<span class="v">∏<sub>c</sub> e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span>, since
+<span class="v">e<sub>r</sub></span> is by definition the sum of all products of
+<span class="v">r</span> distinct weights. Hence</p>
+
+<div class="eq"><div class="body">
+Z = 𝔼<sub>z</sub> [ ∑<sub>(r<sub>c</sub>)</sub>
+e<sup>−ρ<sub>0</sub>(∑<sub>c</sub>r<sub>c</sub>)</sup>
+∏<sub>c</sub> e<sup>−ρ<sub>c</sub>C(r<sub>c</sub>,2)</sup>
+e<sub>r<sub>c</sub></sub>( w<sup>(c)</sup>(z) ) ]
+</div><div class="tag">(12)</div></div>
+
+<p>The inner sum is exactly the coefficient extraction in the statement: without
+<span class="v">ρ<sub>0</sub></span> it factorises as
+<span class="v">∏<sub>c</sub>G<sub>c</sub>(1;z)</span>; with it, the constraint
+<span class="v">∑<sub>c</sub>r<sub>c</sub> = n</span> is carried by the polynomial variable
+<span class="v">u</span>, and summing over <span class="v">n</span> with weights
+<span class="v">e<sup>−ρ<sub>0</sub>(n)</sup></span> gives Eq. 8. ∎</p>
+
+<div class="lemma">
+<p class="label">Verified</p>
+<p><code>scripts/theory/verify_normaliser.py</code> enumerates all
+<span class="v">2<sup>J</sup></span> subsets for five configurations
+(<span class="v">J</span> = 8 to 12, <span class="v">K<sub>z</sub></span> = 2 and 3, both
+signs of <span class="v">ρ<sub>c</sub></span>) and compares
+<span class="v">log Z</span> with Eq. 8 evaluated by Gauss–Hermite quadrature.
+<strong>Worst relative error 3.9 × 10<sup>−15</sup></strong>.
+<code>verify_size_term.py</code> repeats it with the size term for four configurations
+including a free-form random <span class="v">ρ<sub>0</sub></span>: <strong>worst relative
+error 2.0 × 10<sup>−15</sup></strong>. Both are at double-precision round-off.</p>
+</div>
+
+<h3><span class="num">6.1</span>Three corollaries that fall out immediately</h3>
+
+<div class="lemma">
+<p class="label">Corollary 1 — the empty basket</p>
+<p><span class="v">P(S = ∅) = 1 / Z</span> exactly.</p>
+<p><em>Proof.</em> <span class="v">E(∅) = 0</span> by Eq. 4 with
+<span class="v">ρ<sub>0</sub>(0) = 0</span>, so its unnormalised weight is 1. ∎ Hence
+conditioning a trip on buying <em>something</em> costs nothing but replacing
+<span class="v">log Z</span> with <span class="v">log(Z − 1)</span> — exact, where version 2
+needs the inclusion–exclusion factor
+<span class="v">1 − ∏<sub>c</sub>P(y<sub>c</sub>=0)</span> and estimates it from a sample of
+categories. Verified to relative error 3.8 × 10<sup>−15</sup>.</p>
+</div>
+
+<div class="lemma">
+<p class="label">Corollary 2 — inclusion probabilities and the gradient</p>
+<p>Because <span class="v">log Z</span> is the cumulant generating function of the
+sufficient statistic <span class="v">x</span> in the natural parameter
+<span class="v">b</span>,</p>
+<div class="eq"><div class="body">
+<span class="frac"><span>∂ log Z</span><span>∂ b<sub>j</sub></span></span> = 𝔼[ x<sub>j</sub> ] = P( j ∈ S ) ,
+&nbsp;&nbsp;
+<span class="frac"><span>∂² log Z</span><span>∂ b<sub>j</sub> ∂ b<sub>k</sub></span></span> = Cov( x<sub>j</sub>, x<sub>k</sub> )
+</div><div class="tag">(13)</div></div>
+<p>and conditionally on <span class="v">z</span> the inclusion probability has a closed form.
+Writing <span class="v">f(z) = ∑<sub>n</sub>e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>
+for the integrand of Eq. 8,</p>
+<div class="eq"><div class="body">
+P( j ∈ S | z ) =
+<span class="frac"><span>∂ log f(z)</span><span>∂ log w<sub>j</sub></span></span>
+= ∑<sub>r</sub> P( n<sub>c</sub> = r | z ) ·
+<span class="frac"><span>w<sub>j</sub> e<sub>r−1</sub>( w<sup>(c)</sup> \ w<sub>j</sub> )</span><span>e<sub>r</sub>( w<sup>(c)</sup> )</span></span>
+</div><div class="tag">(14)</div></div>
+<p>The second equality says: given the category's count, which product fills a slot depends
+only on that category's weights; the size term enters only through the count law
+<span class="v">P(n<sub>c</sub> = r | z)</span>, which it couples across categories.</p>
+<div class="flag">
+<p class="label">Precision — the count law is not the category's own polynomial</p>
+<p>When <span class="v">ρ<sub>0</sub> ≡ 0</span> the categories are conditionally independent
+given <span class="v">z</span>, <span class="v">f</span> factorises as
+<span class="v">∏<sub>c</sub>G<sub>c</sub>(1;z)</span>, and Eq. 14's derivative reduces to
+<span class="v">∂ log G<sub>c</sub>/∂ log w<sub>j</sub></span>. With
+<span class="v">ρ<sub>0</sub></span> active <strong>that reduction is false</strong>:
+<span class="v">P(n<sub>c</sub>=r|z)</span> is no longer
+<span class="v">G<sub>c</sub></span>'s own normalised coefficient but its leave-one-out
+marginal under the coupled law,</p>
+<div class="eq"><div class="body">
+P( n<sub>c</sub> = r | z ) ∝ G<sub>c</sub>[r] ·
+∑<sub>m</sub> e<sup>−ρ<sub>0</sub>(r+m)</sup> B<sup>(−c)</sup><sub>m</sub>
+</div><div class="tag">(15)</div></div>
+<p>with <span class="v">B<sup>(−c)</sup></span> the polynomial product over every category
+except <span class="v">c</span> — obtainable for all <span class="v">C</span> categories at
+once from the prefix and suffix products the sampler already builds, at no extra order of
+cost. <em>Verified</em> against enumeration to 3.7 × 10<sup>−15</sup> on all four
+configurations including the free-form <span class="v">ρ<sub>0</sub></span>, and the identity
+<span class="v">P(j∈S|z) = ∂log f/∂log w<sub>j</sub></span> confirmed by finite differences to
+7 × 10<sup>−11</sup>.</p>
+</div>
+</div>
+
+<div class="lemma">
+<p class="label">Corollary 3 — sampling, exact given z</p>
+<p>A draw from Eq. 5 is three exact steps:</p>
+<ol>
+  <li>Draw <span class="v">z</span> from its posterior
+  <span class="v">q(z) ∝ N(z; 0, I) · ∑<sub>n</sub>e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>,
+  by sampling–importance–resampling from the Laplace proposal of §14.1 and §17.</li>
+  <li>Given <span class="v">z</span>, draw the total size
+  <span class="v">n ∝ e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>, then the
+  per-category counts <span class="v">(r<sub>c</sub>)</span> given
+  <span class="v">∑r<sub>c</sub> = n</span> by a backward pass over the same suffix
+  products used to form <span class="v">A<sub>n</sub></span>.</li>
+  <li>Given <span class="v">r<sub>c</sub></span>, draw exactly
+  <span class="v">r<sub>c</sub></span> products from
+  <span class="v">𝒞<sub>s</sub>(c)</span> by the classical sequential algorithm on suffix
+  elementary symmetric polynomials, which is exact in
+  <span class="v">O(N<sub>sc</sub> r<sub>c</sub>)</span> and needs no rejection.</li>
+</ol>
+<p><strong>No Gibbs sweeps, no burn-in, no mixing diagnostic.</strong> Steps 2 and 3 are
+exact. <strong>Step 1 is not:</strong> sampling–importance–resampling is exact only in the
+limit of infinitely many proposal draws, and its finite-budget error is governed by the same
+effective sample size that §14.2 shows collapsing from 0.878 to 0.001 across the
+bifurcation. So the draw is exact <em>given</em> <span class="v">z</span>, and approximate in
+<span class="v">z</span>.</p>
+<p>Verified: empirical frequencies over 40,000 draws match the enumerated law to total
+variation 0.018–0.103 against sampling-noise floors of 0.017–0.103, on all nine
+configurations across the two scripts. <strong>That verification certifies steps 2 and 3
+only</strong> — both scripts draw <span class="v">z</span> exactly from its posterior
+discretised on the quadrature grid, not by SIR from a Laplace proposal. Step 1 is the step
+that can fail and it is the one not yet checked.</p>
+</div>
+
+<h2><span class="num">7</span>The nesting</h2>
+
+<h3><span class="num">7.1</span>The three levels, written out</h3>
+
+<p>Theorem 1 is usually read as a computational device. It is also the statement that the
+model <em>is</em> a nested model, and the nesting is worth writing explicitly because it is
+derived rather than assumed. Conditional on <span class="v">z</span>, Eq. 5 factorises
+exactly into three levels:</p>
+
+<div class="eq hero key"><div class="body">
+P( S | z ) = P( n | z ) &nbsp;·&nbsp; P( (r<sub>c</sub>) | n, z )
+&nbsp;·&nbsp; ∏<sub>c</sub> P( S<sub>c</sub> | r<sub>c</sub>, z )
+</div><div class="tag">(16)</div></div>
+
+<div class="scroll"><table>
+<thead><tr><th>level</th><th>what is chosen</th><th>law</th><th>its inclusive value</th></tr></thead>
+<tbody>
+<tr><td><strong>1 — size</strong></td><td>how many lines in total</td><td><span class="v">P(n | z) = e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z) / f(z)</span></td><td><span class="v">log f(z)</span></td></tr>
+<tr><td><strong>2 — allocation</strong></td><td>how those <span class="v">n</span> lines split across categories</td><td><span class="v">P((r<sub>c</sub>) | n, z) = ∏<sub>c</sub> a<sub>r<sub>c</sub></sub>e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>) / A<sub>n</sub>(z)</span></td><td><span class="v">log A<sub>n</sub>(z)</span></td></tr>
+<tr><td><strong>3 — selection</strong></td><td>which <span class="v">r<sub>c</sub></span> products from category <span class="v">c</span></td><td><span class="v">P(S<sub>c</sub> | r<sub>c</sub>, z) = ∏<sub>j∈S<sub>c</sub></sub>w<sub>j</sub> / e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span></td><td><span class="v">log e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span></td></tr>
+</tbody></table></div>
+
+<p>with <span class="v">a<sub>r</sub> = e<sup>−ρ<sub>c</sub>r(r−1)/2</sup></span>. This is
+exactly the shape of a nested choice model — an upper level over totals, a middle level
+allocating across nests, a lower level choosing within a nest, each linked upward by a
+log-sum — and it is what Corollary 3's sampler walks down, in that order.</p>
+
+<div class="flag">
+<p class="label">Three differences from a nested logit, and they are the point</p>
+<ul>
+  <li><strong>No dissimilarity parameters.</strong> A nested logit attaches a free
+  coefficient to each inclusive value. Here the coefficients are all 1, because the three
+  levels are a factorisation of one joint rather than three models joined by hand. §7.2 shows
+  what that costs: the category-entry response becomes an identity, not a fitted number.</li>
+  <li><strong>The nests are not a partition of a single choice.</strong> A basket takes
+  several products from several categories, so level 3 is a subset choice
+  (<span class="v">e<sub>r</sub></span>, the elementary symmetric polynomial) rather than a
+  softmax. Setting <span class="v">R</span> = 1 collapses
+  <span class="v">e<sub>1</sub></span> to <span class="v">∑<sub>j</sub>w<sub>j</sub></span>
+  and recovers the familiar log-sum-exp.</li>
+  <li><strong>The correlation lives in <span class="v">z</span>, and it is integrated out.</strong>
+  A nested logit gets within-nest correlation from correlated errors. Here it comes from
+  <span class="v">ρ<sub>c</sub></span> at level 2 and from the shared
+  <span class="v">z</span> across all levels, and Eq. 8 integrates
+  <span class="v">z</span> exactly rather than approximating the resulting dependence.</li>
+</ul>
+</div>
+
+<p>Everything upstream of Eq. 16 is a single unconditional statement:
+<span class="v">P(S) = 𝔼<sub>z</sub>[P(S|z)f(z)]/Z</span>. The hierarchy exists conditionally
+on <span class="v">z</span> and is integrated away in the marginal, which is why the model has
+a nested <em>structure</em> without a nested <em>factorisation</em> of the kind §7.2
+discusses.</p>
+
+<h3><span class="num">7.2</span>What was kept, what was dropped, and what it cost</h3>
+
+<p>The category level is not abandoned — it is the organising structure of Eqs. 4 and 7, it
+carries a free parameter <span class="v">ρ<sub>c</sub></span>, and the within-category count is
+enumerated exactly rather than approximated. What is abandoned is the <em>nested
+factorisation</em>: a separate law for which categories are entered, linked to product values
+by an estimated coefficient.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>nested-model element</th><th>in version 3</th></tr></thead>
+<tbody>
+<tr><td>categories as a level</td><td><strong>kept</strong> — <span class="v">ρ<sub>c</sub></span>, the per-category polynomial <span class="v">G<sub>c</sub></span>, the count enumeration</td></tr>
+<tr><td>within-category correlation</td><td><strong>kept</strong>, produced by an explicit interaction <span class="v">ρ<sub>c</sub></span> rather than by correlated Gumbel shocks</td></tr>
+<tr><td>inclusive value</td><td><strong>kept as a derived quantity</strong>: <span class="v">log ∑<sub>j∈𝒞(c)</sub>w<sub>j</sub>(z)</span> appears inside <span class="v">G<sub>c</sub></span>. It is not estimated and has no frozen reference</td></tr>
+<tr><td>"at most one product per category"</td><td><strong>a special case</strong> — cap <span class="v">R</span> = 1, or let <span class="v">ρ<sub>c</sub> → ∞</span></td></tr>
+<tr><td>separate <span class="v">P(𝒦)</span>: cloglog entry × truncated shifted Poisson breadth</td><td><strong>gone</strong> — both are consequences of <span class="v">E</span></td></tr>
+<tr><td>the nesting coefficient <span class="v">κ<sub>c</sub></span></td><td><strong>gone, and replaced by an identity</strong></td></tr>
+</tbody></table></div>
+
+<div class="lemma">
+<p class="label">Proposition 5 — the category-entry response is not a free parameter</p>
+<p>Conditional on <span class="v">z</span>, shift every product value in category
+<span class="v">c</span> by <span class="v">δ</span>. Then</p>
+<div class="eq key"><div class="body">
+<span class="frac"><span>d log P( n<sub>c</sub> ≥ 1 )</span><span>d δ</span></span>
+= 𝔼[ r | r ≥ 1 ] − 𝔼[ r ]
+= 𝔼[ r | r ≥ 1 ] · ( 1 − P(n<sub>c</sub> ≥ 1) )
+</div><div class="tag">(17)</div></div>
+<p><em>Proof.</em> The category's count law is
+<span class="v">P(r) ∝ a<sub>r</sub>e<sub>r</sub>(w)</span> with
+<span class="v">a<sub>r</sub> = e<sup>−ρ<sub>c</sub>C(r,2)</sup></span>, and
+<span class="v">e<sub>r</sub></span> is homogeneous of degree <span class="v">r</span>, so a
+shift <span class="v">δ</span> multiplies the weight at <span class="v">r</span> by
+<span class="v">e<sup>rδ</sup></span>. Differentiating
+<span class="v">log ∑<sub>r≥1</sub> − log ∑<sub>r≥0</sub></span> gives the two means. ∎</p>
+<p><em>Verified</em> against direct enumeration on five configurations spanning
+<span class="v">N</span> = 6 to 20 and both signs of <span class="v">ρ<sub>c</sub></span>:
+relative error 1 × 10<sup>−11</sup> to 4 × 10<sup>−11</sup>, at the finite-difference floor.</p>
+</div>
+
+<div class="flag neg">
+<p class="label">This is the sharpest bet the architecture makes, and it conflicts with the fitted predecessor</p>
+<p>Both quantities in Eq. 17 are <strong>measured, not fitted</strong>:
+<span class="v">𝔼[r | r ≥ 1]</span> = 1.2844 and the per-category entry rate is
+6.075/188 = 0.0323. So version 3 <strong>pins the category-entry response at 1.243</strong>,
+with no parameter free to move it — <span class="v">ρ<sub>c</sub></span> and
+<span class="v">ρ<sub>0</sub></span> can only move it by moving those two observable moments.</p>
+<p>Version 2 <em>estimated</em> the same quantity as
+<span class="v">κ̂<sub>c</sub> · G(η)</span> = 0.8723 × 0.983 = <strong>0.858</strong>, and
+found <span class="v">κ &lt; 1</span> robustly — 0% of categories above 1 at
+<span class="v">m</span> = 32, 64 and 128 alike.</p>
+<p><strong>1.243 against 0.858 is a 45% disagreement on the same quantity, and version 3
+cannot absorb it.</strong> That is the price of removing a free parameter: the model is more
+falsifiable and more fragile. Two readings, and the evidence does not yet choose between
+them.</p>
+<ul>
+  <li><em>Version 2 was wrong.</em> Its own §16 records that <span class="v">κ</span> does not
+  respond as its identification story predicts — a fourfold reduction in inclusive-value noise
+  moved it by −0.045 when attenuation theory predicted +0.28 — and that changing a nuisance
+  constant moves it forty times its seed spread. A badly identified parameter can absorb
+  misspecification and settle anywhere.</li>
+  <li><em>Version 3 is wrong.</em> Eq. 17 forces the entry response to be governed entirely by
+  how many products a category yields when entered. If category entry genuinely responds more
+  weakly than that — because a shopper decides on the aisle before the shelf — the architecture
+  has no way to say so.</li>
+</ul>
+<p>The test is held-out fit, and it is decisive in a way neither argument is: fit version 3,
+and compare its category-incidence likelihood with version 2's on the same held-out weeks. If
+version 3 loses there specifically, Eq. 17 is the reason. This is test 9 in §30 and it should
+be run early, because a failure here is architectural rather than a matter of tuning.</p>
+</div>
+
+
+<h2><span class="num">8</span>Units</h2>
+
+<p>Eq. 5 gives the set. Units are a separate factor, and version 3 says exactly what that
+costs rather than presenting the split as a chain rule.</p>
+
+<div class="lemma">
+<p class="label">Assumption U — units do not feed back</p>
+<p>The joint over <span class="v">(S, q)</span> has the form
+<span class="v">P(S, q) ∝ exp E(S) · ∏<sub>j∈S</sub> h<sub>j</sub>(q<sub>j</sub>)</span>
+with each <span class="v">h<sub>j</sub></span> normalised over
+<span class="v">q ≥ 1</span>.</p>
+<p><em>Consequence.</em> Summing over <span class="v">q</span> gives
+<span class="v">∑<sub>q</sub>∏<sub>j∈S</sub>h<sub>j</sub>(q<sub>j</sub>) = 1</span>, so the
+marginal of <span class="v">S</span> is exactly Eq. 5 and
+<span class="v">P(S,q) = P(S)∏<sub>j∈S</sub>P(q<sub>j</sub>)</span>. The factorisation is
+<em>derived</em> from Assumption U rather than assumed as an ordering of decisions.</p>
+<p><em>What it rules out.</em> That buying three of something changes which other products
+appear. It is testable: regress a basket's composition residual on its unit counts.</p>
+</div>
+
+<p>Given the assumption, the units law needs to fit one thing — the conditional
+distribution of <span class="v">q</span> given purchase. Measured on training rows:
+<span class="v">P(q=1) = 0.7768</span>, mean 1.3564, variance 0.8387. The raw variable is
+<em>under</em>-dispersed (0.62) while <span class="v">q − 1</span> is
+<em>over</em>-dispersed (mean 0.3564, variance 0.8387, ratio 2.35). Version 2's shifted
+Poisson forces <span class="v">Var(q) = 𝔼[q] − 1</span> and cannot do this; a shifted
+negative binomial, already fitted in this repository at
+<span class="v">r̂ = 2.03</span>, reduces units-per-line total variation from 0.045 to
+0.016. Version 3 keeps it:</p>
+
+<div class="eq"><div class="body">
+P( q<sub>j</sub> = ν | j ∈ S ) = NB<sub>r<sub>j</sub></sub>( ν − 1 ; Λ<sup>qty</sup><sub>ij</sub> ) ,
+&nbsp; ν = 1, 2, … , &nbsp;&nbsp;
+log Λ<sup>qty</sup><sub>ij</sub> = a<sub>j</sub>
+− ( γ<sup>q⊤</sup><sub>i</sub>β<sup>q</sup><sub>j</sub> ) Δlog p<sub>jst</sub>
++ ψ<sup>q⊤</sup><sub>j</sub> x<sup>rec</sup><sub>ijt</sub>
+</div><div class="tag">(18)</div></div>
+
+<p>Units are censored at 12 in the data; 0.093% of rows are affected, so the truncation is
+left unmodelled and the direction of the resulting bias is recorded rather than corrected: right-censoring
+makes recorded counts too small, so fitting an uncensored law biases
+<span class="v">Λ<sup>qty</sup></span> <strong>downward</strong>. Version 2's Appendix E
+records this direction as upward, which is wrong.</p>
+
+<h2><span class="num">9</span>Trip timing</h2>
+
+<p>Version 2 conditions on the day and never generates it, so inter-trip gaps are exogenous
+and the retailer's central question — <em>if I promote this week, does the household come in
+sooner?</em> — is unanswerable. <code>ANALYSIS.md</code> §2 names this the largest gap. It is
+a discrete-time hazard on the household's own state:</p>
+
+<div class="eq"><div class="body">
+P( trip on day t | h<sub>it</sub> ) = 1 − exp( −e<sup>η<sup>trip</sup><sub>it</sub></sup> ) ,
+&nbsp;&nbsp;
+η<sup>trip</sup><sub>it</sub> = τ<sub>0i</sub>
++ τ<sub>1</sub><sup>⊤</sup>x<sup>gap</sup><sub>it</sub>
++ τ<sub>2</sub><sup>⊤</sup>dow(t)
+− τ<sub>3</sub><sup>⊤</sup>x<sup>sup</sup><sub>it</sub>
++ τ<sub>4</sub> Ω<sub>ist</sub>
+</div><div class="tag">(19)</div></div>
+
+<p>where <span class="v">x<sup>gap</sup></span> is a spline in days since the last trip,
+<span class="v">x<sup>sup</sup><sub>it</sub></span> the days-of-supply vector of Eq. 22 —
+a low reading brings the trip forward, which is the mechanism that makes a stock-up trip
+followed by a long gap — and</p>
+
+<div class="eq"><div class="body">
+Ω<sub>ist</sub> = log ∑<sub>c</sub> exp( promotional attractiveness of category c at store s )
+</div><div class="tag">(20)</div></div>
+
+<p>an exposure summary through which a promotion policy can move trip timing. Store choice
+given a trip is a multinomial over the stores the household has used, conditioned on the same
+state. Measured targets: gaps have mean 7.35 days, median 4, variance 159 (dispersion 21.6),
+and 18.3% of consecutive trips are on consecutive days — strongly overdispersed with a large
+point mass at one day, so a single-parameter geometric hazard will not fit and the spline is
+not decoration.</p>
+
+<div class="flag">
+<p class="label">Imposed, and untested</p>
+<p>Eq. 19 is a modelling choice with no derivation, the complementary log-log link is chosen
+for consistency with a latent-count reading, and the days-of-supply term assumes the
+category's median repurchase gap is the right scale for every household. None of this has been
+fitted or validated. It is included because an environment without it cannot represent the action the
+project exists to study, not because there is evidence for this particular form.</p>
+</div>
+
+<h2><span class="num">10</span>The state, and where every conditioning variable comes from</h2>
 
 <p>A trip's conditioning information splits into two kinds, and version 2 does not
 distinguish them. Making the distinction is what turns a conditional model into a simulator.</p>
@@ -277,7 +833,7 @@ it were. A quantity may enter the model in exactly one of three ways:</p>
 <ol>
   <li><strong>Observed</strong> — it is in the data; use it.</li>
   <li><strong>Latent and integrated out</strong> — it is not in the data, so sum or
-  integrate over it, as Eq. 12 does for <span class="v">z</span> and Eq. 27 for
+  integrate over it, as Eq. 8 does for <span class="v">z</span> and Eq. 32 for
   <span class="v">g</span>.</li>
   <li><strong>Defined</strong> — it is a stated deterministic function of observed
   quantities, with no free dynamics of its own.</li>
@@ -291,8 +847,8 @@ conditioning on the reconstruction as though it were observed.</p>
 <p class="label">This document previously did the forbidden thing, with inventory</p>
 <p>An earlier draft carried a per-category inventory state
 <span class="v">I<sub>ic,t+1</sub> = max(0, I<sub>ict</sub> − r<sub>ic</sub>) +
-∑<sub>j∈𝒞(c)</sub>q<sub>ijt</sub></span> and put it in the product value (Eq. 7) and the trip
-hazard (Eq. 33). <strong>dunnhumby contains no inventory data.</strong> Purchases are the
+∑<sub>j∈𝒞(c)</sub>q<sub>ijt</sub></span> and put it in the product value (Eq. 3) and the trip
+hazard (Eq. 19). <strong>dunnhumby contains no inventory data.</strong> Purchases are the
 inflow; consumption is the outflow and is never observed; the stock at the start of the panel
 is never observed. So that recursion has an unidentified rate
 <span class="v">r<sub>ic</sub></span> and an unidentified initial condition, and both are
@@ -327,7 +883,7 @@ n<sup>τ</sup><sub>ij,t+1</sub> = ϱ · n<sup>τ</sup><sub>ijt</sub> + 1{ j boug
 ω<sub>ijt</sub> = <span class="frac"><span>n<sup>τ</sup><sub>ijt</sub></span><span>max(1, ∑<sub>j′ ∈ 𝒞(c(j))</sub> n<sup>τ</sup><sub>ij′t</sub>)</span></span> ,
 &nbsp;&nbsp;
 f<sub>ijt</sub> = <span class="frac"><span>log(1 + n<sup>τ</sup><sub>ijt</sub>)</span><span>log 100</span></span>
-</div><div class="tag">(3)</div></div>
+</div><div class="tag">(21)</div></div>
 
 <p>What inventory was there to do — let a large purchase suppress the next one, so that a
 promotion can pull demand forward rather than create it — is kept, but as a
@@ -341,13 +897,13 @@ training window. Define the <em>days-of-supply proxy</em></p>
 <div class="eq"><div class="body">
 x<sup>sup</sup><sub>ict</sub> = Q<sub>ic</sub>
 − <span class="frac"><span>Δt<sub>ic</sub></span><span>g<sub>c</sub></span></span>
-</div><div class="tag">(4)</div></div>
+</div><div class="tag">(22)</div></div>
 
 <p>positive when the household plausibly still has some, negative when it plausibly does not.
 All three ingredients are observed: units from purchase lines, elapsed days from trip dates,
 and <span class="v">g<sub>c</sub></span> from the empirical distribution of gaps — a
 descriptive statistic, not a fitted rate. There is no free depletion rate and no initial
-condition. The <em>loading</em> on <span class="v">x<sup>sup</sup></span> in Eqs. 7 and 33
+condition. The <em>loading</em> on <span class="v">x<sup>sup</sup></span> in Eqs. 3 and 19
 stays free, which is a regression coefficient and not a latent dynamic.</p>
 
 <p>The full state is
@@ -370,11 +926,11 @@ accumulation of stock across several successive purchases.</p>
 <p><strong>Testable, and it should be tested before it is kept.</strong> Version 2's recency
 features already contain <span class="v">Δt</span> and <span class="v">g<sub>σ</sub></span>
 through <span class="v">e<sup>−Δt/g<sub>σ(j)</sub></sup></span>. The only new information in
-Eq. 4 is <span class="v">Q<sub>ic</sub></span> — <em>how much</em> was bought, not just when.
+Eq. 22 is <span class="v">Q<sub>ic</sub></span> — <em>how much</em> was bought, not just when.
 So the question is sharp: <strong>does knowing the size of the last purchase predict the next
-one, given its timing?</strong> If not, Eq. 4 should be dropped and the model left with
-recency alone. This is test 8 in §32 and it costs one held-out comparison.</p>
-<p>Exponential decay in Eq. 3 is likewise a choice, and <span class="v">ϱ</span> is a
+one, given its timing?</strong> If not, Eq. 22 should be dropped and the model left with
+recency alone. This is test 8 in §30 and it costs one held-out comparison.</p>
+<p>Exponential decay in Eq. 21 is likewise a choice, and <span class="v">ϱ</span> is a
 smoothing constant of a feature transform rather than the decay rate of anything real. It
 does not raise the Axiom O problem, because <span class="v">n<sup>τ</sup></span> is computable
 exactly from observed purchases for any <span class="v">ϱ</span>.</p>
@@ -402,9 +958,9 @@ category is bought on this trip, fitted on training weeks and scored on test wee
 141,448 held-out rows at a base rate of 0.0855: log-loss 0.234803 with a flexible function of
 timing alone, 0.234416 adding units. <strong>A gain of 0.000387 nats</strong>, which is 1.35%
 of what timing itself buys over the base rate, and about a seventieth of the 0.028-nat effect
-§21 treats as evidence.</p>
+§20 treats as evidence.</p>
 <p><strong>The verdict, and why the two designs disagree in importance.</strong> By a
-predictive standard Eq. 4 does not earn its place. By a policy standard it does, and the
+predictive standard Eq. 22 does not earn its place. By a policy standard it does, and the
 distinction is not special pleading: <em>the coefficient is what a counterfactual uses, not
 the log-loss.</em> Units barely vary exogenously in observational data, so the predictive gain
 is small; a promotion deliberately moves them, and the same coefficient then applies to much
@@ -412,7 +968,7 @@ larger variation. A markdown moving three units instead of one buys back roughly
 next gap.</p>
 <p><strong>So forward-buying is representable, and it is weak.</strong> The environment will
 not be blind to promotional pull-forward, but the payback it represents is small, and that is
-a finding about this dataset rather than a property of the model. Eq. 4 is kept because it
+a finding about this dataset rather than a property of the model. Eq. 22 is kept because it
 costs no parameters; no claim is made that it improves prediction.</p>
 </div>
 <div class="flag">
@@ -421,27 +977,27 @@ costs no parameters; no claim is made that it improves prediction.</p>
 long ones, and a policy-learning run is a long one.</p>
 </div>
 
-<h3><span class="num">5.2</span>Provenance of everything the model conditions on</h3>
+<h3><span class="num">10.1</span>Provenance of everything the model conditions on</h3>
 
 <p>Inventory was not the only place this document reached for something the data does not
 contain, and a reader is entitled to the full list rather than the one case that was caught.
-Every element of Eq. 6 and of the state, classified by Axiom O.</p>
+Every element of Eq. 2 and of the state, classified by Axiom O.</p>
 
 <div class="scroll"><table>
 <thead><tr><th>quantity</th><th>in the data?</th><th>how it enters</th><th>status</th></tr></thead>
 <tbody>
 <tr><td>household, store, day, week</td><td>observed</td><td>conditioning</td><td>clean</td></tr>
-<tr><td>discounted counts <span class="v">n<sup>τ</sup></span>, shares <span class="v">ω</span>, <span class="v">f</span></td><td>observed purchases</td><td>defined, Eq. 3</td><td>clean; <span class="v">ϱ</span> is a smoothing constant</td></tr>
+<tr><td>discounted counts <span class="v">n<sup>τ</sup></span>, shares <span class="v">ω</span>, <span class="v">f</span></td><td>observed purchases</td><td>defined, Eq. 21</td><td>clean; <span class="v">ϱ</span> is a smoothing constant</td></tr>
 <tr><td>recency <span class="v">Δt</span>, repurchase gap <span class="v">g</span></td><td>observed</td><td>defined</td><td>clean; <span class="v">g</span> is a training-window statistic</td></tr>
-<tr><td>days-of-supply <span class="v">x<sup>sup</sup></span></td><td>built from observed units, days, gaps</td><td>defined, Eq. 4</td><td>clean — <strong>replaces the unidentified inventory recursion</strong></td></tr>
+<tr><td>days-of-supply <span class="v">x<sup>sup</sup></span></td><td>built from observed units, days, gaps</td><td>defined, Eq. 22</td><td>clean — <strong>replaces the unidentified inventory recursion</strong></td></tr>
 <tr><td>display <span class="v">D</span>, mailer <span class="v">M</span></td><td>observed</td><td>conditioning</td><td>clean; every one of the 6,522,942 rows on our products has <span class="v">D ≠ 0</span> or <span class="v">M ≠ 0</span>, so absence is a true zero</td></tr>
 <tr><td>coupon eligibility <span class="v">d</span></td><td>observed</td><td>conditioning</td><td>clean; campaign × coupon × window, 9.1% of purchase rows</td></tr>
-<tr><td>trip type <span class="v">g</span></td><td><strong>latent</strong></td><td>summed over exactly, Eq. 27</td><td>integrated — allowed</td></tr>
-<tr><td>basket effect <span class="v">z</span></td><td><strong>latent</strong></td><td>integrated exactly, Eq. 12</td><td>integrated — allowed</td></tr>
+<tr><td>trip type <span class="v">g</span></td><td><strong>latent</strong></td><td>summed over exactly, Eq. 32</td><td>integrated — allowed</td></tr>
+<tr><td>basket effect <span class="v">z</span></td><td><strong>latent</strong></td><td>integrated exactly, Eq. 8</td><td>integrated — allowed</td></tr>
 <tr><td>price <span class="v">Δlog p</span></td><td><strong>24.7% observed</strong></td><td>conditioning, with the rest carried forward</td><td><strong>substituted.</strong> Within the same products the association is −0.7383 in carried-forward weeks against −0.5424 in observed ones, so ~27% of it is a property of the imputation rule</td></tr>
 <tr><td>assortment <span class="v">𝒞<sub>s</sub>(c)</span></td><td><strong>not observed</strong></td><td>defined as "sold at least once in training"</td><td><strong>substituted, and it is selection on the outcome.</strong> More consequential in version 3 than version 2, because <span class="v">Z</span> now sums over the whole assortment</td></tr>
-<tr><td>coupon face value</td><td><strong>not observed</strong></td><td>assumed <span class="v">δ̄</span>, §23</td><td><strong>substituted.</strong> Only recoverable from 36,422 redeemed lines, a selected sample</td></tr>
-<tr><td>cost of goods</td><td><strong>not observed</strong></td><td>assumed margin <span class="v">m<sub>dept</sub></span>, §27</td><td><strong>substituted.</strong> Any margin objective is partly the analyst's choice</td></tr>
+<tr><td>coupon face value</td><td><strong>not observed</strong></td><td>assumed <span class="v">δ̄</span>, §22</td><td><strong>substituted.</strong> Only recoverable from 36,422 redeemed lines, a selected sample</td></tr>
+<tr><td>cost of goods</td><td><strong>not observed</strong></td><td>assumed margin <span class="v">m<sub>dept</sub></span>, §25</td><td><strong>substituted.</strong> Any margin objective is partly the analyst's choice</td></tr>
 <tr><td>consumption / inventory</td><td><strong>not observed</strong></td><td>—</td><td><strong>removed.</strong> Was a reconstruction; now absent, its role taken by <span class="v">x<sup>sup</sup></span></td></tr>
 </tbody></table></div>
 
@@ -450,451 +1006,13 @@ Every element of Eq. 6 and of the state, classified by Axiom O.</p>
 <p>Price, assortment, coupon depth and cost are each a stand-in for something the release does
 not contain. None can be fixed by modelling, because no model creates information. What the
 design can do, and now does, is confine each to a stated place: prices affect only tier-3
-parameters, which §23 forbids the simulator from using; assortment is bounded by a
+parameters, which §22 forbids the simulator from using; assortment is bounded by a
 sensitivity sweep; <span class="v">δ̄</span> and <span class="v">m</span> are carried as ranges
 rather than point values.</p>
 <p><strong>Rankings survive all four; magnitudes survive none of them.</strong> That is the
 honest summary of what this environment can be asked, and it is a direct consequence of the
 provenance table rather than a general caution.</p>
 </div>
-
-<h2><span class="num">6</span>What is random, and what a trip conditions on</h2>
-
-<p>A trip's outcome is a purchase-count vector over the store's assortment. Write
-<span class="v">x ∈ {0,1}<sup>𝒜<sub>s</sub></sup></span> for the purchase indicators, so
-<span class="v">S = {j : x<sub>j</sub> = 1}</span>, and
-<span class="v">q<sub>j</sub> ∈ {1,…,12}</span> for the units of a purchased product.
-Define</p>
-
-<div class="eq"><div class="body">
-n<sub>c</sub>(S) = |S ∩ 𝒞<sub>s</sub>(c)| , &nbsp;&nbsp;
-n(S) = |S| = ∑<sub>c</sub> n<sub>c</sub>(S)
-</div><div class="tag">(5)</div></div>
-
-<p>The conditioning set is</p>
-
-<div class="eq"><div class="body">
-𝒢<sub>v</sub> = ( i, s, t, w, h<sub>it</sub>,
-{Δlog p<sub>jst</sub>}<sub>j</sub>,
-{D<sub>jsw</sub>, M<sub>jsw</sub>}<sub>j</sub>,
-{d<sub>ijt</sub>}<sub>j</sub> )
-</div><div class="tag">(6)</div></div>
-
-<p>with <span class="v">Δlog p</span> the centred log price (Appendix B of version 2,
-unchanged), <span class="v">D</span> and <span class="v">M</span> display and mailer
-indicators, and <span class="v">d<sub>ijt</sub> ∈ {0,1}</span> the <em>coupon eligibility
-indicator</em> — 1 when household <span class="v">i</span> holds a live coupon covering
-product <span class="v">j</span> on day <span class="v">t</span>.
-<span class="v">d</span> is new in version 3 and §21 onward is about it.</p>
-
-<div class="flag">
-<p class="label">Why eligibility is an indicator and not a depth</p>
-<p>An earlier draft of this document made <span class="v">d<sub>ijt</sub> ∈ [0,1]</span> a
-fractional price reduction. <strong>That is not available.</strong> dunnhumby's
-<code>coupon.csv</code> carries exactly three fields —
-<code>COUPON_UPC, PRODUCT_ID, CAMPAIGN</code> — and <code>coupon_redempt.csv</code> carries
-<code>household_key, DAY, COUPON_UPC, CAMPAIGN</code>. <strong>Neither records a face
-value.</strong> The only discount amounts in the release are
-<code>COUPON_DISC</code> on transaction lines, which exist <em>only where a coupon was
-redeemed</em>: 36,422 lines of 2,595,732 (1.40%), median $1.00, median depth 26.8% of line
-value.</p>
-<p>Imputing a face value per coupon from those redeemed lines is possible but thin — 2,318
-redemption events over 1,135 coupons, about two each — and selected, because redemption is
-a choice. Version 3 therefore treats eligibility as binary and reports the effect per
-<em>coupon held</em>. §23 records what this costs: the coupon response can discipline the
-sign and existence of a price effect but cannot be rescaled to a markdown of a stated depth
-without an assumed face value.</p>
-</div>
-
-<h2><span class="num">7</span>Product value</h2>
-
-<p>One linear index per product, evaluated with no basket around it. This is version 2's
-<span class="v">b</span>, extended by the coupon channel and the trip-type shift, and with
-the co-purchase loading split off into its own embedding:</p>
-
-<div class="eq hero"><div class="body">
-b<sup>(g)</sup><sub>ijt</sub> = λ<sub>j</sub> + a<sub>g</sub>
-+ θ<sub>i</sub><sup>⊤</sup>α<sub>j</sub> + ϑ<sub>g</sub><sup>⊤</sup>α<sub>j</sub>
-− ( γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub> ) Δlog p<sub>jst</sub>
-+ ( γ<sup>d⊤</sup><sub>i</sub>β<sup>d</sup><sub>j</sub> ) d<sub>ijt</sub>
-<br>
-+ ψ<sub>j</sub><sup>⊤</sup>x<sup>rec</sup><sub>ijt</sub>
-+ w<sup>loy</sup><sub>j</sub>ω<sub>ijt</sub>
-+ w<sup>frq</sup><sub>j</sub>f<sub>ijt</sub>
-+ w<sup>sup</sup><sub>j</sub>x<sup>sup</sup><sub>ic(j)t</sub>
-+ w<sup>dsp</sup><sub>j</sub>D<sub>jsw</sub>
-+ w<sup>mlr</sup><sub>j</sub>M<sub>jsw</sub>
-+ μ<sub>j</sub><sup>⊤</sup>δ<sub>w</sub>
-+ ζ<sub>j</sub><sup>⊤</sup>ξ<sub>s</sub>
-</div><div class="tag">(7)</div></div>
-
-<p>Three changes from version 2's Eq. 4, each with a reason.</p>
-
-<ul>
-  <li><strong><span class="v">g</span>, the trip type.</strong> A discrete latent in
-  <span class="v">{1,…,G}</span> shifting the overall level by <span class="v">a<sub>g</sub></span>
-  and tilting toward kinds of product by <span class="v">ϑ<sub>g</sub></span>. It is discrete
-  so that it can be summed over exactly — <span class="v">G</span> extra terms, no
-  approximation. §14.3 measures how much it actually carries, which is less than one would
-  hope.</li>
-  <li><strong>The coupon term.</strong> Separate from the price term, with its own
-  household and product loadings, because §22 identifies it from different variation and it
-  must be allowed to differ. Since <span class="v">d</span> is binary,
-  <span class="v">γ<sup>d⊤</sup><sub>i</sub>β<sup>d</sup><sub>j</sub></span> is the shift in
-  product value from holding a coupon — an intent-to-treat effect on the utility scale, not
-  a price elasticity.</li>
-  <li><strong><span class="v">α</span> no longer carries co-purchase.</strong> Version 2 ties
-  the taste embedding and the interaction embedding, which §17 of that document notes is what
-  pins <span class="v">α</span>'s scale, and §10.1 notes is stronger than the theory needs.
-  Version 3 unties them: <span class="v">α<sub>j</sub> ∈ ℝ<sup>K</sup></span> carries taste,
-  and a separate <span class="v">φ<sub>j</sub> ∈ ℝ<sup>K<sub>z</sub></sup></span> carries
-  co-purchase. The scale of <span class="v">φ</span> is pinned by the interaction alone,
-  which is cleaner. Nothing requires <span class="v">K<sub>z</sub></span> to match
-  <span class="v">K</span>, and §14.2 shows raising it does not buy dispersion, so it is set
-  small.</li>
-</ul>
-
-<p>There is no <span class="v">u</span> versus <span class="v">b</span> distinction in
-version 3. Version 2 needs two evaluations of one function because its item conditional is
-defined with the rest of the basket in the context; here the basket law is written directly
-as a joint, and the conditional is a <em>consequence</em> (§11), not a definition.</p>
-
-<h2><span class="num">8</span>The energy</h2>
-
-<p>The whole basket law is one exponential family over subsets of the assortment. There is
-no composition stage.</p>
-
-<div class="eq hero key"><div class="body">
-E(S) = ∑<sub>j ∈ S</sub> b<sup>(g)</sup><sub>ijt</sub>
-+ ∑<sub>{j,k} ⊆ S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub>
-− ∑<sub>c</sub> ρ<sub>c</sub> <span class="frac"><span>n<sub>c</sub>(n<sub>c</sub> − 1)</span><span>2</span></span>
-− ρ<sub>0</sub>( n(S) )
-</div><div class="tag">(8)</div></div>
-
-<div class="eq key"><div class="body">
-P( S | g, 𝒢 ) = <span class="frac"><span>exp E(S)</span><span>Z(g, 𝒢)</span></span> ,
-&nbsp;&nbsp;
-Z(g, 𝒢) = ∑<sub>S ⊆ 𝒜<sub>s</sub></sub> exp E(S)
-</div><div class="tag">(9)</div></div>
-
-<p>Read term by term:</p>
-
-<ul>
-  <li><span class="v">∑<sub>j∈S</sub> b<sub>j</sub></span> — each product's standalone value.</li>
-  <li><span class="v">∑<sub>{j,k}⊆S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub></span> — a
-  pairwise interaction over <em>every</em> pair in the basket, within or across categories.
-  Positive dot product means the two products make each other more likely. This is the
-  complementarity term, and unlike version 2's it acts on whether a category is entered at
-  all, because there is no composition to condition on.</li>
-  <li><span class="v">−ρ<sub>c</sub> n<sub>c</sub>(n<sub>c</sub>−1)/2</span> — a uniform
-  extra interaction among products of the same category. Since
-  <span class="v">n<sub>c</sub>(n<sub>c</sub>−1)/2</span> counts the within-category pairs,
-  this adds <span class="v">−ρ<sub>c</sub></span> to every same-category pair.
-  <span class="v">ρ<sub>c</sub> &gt; 0</span> is substitution — the second yoghurt is worth
-  less than the first; <span class="v">ρ<sub>c</sub> &lt; 0</span> is stocking up. It is a
-  free real number, so the data decides the sign.</li>
-  <li><span class="v">−ρ<sub>0</sub>(n)</span> — a free function of total basket size, one
-  value per <span class="v">n ∈ {0,…,n<sub>max</sub>}</span>, with
-  <span class="v">ρ<sub>0</sub>(0) = 0</span> fixing the scale. §14 shows this is the term
-  that makes the model usable as a price environment, and that version 2's
-  <span class="v">1/(n−1)</span> divisor is a hard-coded special case of it.</li>
-</ul>
-
-<p>Collecting the pairwise terms, the interaction matrix is</p>
-
-<div class="eq"><div class="body">
-W<sub>jk</sub> = φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub> − ρ<sub>c(j)</sub> 1{ c(j) = c(k) }
-&nbsp;&nbsp; ( j ≠ k )
-</div><div class="tag">(10)</div></div>
-
-<p>— low rank plus block diagonal, symmetric by construction, and <strong>indefinite</strong>,
-which §13 shows is exactly what is needed and what version 2 cannot have.</p>
-
-<h2><span class="num">9</span>The normaliser</h2>
-
-<p>Eq. 9 sums over <span class="v">2<sup>|𝒜<sub>s</sub>|</sup></span> subsets — about
-<span class="v">10<sup>915</sup></span> at the median store. It is nevertheless computable
-in closed form up to a low-dimensional Gaussian integral.</p>
-
-<div class="lemma">
-<p class="label">Theorem 1 — the normaliser</p>
-<p>Write <span class="v">b̃<sub>j</sub> = b<sup>(g)</sup><sub>ijt</sub> −
-½‖φ<sub>j</sub>‖²</span> and, for <span class="v">z ∈ ℝ<sup>K<sub>z</sub></sup></span>,
-<span class="v">w<sub>j</sub>(z) = exp( b̃<sub>j</sub> + z<sup>⊤</sup>φ<sub>j</sub> )</span>.
-Let <span class="v">e<sub>r</sub></span> denote the elementary symmetric polynomial of
-degree <span class="v">r</span>, and define the per-category generating polynomial</p>
-<div class="eq"><div class="body">
-G<sub>c</sub>(u; z) = ∑<sub>r=0</sub><sup>min(N<sub>sc</sub>, R)</sup>
-exp( −ρ<sub>c</sub> <span class="frac"><span>r(r−1)</span><span>2</span></span> )
-&thinsp; e<sub>r</sub>( { w<sub>j</sub>(z) }<sub>j ∈ 𝒞<sub>s</sub>(c)</sub> ) &thinsp; u<sup>r</sup>
-</div><div class="tag">(11)</div></div>
-<p>Let <span class="v">A<sub>n</sub>(z)</span> be the coefficients of the product,
-<span class="v">∏<sub>c</sub> G<sub>c</sub>(u; z) = ∑<sub>n</sub> A<sub>n</sub>(z) u<sup>n</sup></span>.
-Then</p>
-<div class="eq key"><div class="body">
-Z = 𝔼<sub>z ~ N(0, I<sub>K<sub>z</sub></sub>)</sub>
-[ ∑<sub>n=0</sub><sup>n<sub>max</sub></sup> e<sup>−ρ<sub>0</sub>(n)</sup> A<sub>n</sub>(z) ]
-</div><div class="tag">(12)</div></div>
-</div>
-
-<p><strong>Proof.</strong> Three steps, each elementary.</p>
-
-<p><em>Step 1 — complete the square.</em> With
-<span class="v">v<sub>S</sub> = ∑<sub>j∈S</sub>φ<sub>j</sub></span>,</p>
-
-<div class="eq"><div class="body">
-∑<sub>{j,k} ⊆ S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub>
-= ½ ( ‖v<sub>S</sub>‖² − ∑<sub>j ∈ S</sub> ‖φ<sub>j</sub>‖² )
-</div><div class="tag">(13)</div></div>
-
-<p>because <span class="v">‖v<sub>S</sub>‖² = ∑<sub>j,k∈S</sub>φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub></span>
-counts each unordered pair twice and each diagonal term once. Absorbing the diagonal into
-<span class="v">b̃</span> gives
-<span class="v">exp E(S) = ( ∏<sub>j∈S</sub> e<sup>b̃<sub>j</sub></sup> ) ·
-e<sup>½‖v<sub>S</sub>‖²</sup> · e<sup>−∑<sub>c</sub>ρ<sub>c</sub>C(n<sub>c</sub>,2) − ρ<sub>0</sub>(n)</sup></span>.</p>
-
-<p><em>Step 2 — Hubbard–Stratonovich.</em> For any
-<span class="v">v ∈ ℝ<sup>K<sub>z</sub></sup></span>, the moment generating function of a
-standard Gaussian gives</p>
-
-<div class="eq"><div class="body">
-𝔼<sub>z ~ N(0,I)</sub>[ e<sup>z<sup>⊤</sup>v</sup> ] = e<sup>½‖v‖²</sup>
-</div><div class="tag">(14)</div></div>
-
-<p>Substituting and exchanging the (finite) sum over subsets with the expectation,</p>
-
-<div class="eq"><div class="body">
-Z = 𝔼<sub>z</sub> [ ∑<sub>S ⊆ 𝒜<sub>s</sub></sub>
-( ∏<sub>j ∈ S</sub> w<sub>j</sub>(z) ) ·
-e<sup>−∑<sub>c</sub>ρ<sub>c</sub>C(n<sub>c</sub>,2) − ρ<sub>0</sub>(n)</sup> ]
-</div><div class="tag">(15)</div></div>
-
-<p><strong>The step that does the work is this one.</strong> Conditionally on
-<span class="v">z</span>, the coupling between products has vanished: the summand is a
-product over <span class="v">j ∈ S</span> of per-product weights, times a factor depending on
-<span class="v">S</span> only through the counts. The interaction has been traded for a
-<span class="v">K<sub>z</sub></span>-dimensional integral.</p>
-
-<p><em>Step 3 — group by counts.</em> The set of subsets with a given count vector
-<span class="v">(r<sub>c</sub>)</span> contributes
-<span class="v">∏<sub>c</sub> e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span>, since
-<span class="v">e<sub>r</sub></span> is by definition the sum of all products of
-<span class="v">r</span> distinct weights. Hence</p>
-
-<div class="eq"><div class="body">
-Z = 𝔼<sub>z</sub> [ ∑<sub>(r<sub>c</sub>)</sub>
-e<sup>−ρ<sub>0</sub>(∑<sub>c</sub>r<sub>c</sub>)</sup>
-∏<sub>c</sub> e<sup>−ρ<sub>c</sub>C(r<sub>c</sub>,2)</sup>
-e<sub>r<sub>c</sub></sub>( w<sup>(c)</sup>(z) ) ]
-</div><div class="tag">(16)</div></div>
-
-<p>The inner sum is exactly the coefficient extraction in the statement: without
-<span class="v">ρ<sub>0</sub></span> it factorises as
-<span class="v">∏<sub>c</sub>G<sub>c</sub>(1;z)</span>; with it, the constraint
-<span class="v">∑<sub>c</sub>r<sub>c</sub> = n</span> is carried by the polynomial variable
-<span class="v">u</span>, and summing over <span class="v">n</span> with weights
-<span class="v">e<sup>−ρ<sub>0</sub>(n)</sup></span> gives Eq. 12. ∎</p>
-
-<div class="lemma">
-<p class="label">Verified</p>
-<p><code>scripts/theory/verify_normaliser.py</code> enumerates all
-<span class="v">2<sup>J</sup></span> subsets for five configurations
-(<span class="v">J</span> = 8 to 12, <span class="v">K<sub>z</sub></span> = 2 and 3, both
-signs of <span class="v">ρ<sub>c</sub></span>) and compares
-<span class="v">log Z</span> with Eq. 12 evaluated by Gauss–Hermite quadrature.
-<strong>Worst relative error 3.9 × 10<sup>−15</sup></strong>.
-<code>verify_size_term.py</code> repeats it with the size term for four configurations
-including a free-form random <span class="v">ρ<sub>0</sub></span>: <strong>worst relative
-error 2.0 × 10<sup>−15</sup></strong>. Both are at double-precision round-off.</p>
-</div>
-
-<h3><span class="num">9.1</span>Three corollaries that fall out immediately</h3>
-
-<div class="lemma">
-<p class="label">Corollary 1 — the empty basket</p>
-<p><span class="v">P(S = ∅) = 1 / Z</span> exactly.</p>
-<p><em>Proof.</em> <span class="v">E(∅) = 0</span> by Eq. 8 with
-<span class="v">ρ<sub>0</sub>(0) = 0</span>, so its unnormalised weight is 1. ∎ Hence
-conditioning a trip on buying <em>something</em> costs nothing but replacing
-<span class="v">log Z</span> with <span class="v">log(Z − 1)</span> — exact, where version 2
-needs the inclusion–exclusion factor
-<span class="v">1 − ∏<sub>c</sub>P(y<sub>c</sub>=0)</span> and estimates it from a sample of
-categories. Verified to relative error 3.8 × 10<sup>−15</sup>.</p>
-</div>
-
-<div class="lemma">
-<p class="label">Corollary 2 — inclusion probabilities and the gradient</p>
-<p>Because <span class="v">log Z</span> is the cumulant generating function of the
-sufficient statistic <span class="v">x</span> in the natural parameter
-<span class="v">b</span>,</p>
-<div class="eq"><div class="body">
-<span class="frac"><span>∂ log Z</span><span>∂ b<sub>j</sub></span></span> = 𝔼[ x<sub>j</sub> ] = P( j ∈ S ) ,
-&nbsp;&nbsp;
-<span class="frac"><span>∂² log Z</span><span>∂ b<sub>j</sub> ∂ b<sub>k</sub></span></span> = Cov( x<sub>j</sub>, x<sub>k</sub> )
-</div><div class="tag">(17)</div></div>
-<p>and conditionally on <span class="v">z</span> the inclusion probability has a closed form.
-Writing <span class="v">f(z) = ∑<sub>n</sub>e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>
-for the integrand of Eq. 12,</p>
-<div class="eq"><div class="body">
-P( j ∈ S | z ) =
-<span class="frac"><span>∂ log f(z)</span><span>∂ log w<sub>j</sub></span></span>
-= ∑<sub>r</sub> P( n<sub>c</sub> = r | z ) ·
-<span class="frac"><span>w<sub>j</sub> e<sub>r−1</sub>( w<sup>(c)</sup> \ w<sub>j</sub> )</span><span>e<sub>r</sub>( w<sup>(c)</sup> )</span></span>
-</div><div class="tag">(18)</div></div>
-<p>The second equality says: given the category's count, which product fills a slot depends
-only on that category's weights; the size term enters only through the count law
-<span class="v">P(n<sub>c</sub> = r | z)</span>, which it couples across categories.</p>
-<div class="flag">
-<p class="label">Precision — the count law is not the category's own polynomial</p>
-<p>When <span class="v">ρ<sub>0</sub> ≡ 0</span> the categories are conditionally independent
-given <span class="v">z</span>, <span class="v">f</span> factorises as
-<span class="v">∏<sub>c</sub>G<sub>c</sub>(1;z)</span>, and Eq. 18's derivative reduces to
-<span class="v">∂ log G<sub>c</sub>/∂ log w<sub>j</sub></span>. With
-<span class="v">ρ<sub>0</sub></span> active <strong>that reduction is false</strong>:
-<span class="v">P(n<sub>c</sub>=r|z)</span> is no longer
-<span class="v">G<sub>c</sub></span>'s own normalised coefficient but its leave-one-out
-marginal under the coupled law,</p>
-<div class="eq"><div class="body">
-P( n<sub>c</sub> = r | z ) ∝ G<sub>c</sub>[r] ·
-∑<sub>m</sub> e<sup>−ρ<sub>0</sub>(r+m)</sup> B<sup>(−c)</sup><sub>m</sub>
-</div><div class="tag">(18a)</div></div>
-<p>with <span class="v">B<sup>(−c)</sup></span> the polynomial product over every category
-except <span class="v">c</span> — obtainable for all <span class="v">C</span> categories at
-once from the prefix and suffix products the sampler already builds, at no extra order of
-cost. <em>Verified</em> against enumeration to 3.7 × 10<sup>−15</sup> on all four
-configurations including the free-form <span class="v">ρ<sub>0</sub></span>, and the identity
-<span class="v">P(j∈S|z) = ∂log f/∂log w<sub>j</sub></span> confirmed by finite differences to
-7 × 10<sup>−11</sup>.</p>
-</div>
-</div>
-
-<div class="lemma">
-<p class="label">Corollary 3 — sampling, exact given z</p>
-<p>A draw from Eq. 9 is three exact steps:</p>
-<ol>
-  <li>Draw <span class="v">z</span> from its posterior
-  <span class="v">q(z) ∝ N(z; 0, I) · ∑<sub>n</sub>e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>,
-  by sampling–importance–resampling from the Laplace proposal of §14.1 and §18.</li>
-  <li>Given <span class="v">z</span>, draw the total size
-  <span class="v">n ∝ e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>, then the
-  per-category counts <span class="v">(r<sub>c</sub>)</span> given
-  <span class="v">∑r<sub>c</sub> = n</span> by a backward pass over the same suffix
-  products used to form <span class="v">A<sub>n</sub></span>.</li>
-  <li>Given <span class="v">r<sub>c</sub></span>, draw exactly
-  <span class="v">r<sub>c</sub></span> products from
-  <span class="v">𝒞<sub>s</sub>(c)</span> by the classical sequential algorithm on suffix
-  elementary symmetric polynomials, which is exact in
-  <span class="v">O(N<sub>sc</sub> r<sub>c</sub>)</span> and needs no rejection.</li>
-</ol>
-<p><strong>No Gibbs sweeps, no burn-in, no mixing diagnostic.</strong> Steps 2 and 3 are
-exact. <strong>Step 1 is not:</strong> sampling–importance–resampling is exact only in the
-limit of infinitely many proposal draws, and its finite-budget error is governed by the same
-effective sample size that §14.2 shows collapsing from 0.878 to 0.001 across the
-bifurcation. So the draw is exact <em>given</em> <span class="v">z</span>, and approximate in
-<span class="v">z</span>.</p>
-<p>Verified: empirical frequencies over 40,000 draws match the enumerated law to total
-variation 0.018–0.103 against sampling-noise floors of 0.017–0.103, on all nine
-configurations across the two scripts. <strong>That verification certifies steps 2 and 3
-only</strong> — both scripts draw <span class="v">z</span> exactly from its posterior
-discretised on the quadrature grid, not by SIR from a Laplace proposal. Step 1 is the step
-that can fail and it is the one not yet checked.</p>
-</div>
-
-<h2><span class="num">9.2</span>The nesting, written out</h2>
-
-<p>Theorem 1 is usually read as a computational device. It is also the statement that the
-model <em>is</em> a nested model, and the nesting is worth writing explicitly because it is
-derived rather than assumed. Conditional on <span class="v">z</span>, Eq. 9 factorises
-exactly into three levels:</p>
-
-<div class="eq hero key"><div class="body">
-P( S | z ) = P( n | z ) &nbsp;·&nbsp; P( (r<sub>c</sub>) | n, z )
-&nbsp;·&nbsp; ∏<sub>c</sub> P( S<sub>c</sub> | r<sub>c</sub>, z )
-</div><div class="tag">(18b)</div></div>
-
-<div class="scroll"><table>
-<thead><tr><th>level</th><th>what is chosen</th><th>law</th><th>its inclusive value</th></tr></thead>
-<tbody>
-<tr><td><strong>1 — size</strong></td><td>how many lines in total</td><td><span class="v">P(n | z) = e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z) / f(z)</span></td><td><span class="v">log f(z)</span></td></tr>
-<tr><td><strong>2 — allocation</strong></td><td>how those <span class="v">n</span> lines split across categories</td><td><span class="v">P((r<sub>c</sub>) | n, z) = ∏<sub>c</sub> a<sub>r<sub>c</sub></sub>e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>) / A<sub>n</sub>(z)</span></td><td><span class="v">log A<sub>n</sub>(z)</span></td></tr>
-<tr><td><strong>3 — selection</strong></td><td>which <span class="v">r<sub>c</sub></span> products from category <span class="v">c</span></td><td><span class="v">P(S<sub>c</sub> | r<sub>c</sub>, z) = ∏<sub>j∈S<sub>c</sub></sub>w<sub>j</sub> / e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span></td><td><span class="v">log e<sub>r<sub>c</sub></sub>(w<sup>(c)</sup>)</span></td></tr>
-</tbody></table></div>
-
-<p>with <span class="v">a<sub>r</sub> = e<sup>−ρ<sub>c</sub>r(r−1)/2</sup></span>. This is
-exactly the shape of a nested choice model — an upper level over totals, a middle level
-allocating across nests, a lower level choosing within a nest, each linked upward by a
-log-sum — and it is what Corollary 3's sampler walks down, in that order.</p>
-
-<div class="flag">
-<p class="label">Three differences from a nested logit, and they are the point</p>
-<ul>
-  <li><strong>No dissimilarity parameters.</strong> A nested logit attaches a free
-  coefficient to each inclusive value. Here the coefficients are all 1, because the three
-  levels are a factorisation of one joint rather than three models joined by hand. §16 shows
-  what that costs: the category-entry response becomes an identity, not a fitted number.</li>
-  <li><strong>The nests are not a partition of a single choice.</strong> A basket takes
-  several products from several categories, so level 3 is a subset choice
-  (<span class="v">e<sub>r</sub></span>, the elementary symmetric polynomial) rather than a
-  softmax. Setting <span class="v">R</span> = 1 collapses
-  <span class="v">e<sub>1</sub></span> to <span class="v">∑<sub>j</sub>w<sub>j</sub></span>
-  and recovers the familiar log-sum-exp.</li>
-  <li><strong>The correlation lives in <span class="v">z</span>, and it is integrated out.</strong>
-  A nested logit gets within-nest correlation from correlated errors. Here it comes from
-  <span class="v">ρ<sub>c</sub></span> at level 2 and from the shared
-  <span class="v">z</span> across all levels, and Eq. 12 integrates
-  <span class="v">z</span> exactly rather than approximating the resulting dependence.</li>
-</ul>
-</div>
-
-<p>Everything upstream of Eq. 18b is a single unconditional statement:
-<span class="v">P(S) = 𝔼<sub>z</sub>[P(S|z)f(z)]/Z</span>. The hierarchy exists conditionally
-on <span class="v">z</span> and is integrated away in the marginal, which is why the model has
-a nested <em>structure</em> without a nested <em>factorisation</em> of the kind §16
-discusses.</p>
-
-<h2><span class="num">10</span>Units</h2>
-
-<p>Eq. 9 gives the set. Units are a separate factor, and version 3 says exactly what that
-costs rather than presenting the split as a chain rule.</p>
-
-<div class="lemma">
-<p class="label">Assumption U — units do not feed back</p>
-<p>The joint over <span class="v">(S, q)</span> has the form
-<span class="v">P(S, q) ∝ exp E(S) · ∏<sub>j∈S</sub> h<sub>j</sub>(q<sub>j</sub>)</span>
-with each <span class="v">h<sub>j</sub></span> normalised over
-<span class="v">q ≥ 1</span>.</p>
-<p><em>Consequence.</em> Summing over <span class="v">q</span> gives
-<span class="v">∑<sub>q</sub>∏<sub>j∈S</sub>h<sub>j</sub>(q<sub>j</sub>) = 1</span>, so the
-marginal of <span class="v">S</span> is exactly Eq. 9 and
-<span class="v">P(S,q) = P(S)∏<sub>j∈S</sub>P(q<sub>j</sub>)</span>. The factorisation is
-<em>derived</em> from Assumption U rather than assumed as an ordering of decisions.</p>
-<p><em>What it rules out.</em> That buying three of something changes which other products
-appear. It is testable: regress a basket's composition residual on its unit counts.</p>
-</div>
-
-<p>Given the assumption, the units law needs to fit one thing — the conditional
-distribution of <span class="v">q</span> given purchase. Measured on training rows:
-<span class="v">P(q=1) = 0.7768</span>, mean 1.3564, variance 0.8387. The raw variable is
-<em>under</em>-dispersed (0.62) while <span class="v">q − 1</span> is
-<em>over</em>-dispersed (mean 0.3564, variance 0.8387, ratio 2.35). Version 2's shifted
-Poisson forces <span class="v">Var(q) = 𝔼[q] − 1</span> and cannot do this; a shifted
-negative binomial, already fitted in this repository at
-<span class="v">r̂ = 2.03</span>, reduces units-per-line total variation from 0.045 to
-0.016. Version 3 keeps it:</p>
-
-<div class="eq"><div class="body">
-P( q<sub>j</sub> = ν | j ∈ S ) = NB<sub>r<sub>j</sub></sub>( ν − 1 ; Λ<sup>qty</sup><sub>ij</sub> ) ,
-&nbsp; ν = 1, 2, … , &nbsp;&nbsp;
-log Λ<sup>qty</sup><sub>ij</sub> = a<sub>j</sub>
-− ( γ<sup>q⊤</sup><sub>i</sub>β<sup>q</sup><sub>j</sub> ) Δlog p<sub>jst</sub>
-+ ψ<sup>q⊤</sup><sub>j</sub> x<sup>rec</sup><sub>ijt</sub>
-</div><div class="tag">(19)</div></div>
-
-<p>Units are censored at 12 in the data; 0.093% of rows are affected, so the truncation is
-left unmodelled and the direction of the resulting bias is recorded rather than corrected: right-censoring
-makes recorded counts too small, so fitting an uncensored law biases
-<span class="v">Λ<sup>qty</sup></span> <strong>downward</strong>. Version 2's Appendix E
-records this direction as upward, which is wrong.</p>
 
 <h2><span class="num">11</span>What the conditionals look like, and why they are not the definition</h2>
 
@@ -910,7 +1028,7 @@ log <span class="frac"><span>P(S ∪ {j})</span><span>P(S)</span></span>
 + ∑<sub>k ∈ S</sub> φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub>
 − ρ<sub>c(j)</sub> n<sub>c(j)</sub>(S)
 − [ ρ<sub>0</sub>(n+1) − ρ<sub>0</sub>(n) ]
-</div><div class="tag">(20)</div></div>
+</div><div class="tag">(23)</div></div>
 
 <p>Every term is interpretable and each is the derivative of one modelling decision. The
 product's own value; the total pull of everything already in the basket; a penalty
@@ -922,11 +1040,12 @@ Gibbs sampling <em>available</em> as a check on Corollary 3, even though it is n
 <p class="label">Note on Hammersley–Clifford, and on what is not being invoked</p>
 <p>Nothing in Part II uses Hammersley–Clifford or Besag's positivity condition. The joint is
 written down first and shown to be summable; the conditionals are consequences. Version 2
-needed a uniqueness theorem because it started from conditionals, and its §10 correctly
+needed a uniqueness theorem because it started from conditionals, and its §8 correctly
 notes that Besag's positivity fails on its support and that Brook's argument is the right
 one. That entire discussion is unnecessary here, which is a property of the construction and
 not a claim of novelty.</p>
 </div>
+
 
 <div class="part"><div class="pn">Part II</div><div class="pt">Why this parameterisation and not another</div></div>
 
@@ -946,7 +1065,7 @@ distributional failures in §3 are not cosmetic.</p>
 &nbsp;&nbsp;&nbsp; and in particular &nbsp;&nbsp;&nbsp;
 <span class="frac"><span>d 𝔼[n]</span><span>d δ</span></span> = Var( n )
 &nbsp; when d ≡ 1
-</div><div class="tag">(21)</div></div>
+</div><div class="tag">(24)</div></div>
 <p><em>Proof.</em> Immediate from Corollary 2: <span class="v">log Z</span> is the cumulant
 generating function, so
 <span class="v">𝔼[n] = ∑<sub>j</sub>∂log Z/∂b<sub>j</sub></span> and differentiating again
@@ -958,7 +1077,7 @@ configurations: relative error 1.1–1.5 × 10<sup>−10</sup>, at the finite-di
 </div>
 
 <p>The distinction matters, because a uniform proportional price change does <em>not</em>
-produce a uniform shift in <span class="v">b</span>: by Eq. 7,
+produce a uniform shift in <span class="v">b</span>: by Eq. 3,
 <span class="v">∂b<sub>j</sub>/∂log p<sub>j</sub> = −γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub></span>
 varies by product. So the object of interest is the covariance form, and the identity
 <span class="v">d𝔼[n]/dδ = Var(n)</span> is the special case where every product's price
@@ -966,7 +1085,7 @@ sensitivity is equal. What carries the argument in the general case is Cauchy–
 
 <div class="eq key"><div class="body">
 | Cov( n , d<sup>⊤</sup>x ) | ≤ sd( n ) · sd( d<sup>⊤</sup>x )
-</div><div class="tag">(22)</div></div>
+</div><div class="tag">(25)</div></div>
 
 <p>so the aggregate basket-size response to <em>any</em> price change is bounded by the
 standard deviation of basket size times that of the price-weighted purchase vector — and for
@@ -978,7 +1097,7 @@ binds exactly, and it is the case a chain-wide markdown approaches.</p>
 <p class="label">What this means for every model in this class</p>
 <p><strong>Distributional fidelity and counterfactual validity are the same
 property here, not two desiderata to be traded off.</strong> For a uniform value shift the
-two are the same number; for a general one they are linked by Eq. 22, so a model that
+two are the same number; for a general one they are linked by Eq. 25, so a model that
 under-produces the basket-size variance cannot produce the aggregate response whatever its
 price loadings.</p>
 <p>Measured with care about which variance: Proposition 1 is an identity for the variance
@@ -996,7 +1115,7 @@ missing its largest component.</p>
 
 <h2><span class="num">13</span>What a Gaussian latent can and cannot represent</h2>
 
-<p>Theorem 1 works because the <em>attractive part</em> of the interaction in Eq. 10 is
+<p>Theorem 1 works because the <em>attractive part</em> of the interaction in Eq. 6 is
 <span class="v">ΦΦ<sup>⊤</sup></span>, positive semi-definite of rank
 <span class="v">K<sub>z</sub></span>. That is not an incidental convenience; it is exactly the
 class of interactions reachable this way, and it is worth being precise about the boundary.</p>
@@ -1042,7 +1161,7 @@ repulsion is bounded below</strong>. Those two are what force the enumeration, a
 document should not have inherited (2) as though it were unconditional.</p>
 </div>
 
-<p>Version 2's §10.2 then argues, correctly, that within-category substitution does not need
+<p>Version 2's section 10.2 then argues, correctly, that within-category substitution does not need
 to be <em>learned</em> because its support already forbids buying two of the same product and
 its composition already fixes <span class="v">k<sub>c</sub></span>. That argument works only
 because the composition is conditioned on — and conditioning on the composition is precisely
@@ -1088,7 +1207,7 @@ matrix, and that matrix turns out to control the economics as well as the numeri
 
 <h3><span class="num">14.1</span>The mode equation</h3>
 
-<p>Write the log integrand of Eq. 12 as
+<p>Write the log integrand of Eq. 8 as
 <span class="v">F(z) = −½‖z‖² + log[ ∑<sub>n</sub>e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z) ]</span>.
 By Corollary 2 applied conditionally on <span class="v">z</span>,</p>
 
@@ -1098,21 +1217,21 @@ By Corollary 2 applied conditionally on <span class="v">z</span>,</p>
 ∇²F(z) = −I + Λ(z) ,
 &nbsp;&nbsp;
 Λ(z) := Cov( ∑<sub>j</sub> φ<sub>j</sub> x<sub>j</sub> | z ) ⪰ 0
-</div><div class="tag">(23)</div></div>
+</div><div class="tag">(26)</div></div>
 
-<p>where <span class="v">π<sub>j</sub>(z) = P(j ∈ S | z)</span> from Eq. 18. Setting the
+<p>where <span class="v">π<sub>j</sub>(z) = P(j ∈ S | z)</span> from Eq. 14. Setting the
 gradient to zero gives a fixed point which is the self-consistent-field equation of
 mean-field theory:</p>
 
 <div class="eq"><div class="body">
 z<sup>⋆</sup> = ∑<sub>j</sub> π<sub>j</sub>(z<sup>⋆</sup>) φ<sub>j</sub>
 = 𝔼[ ∑<sub>j ∈ S</sub> φ<sub>j</sub> | z<sup>⋆</sup> ]
-</div><div class="tag">(24)</div></div>
+</div><div class="tag">(27)</div></div>
 
 <div class="lemma">
 <p class="label">Proposition 3 — stability</p>
 <p>If <span class="v">sup<sub>z</sub> λ<sub>max</sub>(Λ(z)) &lt; 1</span> then
-<span class="v">F</span> is strictly concave, Eq. 24 has a unique solution, the iteration
+<span class="v">F</span> is strictly concave, Eq. 27 has a unique solution, the iteration
 <span class="v">z ← ∑<sub>j</sub>π<sub>j</sub>(z)φ<sub>j</sub></span> is a global contraction
 with modulus <span class="v">sup λ<sub>max</sub></span>, and the Laplace proposal at
 <span class="v">z<sup>⋆</sup></span> with covariance
@@ -1137,7 +1256,7 @@ multi-start plus the importance-sampling effective sample size, not the eigenval
 <div class="eq"><div class="body">
 Var(n) = 𝔼<sub>z</sub>[ Var(n | z) ] + Var<sub>z</sub>( 𝔼[n | z] )
 ≈ Λ<sub>0</sub> + u<sup>⊤</sup>( I − Λ )<sup>−1</sup> u
-</div><div class="tag">(25)</div></div>
+</div><div class="tag">(28)</div></div>
 
 <p>where, all evaluated at the mode <span class="v">z<sup>⋆</sup></span> and writing
 <span class="v">v<sub>S</sub> = ∑<sub>j∈S</sub>φ<sub>j</sub></span>,</p>
@@ -1148,7 +1267,7 @@ Var(n) = 𝔼<sub>z</sub>[ Var(n | z) ] + Var<sub>z</sub>( 𝔼[n | z] )
 u := Cov( n , v<sub>S</sub> | z<sup>⋆</sup> ) ,
 &nbsp;&nbsp;
 Λ := Cov( v<sub>S</sub> | z<sup>⋆</sup> )
-</div><div class="tag">(25a)</div></div>
+</div><div class="tag">(29)</div></div>
 
 <p>with <span class="v">(I−Λ)<sup>−1</sup></span> the posterior covariance of
 <span class="v">z</span> at the mode, and <span class="v">u</span> the derivative of
@@ -1162,7 +1281,7 @@ u := Cov( n , v<sub>S</sub> | z<sup>⋆</sup> ) ,
 Var(n) ≤ <span class="frac"><span>Λ<sub>0</sub></span><span>1 − λ<sub>max</sub>(Λ)</span></span>
 &nbsp;&nbsp;&nbsp;⟺&nbsp;&nbsp;&nbsp;
 λ<sub>max</sub>(Λ) ≥ 1 − <span class="frac"><span>Var(n | z<sup>⋆</sup>)</span><span>Var(n)</span></span>
-</div><div class="tag">(26)</div></div>
+</div><div class="tag">(30)</div></div>
 <p><em>Proof.</em> With <span class="v">e = u/‖u‖</span>,
 <span class="v">u<sup>⊤</sup>(I−Λ)<sup>−1</sup>u = ‖u‖²e<sup>⊤</sup>(I−Λ)<sup>−1</sup>e
 ≤ ‖u‖²/(1−λ<sub>max</sub>)</span>. By Cauchy–Schwarz on the <em>conditional</em>
@@ -1195,7 +1314,7 @@ choose <span class="v">ρ<sub>0</sub></span> so that <span class="v">P(n)</span>
 mass at 0 and half at 12 over twelve products. Then
 <span class="v">Var(n) = 36</span> while <span class="v">∑π(1−π) = 3</span>: the old bound is
 violated <strong>twelve-fold</strong>. Worse, it contradicted the design it was written to
-justify — §14.4 says <span class="v">ρ<sub>0</sub></span> frees the model to have large
+justify — §14.5 says <span class="v">ρ<sub>0</sub></span> frees the model to have large
 <span class="v">Var(n)</span> at small <span class="v">λ</span>, which the wrong bound
 forbids.</p>
 <p>The verification did not catch it because every instance it tested ran at
@@ -1204,9 +1323,9 @@ against a bound derived from the same wrong quantity — an algebraic identity r
 claim. Both are now fixed and the counterexample is a permanent test.</p>
 </div>
 
-<h3><span class="num">14.2a</span>What survives, and it is what the design needs</h3>
+<h3><span class="num">14.3</span>What survives, and it is what the design needs</h3>
 
-<p>Specialise Eq. 26 to the sub-model with
+<p>Specialise Eq. 30 to the sub-model with
 <span class="v">ρ<sub>c</sub> = ρ<sub>0</sub> = 0</span>. There the indicators
 <em>are</em> conditionally independent given <span class="v">z</span>, so
 <span class="v">Λ<sub>0</sub> = ∑π(1−π) ≈ 𝔼[n]</span> — accurate to a relative
@@ -1216,12 +1335,12 @@ basket of 7.8 — and the bound becomes</p>
 <div class="eq key"><div class="body">
 λ<sub>max</sub> ≥ 1 − <span class="frac"><span>1</span><span>dispersion</span></span>
 &nbsp;&nbsp;&nbsp; ( ρ<sub>c</sub> = ρ<sub>0</sub> = 0 only )
-</div><div class="tag">(26b)</div></div>
+</div><div class="tag">(31)</div></div>
 
 <p>That sub-model is precisely <strong>a basket model whose only interaction is a low-rank
 Gaussian latent</strong> — the natural thing to write down, and the thing this section exists
-to rule out. Raising <span class="v">K<sub>z</sub></span> does not rescue it: neither Eq. 26
-nor Eq. 26b mentions the dimension.</p>
+to rule out. Raising <span class="v">K<sub>z</sub></span> does not rescue it: neither Eq. 30
+nor Eq. 31 mentions the dimension.</p>
 
 <div class="flag neg">
 <p class="label">The bind, stated correctly</p>
@@ -1233,7 +1352,7 @@ Proposition 1 the same quantity caps the aggregate price response.</p>
 <p><strong>The escape is to raise <span class="v">Λ<sub>0</sub> = Var(n|z<sup>⋆</sup>)</span>
 instead of <span class="v">λ</span></strong>, which is what a free
 <span class="v">ρ<sub>0</sub></span> does directly. The corrected bound now says this rather
-than forbidding it, and §14.4 is the argument it licenses.</p>
+than forbidding it, and §14.5 is the argument it licenses.</p>
 </div>
 
 <p>How unsafe, measured. <code>verify_response.py</code> sweeps a one-factor family with
@@ -1267,7 +1386,7 @@ do. Two things transfer regardless of that artefact:</p>
   <span class="v">a</span> = 0.40; 2.475 against 1.835 at 0.50; 5.294 against 2.246 at 0.55).
   It overstates only past the bifurcation, where the toy has saturated at "buy all 16" and
   the regime is an artefact. So the <span class="v">λ</span> genuinely required to hit a given
-  dispersion is <em>lower</em> than Eq. 26b says, not higher — an earlier draft asserted the
+  dispersion is <em>lower</em> than Eq. 31 says, not higher — an earlier draft asserted the
   opposite by reading a table of absolute errors that hid the sign.</li>
   <li><strong>ESS is the diagnostic that fires.</strong> It is not a nicety to be monitored;
   it is the phase-transition detector, and it moves by three orders of magnitude across the
@@ -1275,7 +1394,7 @@ do. Two things transfer regardless of that artefact:</p>
   below 1 and is actively misleading.</li>
 </ul>
 
-<h3><span class="num">14.3</span>What does not fix it</h3>
+<h3><span class="num">14.4</span>What does not fix it</h3>
 
 <p>Two natural repairs were tested and both fail, which is why the design ends where it
 does.</p>
@@ -1329,11 +1448,11 @@ design.</strong></p>
 <code>size_decomposition.py</code>, which fits negative-binomial components only.</p>
 </div>
 
-<h3><span class="num">14.4</span>The size term, and what it replaces</h3>
+<h3><span class="num">14.5</span>The size term, and what it replaces</h3>
 
 <p>The size direction must therefore be carried by something exactly summable rather than by
 the latent or a mixture. That is precisely the free function
-<span class="v">ρ<sub>0</sub>(n)</span> in Eq. 8: it makes
+<span class="v">ρ<sub>0</sub>(n)</span> in Eq. 4: it makes
 <span class="v">P(n)</span> a free discrete distribution on
 <span class="v">{0,…,n<sub>max</sub>}</span>, at <span class="v">n<sub>max</sub></span>
 parameters and no approximation, computed by the same generating-polynomial device as
@@ -1346,7 +1465,7 @@ Proposition 1 the aggregate price response, is fitted from data.</p>
 <p>The divisor multiplies the pairwise term by <span class="v">1/(n−1)</span>, which damps
 exactly the feedback that Proposition 3 says drives the system critical. It is an unexplained,
 hard-coded, one-parameter-free special case of a size potential, and version 2 records that
-removing it made things "substantially worse" without explaining why. Eq. 8 replaces it with
+removing it made things "substantially worse" without explaining why. Eq. 4 replaces it with
 a free <span class="v">ρ<sub>0</sub>(n)</span> that subsumes it: any
 <span class="v">n</span>-dependence the divisor induces can be absorbed, because
 <span class="v">ρ<sub>0</sub></span> is unrestricted. The answer to "why <span class="v">1/(n−1)</span>"
@@ -1358,7 +1477,7 @@ and <span class="v">n<sub>max</sub> = 80</span> covers 99.98%. Baskets above the
 excluded from the support, which is a stated restriction of the model rather than an
 approximation to it.</p>
 
-<h3><span class="num">14.5</span>Does the size potential prevent the bifurcation? Partly</h3>
+<h3><span class="num">14.6</span>Does the size potential prevent the bifurcation? Partly</h3>
 
 <p>§14.2's sweep is the worst case for stability — every product loading the latent the same
 way — and it runs at <span class="v">ρ<sub>0</sub> ≡ 0</span>. The claim that
@@ -1438,81 +1557,9 @@ theorem, and it is falsifiable: fit both, compare held-out set log-likelihood co
 same way for each, and compare generated basket-size distributions. That comparison has not
 been run.</p>
 
-<h2><span class="num">16</span>Where the nesting went</h2>
-
-<p>The category level is not abandoned — it is the organising structure of Eqs. 8 and 11, it
-carries a free parameter <span class="v">ρ<sub>c</sub></span>, and the within-category count is
-enumerated exactly rather than approximated. What is abandoned is the <em>nested
-factorisation</em>: a separate law for which categories are entered, linked to product values
-by an estimated coefficient.</p>
-
-<div class="scroll"><table>
-<thead><tr><th>nested-model element</th><th>in version 3</th></tr></thead>
-<tbody>
-<tr><td>categories as a level</td><td><strong>kept</strong> — <span class="v">ρ<sub>c</sub></span>, the per-category polynomial <span class="v">G<sub>c</sub></span>, the count enumeration</td></tr>
-<tr><td>within-category correlation</td><td><strong>kept</strong>, produced by an explicit interaction <span class="v">ρ<sub>c</sub></span> rather than by correlated Gumbel shocks</td></tr>
-<tr><td>inclusive value</td><td><strong>kept as a derived quantity</strong>: <span class="v">log ∑<sub>j∈𝒞(c)</sub>w<sub>j</sub>(z)</span> appears inside <span class="v">G<sub>c</sub></span>. It is not estimated and has no frozen reference</td></tr>
-<tr><td>"at most one product per category"</td><td><strong>a special case</strong> — cap <span class="v">R</span> = 1, or let <span class="v">ρ<sub>c</sub> → ∞</span></td></tr>
-<tr><td>separate <span class="v">P(𝒦)</span>: cloglog entry × truncated shifted Poisson breadth</td><td><strong>gone</strong> — both are consequences of <span class="v">E</span></td></tr>
-<tr><td>the nesting coefficient <span class="v">κ<sub>c</sub></span></td><td><strong>gone, and replaced by an identity</strong></td></tr>
-</tbody></table></div>
-
-<div class="lemma">
-<p class="label">Proposition 5 — the category-entry response is not a free parameter</p>
-<p>Conditional on <span class="v">z</span>, shift every product value in category
-<span class="v">c</span> by <span class="v">δ</span>. Then</p>
-<div class="eq key"><div class="body">
-<span class="frac"><span>d log P( n<sub>c</sub> ≥ 1 )</span><span>d δ</span></span>
-= 𝔼[ r | r ≥ 1 ] − 𝔼[ r ]
-= 𝔼[ r | r ≥ 1 ] · ( 1 − P(n<sub>c</sub> ≥ 1) )
-</div><div class="tag">(36)</div></div>
-<p><em>Proof.</em> The category's count law is
-<span class="v">P(r) ∝ a<sub>r</sub>e<sub>r</sub>(w)</span> with
-<span class="v">a<sub>r</sub> = e<sup>−ρ<sub>c</sub>C(r,2)</sup></span>, and
-<span class="v">e<sub>r</sub></span> is homogeneous of degree <span class="v">r</span>, so a
-shift <span class="v">δ</span> multiplies the weight at <span class="v">r</span> by
-<span class="v">e<sup>rδ</sup></span>. Differentiating
-<span class="v">log ∑<sub>r≥1</sub> − log ∑<sub>r≥0</sub></span> gives the two means. ∎</p>
-<p><em>Verified</em> against direct enumeration on five configurations spanning
-<span class="v">N</span> = 6 to 20 and both signs of <span class="v">ρ<sub>c</sub></span>:
-relative error 1 × 10<sup>−11</sup> to 4 × 10<sup>−11</sup>, at the finite-difference floor.</p>
-</div>
-
-<div class="flag neg">
-<p class="label">This is the sharpest bet the architecture makes, and it conflicts with the fitted predecessor</p>
-<p>Both quantities in Eq. 36 are <strong>measured, not fitted</strong>:
-<span class="v">𝔼[r | r ≥ 1]</span> = 1.2844 and the per-category entry rate is
-6.075/188 = 0.0323. So version 3 <strong>pins the category-entry response at 1.243</strong>,
-with no parameter free to move it — <span class="v">ρ<sub>c</sub></span> and
-<span class="v">ρ<sub>0</sub></span> can only move it by moving those two observable moments.</p>
-<p>Version 2 <em>estimated</em> the same quantity as
-<span class="v">κ̂<sub>c</sub> · G(η)</span> = 0.8723 × 0.983 = <strong>0.858</strong>, and
-found <span class="v">κ &lt; 1</span> robustly — 0% of categories above 1 at
-<span class="v">m</span> = 32, 64 and 128 alike.</p>
-<p><strong>1.243 against 0.858 is a 45% disagreement on the same quantity, and version 3
-cannot absorb it.</strong> That is the price of removing a free parameter: the model is more
-falsifiable and more fragile. Two readings, and the evidence does not yet choose between
-them.</p>
-<ul>
-  <li><em>Version 2 was wrong.</em> Its own §17 records that <span class="v">κ</span> does not
-  respond as its identification story predicts — a fourfold reduction in inclusive-value noise
-  moved it by −0.045 when attenuation theory predicted +0.28 — and that changing a nuisance
-  constant moves it forty times its seed spread. A badly identified parameter can absorb
-  misspecification and settle anywhere.</li>
-  <li><em>Version 3 is wrong.</em> Eq. 36 forces the entry response to be governed entirely by
-  how many products a category yields when entered. If category entry genuinely responds more
-  weakly than that — because a shopper decides on the aisle before the shelf — the architecture
-  has no way to say so.</li>
-</ul>
-<p>The test is held-out fit, and it is decisive in a way neither argument is: fit version 3,
-and compare its category-incidence likelihood with version 2's on the same held-out weeks. If
-version 3 loses there specifically, Eq. 36 is the reason. This is test 9 in §32 and it should
-be run early, because a failure here is architectural rather than a matter of tuning.</p>
-</div>
-
 <div class="part"><div class="pn">Part III</div><div class="pt">Estimation</div></div>
 
-<h2><span class="num">17</span>The likelihood</h2>
+<h2><span class="num">16</span>The likelihood</h2>
 
 <p>Because <span class="v">Z</span> is computable, there is an actual likelihood to maximise
 — not a weighted composite. For a trip <span class="v">v</span> with observed basket
@@ -1522,19 +1569,19 @@ be run early, because a failure here is architectural rather than a matter of tu
 ℓ<sub>v</sub>(Θ) = log [ ∑<sub>g=1</sub><sup>G</sup> π<sub>g</sub>(h<sub>it</sub>)
 <span class="frac"><span>exp E<sup>(g)</sup>(S<sub>v</sub>)</span><span>Z(g) − 1</span></span> ]
 + ∑<sub>j ∈ S<sub>v</sub></sub> log P( q<sub>j</sub> | j ∈ S<sub>v</sub> )
-</div><div class="tag">(27)</div></div>
+</div><div class="tag">(32)</div></div>
 
 <p>with <span class="v">Z(g) − 1</span> from Corollary 1 implementing the conditioning on a
 non-empty basket, and <span class="v">π<sub>g</sub></span> a softmax over the trip-type
 index. The objective is <span class="v">−∑<sub>v</sub>ℓ<sub>v</sub></span> plus penalties.
 Every parameter is fitted against one objective; there are no relative weights to choose,
-and version 2's §11 finding that its weighting sits 24.5× away from the likelihood has no
+and version 2's section 11 finding that its weighting sits 24.5× away from the likelihood has no
 analogue here.</p>
 
-<h2><span class="num">18</span>Monte Carlo maximum likelihood, and its bias</h2>
+<h2><span class="num">17</span>Monte Carlo maximum likelihood, and its bias</h2>
 
 <p><span class="v">Z</span> is an expectation, estimated by importance sampling from a
-Laplace proposal at the mode of Eq. 24 — the machinery already built and validated on the
+Laplace proposal at the mode of Eq. 27 — the machinery already built and validated on the
 <code>joint-implementation</code> branch, where it achieved effective sample size 0.70 at
 <span class="v">K</span> = 64 and agreed with brute force to 0.002–0.007 nats. Here
 <span class="v">K<sub>z</sub></span> is 8–16 rather than 64, so it should do better; that is
@@ -1546,7 +1593,7 @@ a projection, not a measurement.</p>
 <span class="frac"><span>N(z<sub>d</sub>; 0, I) &thinsp; f(z<sub>d</sub>)</span><span>q(z<sub>d</sub>)</span></span> ,
 &nbsp;&nbsp;
 z<sub>d</sub> ~ q = N( z<sup>⋆</sup>, (I − Λ(z<sup>⋆</sup>))<sup>−1</sup> )
-</div><div class="tag">(28)</div></div>
+</div><div class="tag">(33)</div></div>
 
 <p>where <span class="v">f(z) = ∑<sub>n</sub>e<sup>−ρ<sub>0</sub>(n)</sup>A<sub>n</sub>(z)</span>.
 This is Geyer's Monte Carlo maximum likelihood, and its properties are known rather than
@@ -1563,19 +1610,19 @@ principle gain by making the bound loose rather than the model good.</p>
 <em>First</em>, the bias is
 <span class="v">≈ −Var(Ẑ)/(2Z²) = −(1/D)(1/ESS − 1)/2</span> to leading order, so at
 <span class="v">ESS = 0.7</span> and <span class="v">D = 32</span> it is about
-<span class="v">0.007</span> nats — a quarter of the 0.028-nat held-out improvement §21 treats as evidence, so not
+<span class="v">0.007</span> nats — a quarter of the 0.028-nat held-out improvement §20 treats as evidence, so not
 negligible, but it must be checked at the fitted parameters, not assumed.
 <em>Second</em>, held-out likelihood is reported with a large independent
 <span class="v">D</span> and a fresh random seed, so model selection is not made on the same
 draws that were optimised. <em>Third</em>, ESS is logged every iteration, and §14 shows it is
 the diagnostic that detects the failure mode that would make the bias large.</p>
-<p>What is <em>not</em> claimed: that the estimator is unbiased, or that maximising Eq. 28
+<p>What is <em>not</em> claimed: that the estimator is unbiased, or that maximising Eq. 33
 is equivalent to maximum likelihood at finite <span class="v">D</span>. It is not.</p>
 </div>
 
-<h3><span class="num">18.1</span>Gradients are exact given the draws</h3>
+<h3><span class="num">17.1</span>Gradients are exact given the draws</h3>
 
-<p>Differentiating Eq. 28 with the proposal treated as a constant — legitimate, because
+<p>Differentiating Eq. 33 with the proposal treated as a constant — legitimate, because
 importance sampling is unbiased for any fixed proposal — gives</p>
 
 <div class="eq"><div class="body">
@@ -1583,17 +1630,17 @@ importance sampling is unbiased for any fixed proposal — gives</p>
 = ∑<sub>d</sub> ŵ<sub>d</sub>
 <span class="frac"><span>∂ log f(z<sub>d</sub>)</span><span>∂ Θ</span></span> ,
 &nbsp;&nbsp; ŵ<sub>d</sub> = softmax of the log importance weights
-</div><div class="tag">(29)</div></div>
+</div><div class="tag">(34)</div></div>
 
 <p>and since
-<span class="v">∂ log f(z)/∂b<sub>j</sub> = π<sub>j</sub>(z)</span> by Eq. 18, this is
+<span class="v">∂ log f(z)/∂b<sub>j</sub> = π<sub>j</sub>(z)</span> by Eq. 14, this is
 exactly the self-normalised importance-sampling estimate of the model expectation
 <span class="v">𝔼[x<sub>j</sub>]</span>. The gradient of the log-likelihood is therefore the
 familiar exponential-family form <em>observed minus expected</em>,
 <span class="v">x<sub>j</sub><sup>obs</sup> − 𝔼[x<sub>j</sub>]</span>, estimated with a bias
 of order <span class="v">1/D</span>. No differentiation through the mode-finder is required.</p>
 
-<h2><span class="num">19</span>Cost</h2>
+<h2><span class="num">18</span>Cost</h2>
 
 <p>Per trip and per Gaussian draw, at the median store
 (<span class="v">|𝒜<sub>s</sub>|</span> = 3,041, 169 categories stocked) with
@@ -1605,8 +1652,8 @@ of order <span class="v">1/D</span>. No differentiation through the mode-finder 
 <tbody>
 <tr><td>projections <span class="v">z<sup>⊤</sup>φ<sub>j</sub></span></td><td><span class="v">|𝒜<sub>s</sub>| K<sub>z</sub></span></td><td>no — <span class="v">φ</span> does not depend on <span class="v">g</span></td><td class="num">48,656</td></tr>
 <tr><td>elementary symmetric polynomials</td><td><span class="v">G |𝒜<sub>s</sub>| R</span></td><td>yes</td><td class="num">72,984</td></tr>
-<tr><td>linear index <span class="v">b<sup>(g)</sup><sub>ijt</sub></span>, Eq. 7</td><td><span class="v">G |𝒜<sub>s</sub>| (K + 3K<sub>p</sub> + …)</span>, once per trip not per draw</td><td>yes</td><td class="num">≈ 500,000</td></tr>
-<tr><td>mode-finding, Eq. 24</td><td><span class="v">I<sub>mode</sub></span> × (rows 2–3), once per trip not per draw</td><td>yes</td><td class="num">≈ 1.8M at <span class="v">I<sub>mode</sub></span> = 5</td></tr>
+<tr><td>linear index <span class="v">b<sup>(g)</sup><sub>ijt</sub></span>, Eq. 3</td><td><span class="v">G |𝒜<sub>s</sub>| (K + 3K<sub>p</sub> + …)</span>, once per trip not per draw</td><td>yes</td><td class="num">≈ 500,000</td></tr>
+<tr><td>mode-finding, Eq. 27</td><td><span class="v">I<sub>mode</sub></span> × (rows 2–3), once per trip not per draw</td><td>yes</td><td class="num">≈ 1.8M at <span class="v">I<sub>mode</sub></span> = 5</td></tr>
 <tr><td><span class="v">Λ(z<sup>⋆</sup>)</span> and its Cholesky</td><td><span class="v">|𝒜<sub>s</sub>|K<sub>z</sub>² + K<sub>z</sub>³</span>, once per trip</td><td>yes</td><td class="num">≈ 2.3M</td></tr>
 <tr><td>category convolution for <span class="v">A<sub>n</sub></span></td><td><span class="v">G C<sub>s</sub> (R+1)(n<sub>max</sub>+1)</span></td><td>yes</td><td class="num">278,343</td></tr>
 <tr><td><strong>total per draw</strong></td><td></td><td></td><td class="num"><strong>399,983</strong></td></tr>
@@ -1640,10 +1687,10 @@ the latent dimension. The projection is therefore <strong>2–8 hours per fit</s
 <span class="v">G</span> = 3, and the first thing the implementation branch should do is
 measure it on a hundred iterations before anything is built on top. If it lands badly,
 <span class="v">G</span> = 1 removes a factor of 2.4 and costs the trip-type mechanism,
-which §14.3 already shows carries less than expected.</p>
+which §14.4 already shows carries less than expected.</p>
 </div>
 
-<h3><span class="num">19.1</span>Parameter count</h3>
+<h3><span class="num">18.1</span>Parameter count</h3>
 
 <div class="scroll"><table>
 <thead><tr><th>block</th><th>members</th><th class="num">count</th></tr></thead>
@@ -1664,26 +1711,26 @@ type and the hazard, because untying <span class="v">φ</span> from
 
 <div class="flag">
 <p class="label">A parameter block that arithmetic alone would have condemned</p>
-<p>The inventory recursion §5.1 removed on identification grounds would also have failed on
+<p>The inventory recursion §10 removed on identification grounds would also have failed on
 cost. A per-household, per-category consumption rate
 <span class="v">r<sub>ic</sub></span> is 2,066 × 188 = <strong>388,408</strong> parameters —
 59% as large as the entire rest of the model — for a quantity that is never observed,
 identified only through the model's own fit, and estimated from a mean of 76 trips per
 household (median 60). An identification objection and a counting objection landed on the
 same block, which is worth noting: they usually do.</p>
-<p>Eq. 4's days-of-supply proxy costs <strong>no</strong> parameters beyond the loadings
+<p>Eq. 22's days-of-supply proxy costs <strong>no</strong> parameters beyond the loadings
 <span class="v">w<sup>sup</sup><sub>j</sub></span> and <span class="v">τ<sub>3</sub></span>,
 because <span class="v">g<sub>c</sub></span> is a descriptive statistic rather than a fitted
 rate.</p>
 </div>
 
-<h2><span class="num">20</span>What consistency does and does not hold</h2>
+<h2><span class="num">19</span>What consistency does and does not hold</h2>
 
 <p>Version 3 removes one of version 2's two obstructions and leaves the other exactly where
 it was. Saying so plainly matters more than the improvement.</p>
 
 <ul>
-  <li><strong>Removed: the reweighting obstruction.</strong> Eq. 27 is a single likelihood.
+  <li><strong>Removed: the reweighting obstruction.</strong> Eq. 32 is a single likelihood.
   There is no weighted composite whose maximiser is an M-estimator for nothing in
   particular.</li>
   <li><strong>Not removed: incidental parameters.</strong>
@@ -1696,20 +1743,21 @@ it was. Saying so plainly matters more than the improvement.</p>
   The available treatments are a hierarchical prior with the hyperparameters estimated
   (partial pooling, which shrinks but does not eliminate the bias), or an explicit integral
   over the household effects. Neither is free and neither is implemented.</li>
-  <li><strong>Added: Monte Carlo bias</strong>, §18, of order <span class="v">1/D</span> and
+  <li><strong>Added: Monte Carlo bias</strong>, §17, of order <span class="v">1/D</span> and
   in the unsafe direction.</li>
 </ul>
 
-<p>What can honestly be claimed: Eq. 27 is a penalised M-estimator whose population objective
+<p>What can honestly be claimed: Eq. 32 is a penalised M-estimator whose population objective
 is maximised at the truth as <span class="v">D → ∞</span> when the household parameters are
 treated as fixed effects and the number of trips per household grows. Neither condition holds
 here. Any interval on any parameter must come from a household block bootstrap over
 <em>refits</em>, which has never been run in this project, and not from seed spread, which
-version 2 §18 measured to understate uncertainty by a factor of forty.</p>
+version 2 section 18 measured to understate uncertainty by a factor of forty.</p>
+
 
 <div class="part"><div class="pn">Part IV</div><div class="pt">The causal layer</div></div>
 
-<h2><span class="num">21</span>What a counterfactual means here</h2>
+<h2><span class="num">20</span>What a counterfactual means here</h2>
 
 <p>Everything so far is a conditional law <span class="v">P(S | 𝒢)</span>. Goal 2 asks for
 <span class="v">P(S | do(price))</span>. These coincide only under an assumption, and stating
@@ -1724,7 +1772,7 @@ promotion) and <span class="v">ν<sub>jsw</sub></span> for a product–store–w
 ( p<sub>jsw</sub>, D<sub>jsw</sub>, M<sub>jsw</sub> ) = F( observed history, ν<sub>cw</sub>, ν<sub>jsw</sub>, ε<sup>retailer</sup> )
 &nbsp;&nbsp;→&nbsp;&nbsp;
 S<sub>v</sub> ~ P( · | 𝒢<sub>v</sub>, ν )
-</div><div class="tag">(30)</div></div>
+</div><div class="tag">(35)</div></div>
 
 <p>The problem is the arrow from <span class="v">ν</span> to both. A retailer promotes what
 it expects to sell; the same expectation raises demand directly. Conditioning on price
@@ -1734,7 +1782,7 @@ therefore mixes the price response with the shock.</p>
 <p class="label">Assumption C — conditional ignorability of price</p>
 <p><span class="v">P(S | do(p), 𝒢) = P(S | p, 𝒢)</span> holds if
 <span class="v">p ⫫ ν | 𝒢</span> — the residual price variation, after everything in
-Eq. 6, is unrelated to unobserved demand.</p>
+Eq. 2, is unrelated to unobserved demand.</p>
 </div>
 
 <p>Assumption C is false in this data, and the evidence is already in the repository rather
@@ -1759,7 +1807,7 @@ association with at least two named, measured confounds, and version 3 does not 
 What version 3 changes is that it stops routing policy questions through that number.</p>
 </div>
 
-<h2><span class="num">22</span>Coupons: the one design with a credible contrast</h2>
+<h2><span class="num">21</span>Coupons: the one design with a credible contrast</h2>
 
 <p>The dunnhumby release contains a campaign structure that this project has never used, and
 it supplies exactly the variation that shelf prices do not.</p>
@@ -1811,14 +1859,14 @@ the second requires assumptions about awareness that this data cannot support.</
 <p>For goal 3 this is fortunate rather than limiting: a targeting policy chooses whom to
 <em>send</em> coupons to. <strong>Intent-to-treat is exactly the causal quantity a targeting
 policy needs</strong>, and modelling redemption would answer a question nobody gets to act on.
-The household-specific loading <span class="v">γ<sup>d</sup><sub>i</sub></span> in Eq. 7
+The household-specific loading <span class="v">γ<sup>d</sup><sub>i</sub></span> in Eq. 3
 absorbs heterogeneous responsiveness — including the 73% of campaign households that never
 redeem anything — as a random coefficient rather than as a separate awareness stage.</p>
 </div>
 
-<h2><span class="num">23</span>Three tiers, and which parameter the simulator uses</h2>
+<h2><span class="num">22</span>Three tiers, and which parameter the simulator uses</h2>
 
-<p>The consequence of §21 and §22 is that not all coefficients in Eq. 7 have the same
+<p>The consequence of §20 and §21 is that not all coefficients in Eq. 3 have the same
 status, and the model should stop pretending they do.</p>
 
 <div class="scroll"><table>
@@ -1826,7 +1874,7 @@ status, and the model should stop pretending they do.</p>
 <tbody>
 <tr><td><strong>1 — predictive</strong></td><td><span class="v">λ, α, θ, φ, ρ<sub>c</sub>, ρ<sub>0</sub>, ψ, μ, ζ, w<sup>·</sup></span></td><td>all observational variation</td><td>forecasting, basket scoring, imputation, generation under the observed regime</td></tr>
 <tr><td><strong>2 — interventional</strong></td><td><span class="v">γ<sup>d</sup>, β<sup>d</sup></span> (coupon), and <span class="v">w<sup>dsp</sup>, w<sup>mlr</sup></span> with reservations</td><td>household × product × week coupon eligibility under Assumption D</td><td>counterfactual policy simulation</td></tr>
-<tr><td><strong>3 — associational only</strong></td><td><span class="v">γ, β</span> (shelf price)</td><td>observational price variation, confounded per §21</td><td>nothing interventional; retained because dropping it would push its association into the tier-1 terms</td></tr>
+<tr><td><strong>3 — associational only</strong></td><td><span class="v">γ, β</span> (shelf price)</td><td>observational price variation, confounded per §20</td><td>nothing interventional; retained because dropping it would push its association into the tier-1 terms</td></tr>
 </tbody></table></div>
 
 <p><strong>The simulator uses tier-2 coefficients for the price channel, not tier 3.</strong>
@@ -1837,7 +1885,7 @@ coupon-identified response rescaled by an assumed coupon depth
 <span class="v">γ<sup>⊤</sup>β</span>. This is the substantive break with version 2, which
 uses one price coefficient for both prediction and policy. The price of the break is the
 nuisance constant <span class="v">δ̄</span>, which the data does not supply and which must be
-carried through every result as a range, exactly as §24 carries confounding and §27 carries
+carried through every result as a range, exactly as §23 carries confounding and §25 carries
 the margin rate. A coupon-targeting policy, which chooses <em>whether to send a coupon</em>
 rather than how deep to cut, does not need <span class="v">δ̄</span> at all.</p>
 
@@ -1846,7 +1894,7 @@ rather than how deep to cut, does not need <span class="v">δ̄</span> at all.</
 <p>It assumes a coupon and a shelf markdown of the same depth move demand by the same amount.
 They plausibly do not: a coupon is targeted, salient, and requires an action.</p>
 <p><strong>And the comparison cannot be made on a common scale, because the coupon's face
-value is not in the data</strong> (§6). <span class="v">γ<sup>d⊤</sup>β<sup>d</sup></span> is
+value is not in the data</strong> (§3). <span class="v">γ<sup>d⊤</sup>β<sup>d</sup></span> is
 the utility shift from <em>holding a coupon</em>;
 <span class="v">γ<sup>⊤</sup>β</span> is a response per log point of price. Equating them
 requires a depth <span class="v">δ̄</span> such that a held coupon is worth
@@ -1858,7 +1906,7 @@ the 36,422 redeemed lines (median depth 26.8%), which is a selected sample of a 
   coupon-identified response is not negative on the utility scale, the shelf-price
   coefficient has no interventional support at all, whatever its magnitude.</li>
   <li><strong>Relative comparisons across households and products transfer.</strong> The
-  targeting problem of §29 needs
+  targeting problem of §27 needs
   <span class="v">Uplift<sub>ij</sub></span> ranked across pairs, and a common unknown scale
   factor <span class="v">δ̄</span> does not change a ranking.</li>
   <li><strong>An equality test is possible under an assumed <span class="v">δ̄</span></strong>,
@@ -1868,7 +1916,7 @@ the 36,422 redeemed lines (median depth 26.8%), which is a selected sample of a 
 can perform, and it now has a stated limitation rather than a promised equivalence.</p>
 </div>
 
-<h2><span class="num">24</span>Sensitivity rather than false precision</h2>
+<h2><span class="num">23</span>Sensitivity rather than false precision</h2>
 
 <p>Where a policy value depends on a tier-3 parameter it should be reported as a band, not a
 number. Parameterise the confounding by the fraction <span class="v">κ<sub>conf</sub> ∈
@@ -1880,7 +1928,7 @@ spanning <span class="v">κ<sub>conf</sub> ∈ [0, 0.6]</span> is therefore supp
 measurement at both ends, and a policy whose ranking is stable across it can be recommended;
 one whose ranking flips inside it cannot.</p>
 
-<h2><span class="num">25</span>The estimands</h2>
+<h2><span class="num">24</span>The estimands</h2>
 
 <p>Two objects, both computable from the fitted model by Corollary 2 and both defined at the
 level the decision is made.</p>
@@ -1896,13 +1944,13 @@ level the decision is made.</p>
 = g<sub>j</sub> <span class="frac"><span>Var(x<sub>j</sub>)</span><span>π<sub>j</sub></span></span>
 − ( γ<sup>q⊤</sup><sub>i</sub>β<sup>q</sup><sub>j</sub> )
 <span class="frac"><span>Λ<sup>qty</sup></span><span>1 + Λ<sup>qty</sup></span></span>
-</div><div class="tag">(31)</div></div>
+</div><div class="tag">(36)</div></div>
 
 <p>and since <span class="v">Var(x<sub>j</sub>) = π<sub>j</sub>(1−π<sub>j</sub>)</span> for a
 binary indicator, the first term is <span class="v">g<sub>j</sub>(1 − π<sub>j</sub>)</span>.
 Two things are notably absent compared with version 2's Appendix C: there is no separate
 incidence margin and no separate breadth margin, because entry and breadth are not separate
-factors — they are consequences of the same <span class="v">Z</span>, and Eq. 17 delivers
+factors — they are consequences of the same <span class="v">Z</span>, and Eq. 13 delivers
 their derivatives automatically. The four-margin decomposition that version 2 must compute
 and cannot combine collapses to two, and the two use the same normalisation, which version 2
 §C explicitly notes its two do not.</p>
@@ -1914,7 +1962,7 @@ and cannot combine collapses to two, and the two use the same normalisation, whi
 = Cov( x<sub>j</sub>, x<sub>k</sub> ) ,
 &nbsp;&nbsp;
 Uplift<sub>ij</sub>(d) = 𝔼[ revenue | do(d<sub>ij</sub> = d) ] − 𝔼[ revenue | do(d<sub>ij</sub> = 0) ]
-</div><div class="tag">(32)</div></div>
+</div><div class="tag">(37)</div></div>
 
 <p>The uplift is a whole-basket quantity: a coupon on product <span class="v">j</span> moves
 <span class="v">π<sub>j</sub></span>, and through <span class="v">Cov(x<sub>j</sub>,
@@ -1925,65 +1973,24 @@ cannot compute this at all</strong>: its interaction lives inside a fixed compos
 coupon cannot pull a product from a category the household was not already going to enter.
 This is the concrete payoff of §3.</p>
 
+
 <div class="part"><div class="pn">Part V</div><div class="pt">The environment</div></div>
 
-<h2><span class="num">26</span>Trip timing</h2>
-
-<p>Version 2 conditions on the day and never generates it, so inter-trip gaps are exogenous
-and the retailer's central question — <em>if I promote this week, does the household come in
-sooner?</em> — is unanswerable. <code>ANALYSIS.md</code> §2 names this the largest gap. It is
-a discrete-time hazard on the household's own state:</p>
-
-<div class="eq"><div class="body">
-P( trip on day t | h<sub>it</sub> ) = 1 − exp( −e<sup>η<sup>trip</sup><sub>it</sub></sup> ) ,
-&nbsp;&nbsp;
-η<sup>trip</sup><sub>it</sub> = τ<sub>0i</sub>
-+ τ<sub>1</sub><sup>⊤</sup>x<sup>gap</sup><sub>it</sub>
-+ τ<sub>2</sub><sup>⊤</sup>dow(t)
-− τ<sub>3</sub><sup>⊤</sup>x<sup>sup</sup><sub>it</sub>
-+ τ<sub>4</sub> Ω<sub>ist</sub>
-</div><div class="tag">(33)</div></div>
-
-<p>where <span class="v">x<sup>gap</sup></span> is a spline in days since the last trip,
-<span class="v">x<sup>sup</sup><sub>it</sub></span> the days-of-supply vector of Eq. 4 —
-a low reading brings the trip forward, which is the mechanism that makes a stock-up trip
-followed by a long gap — and</p>
-
-<div class="eq"><div class="body">
-Ω<sub>ist</sub> = log ∑<sub>c</sub> exp( promotional attractiveness of category c at store s )
-</div><div class="tag">(34)</div></div>
-
-<p>an exposure summary through which a promotion policy can move trip timing. Store choice
-given a trip is a multinomial over the stores the household has used, conditioned on the same
-state. Measured targets: gaps have mean 7.35 days, median 4, variance 159 (dispersion 21.6),
-and 18.3% of consecutive trips are on consecutive days — strongly overdispersed with a large
-point mass at one day, so a single-parameter geometric hazard will not fit and the spline is
-not decoration.</p>
-
-<div class="flag">
-<p class="label">Imposed, and untested</p>
-<p>Eq. 33 is a modelling choice with no derivation, the complementary log-log link is chosen
-for consistency with a latent-count reading, and the days-of-supply term assumes the
-category's median repurchase gap is the right scale for every household. None of this has been
-fitted or validated. It is included because an environment without it cannot represent the action the
-project exists to study, not because there is evidence for this particular form.</p>
-</div>
-
-<h2><span class="num">27</span>The decision process</h2>
+<h2><span class="num">25</span>The decision process</h2>
 
 <div class="scroll"><table>
 <thead><tr><th>element</th><th>definition</th></tr></thead>
 <tbody>
 <tr><td>state <span class="v">s<sub>t</sub></span></td><td><span class="v">( {h<sub>it</sub>}<sub>i=1..N</sub>, calendar, current price and promotion state )</span> — closed by Axiom S</td></tr>
 <tr><td>action <span class="v">a<sub>t</sub></span></td><td>per product–store–week: price, display, mailer. Per household–product: whether to send a coupon, <span class="v">d<sub>ij</sub> ∈ {0,1}</span>, and its validity window</td></tr>
-<tr><td>transition</td><td>trip hazard Eq. 33 → basket law Eq. 9 → units Eq. 19 → state recursions Eqs. 3–4</td></tr>
-<tr><td>reward</td><td><span class="v">∑<sub>j∈S</sub> p<sub>j</sub>q<sub>j</sub>(1 − δ̄ d<sub>ij</sub>) − m<sub>dept(j)</sub>p<sub>j</sub>q<sub>j</sub></span> — revenue net of coupon cost at the assumed depth <span class="v">δ̄</span> of §23, minus cost of goods at an <em>assumed</em> department margin rate. Since <span class="v">d</span> is binary, the discount must be priced by <span class="v">δ̄</span>; writing <span class="v">(1 − d<sub>ij</sub>)</span> would zero the line</td></tr>
+<tr><td>transition</td><td>trip hazard Eq. 19 → basket law Eq. 5 → units Eq. 18 → state recursions Eqs. 21–4</td></tr>
+<tr><td>reward</td><td><span class="v">∑<sub>j∈S</sub> p<sub>j</sub>q<sub>j</sub>(1 − δ̄ d<sub>ij</sub>) − m<sub>dept(j)</sub>p<sub>j</sub>q<sub>j</sub></span> — revenue net of coupon cost at the assumed depth <span class="v">δ̄</span> of §22, minus cost of goods at an <em>assumed</em> department margin rate. Since <span class="v">d</span> is binary, the discount must be priced by <span class="v">δ̄</span>; writing <span class="v">(1 − d<sub>ij</sub>)</span> would zero the line</td></tr>
 </tbody></table></div>
 
 <p>Households are conditionally independent given the action, so the transition kernel
 factorises over 2,066 chains and simulation is embarrassingly parallel. Version 2's generator
 runs at 105 baskets per second single-threaded; version 3's per-basket cost is dominated by
-the same assortment-wide evaluation of Eq. 7 plus <span class="v">D</span> draws for the
+the same assortment-wide evaluation of Eq. 3 plus <span class="v">D</span> draws for the
 sampler, so it will be slower per basket and exact instead of four Gibbs sweeps.</p>
 
 <div class="flag neg">
@@ -1993,10 +2000,10 @@ because dunnhumby ships no cost data. Any margin-based objective therefore rests
 assumed rate <span class="v">m<sub>dept</sub></span>, and a markdown policy optimised against
 an assumed margin is optimising a number the analyst chose. The honest treatment is to report
 policy rankings as a function of <span class="v">m</span> across a plausible range and flag
-any ranking that is not stable in it, exactly as §24 does for confounding.</p>
+any ranking that is not stable in it, exactly as §23 does for confounding.</p>
 </div>
 
-<h2><span class="num">28</span>How accurate does the environment have to be?</h2>
+<h2><span class="num">26</span>How accurate does the environment have to be?</h2>
 
 <p>This is answerable rather than a matter of taste, and the answer is uncomfortable.</p>
 
@@ -2008,7 +2015,7 @@ kernels differing by at most <span class="v">ε</span> in total variation at eve
 state–action pair. Then for any policy and horizon <span class="v">H</span>,</p>
 <div class="eq"><div class="body">
 | V<sup>π</sup><sub>M</sub> − V<sup>π</sup><sub>M̂</sub> | ≤ H² R<sub>max</sub> ε
-</div><div class="tag">(35)</div></div>
+</div><div class="tag">(38)</div></div>
 <p><em>Proof.</em> Coupling the two trajectory distributions step by step gives
 <span class="v">TV( traj<sub>M</sub>, traj<sub>M̂</sub> ) ≤ H ε</span>. The total return is
 bounded in <span class="v">[0, H R<sub>max</sub>]</span>, and for any
@@ -2027,11 +2034,11 @@ vacuous by a factor of thirty.</p>
 <p class="label">What follows, and what does not</p>
 <p><strong>Does follow:</strong> no worst-case guarantee is available for twelve-step
 model-based policy <em>evaluation</em> at any accuracy this model class will plausibly reach.
-Inverting Eq. 35 for a 5% error on a twelve-step value needs
+Inverting Eq. 38 for a 5% error on a twelve-step value needs
 <span class="v">ε ≤ 4.5 × 10<sup>−4</sup></span>, which is far below sampling noise on any
 held-out set this size. Reporting a simulated policy value as an estimate of the real one is
 not defensible, and this project should stop planning to.</p>
-<p><strong>Does not follow:</strong> that the environment is useless. Eq. 35 is a worst-case
+<p><strong>Does not follow:</strong> that the environment is useless. Eq. 38 is a worst-case
 bound over all policies and all reward functions; it says nothing about the <em>ranking</em>
 of two similar policies, for which errors substantially cancel. The defensible workflow is:
 use the environment for policy <em>search</em> and for stress-testing, then evaluate the
@@ -2039,16 +2046,16 @@ resulting policy on logged data by off-policy methods with their own finite-samp
 That division of labour is the honest one, and it is what the accuracy analysis supports
 rather than what one would prefer.</p>
 <p>It also gives a concrete target that is worth hitting even so: per-trip basket total
-variation is the quantity that enters Eq. 35, version 2 sits at ≥ 0.28 on its coarsest
+variation is the quantity that enters Eq. 38, version 2 sits at ≥ 0.28 on its coarsest
 marginal, and §3 attributes almost all of that to the composition stage that version 3
 removes. Driving it to 0.05 would be a 5.6-fold improvement in the only bound available — which
 still leaves 144 × 180 × 0.05 = $1,296 against a true value near $235, so it narrows the gap
 without closing it.</p>
 </div>
 
-<h2><span class="num">29</span>Coupon targeting as an optimisation</h2>
+<h2><span class="num">27</span>Coupon targeting as an optimisation</h2>
 
-<p>With Eq. 32 the targeting problem is well posed. Choose a binary assignment
+<p>With Eq. 37 the targeting problem is well posed. Choose a binary assignment
 <span class="v">A<sub>ij</sub> ∈ {0,1}</span> of coupons to household–product pairs:</p>
 
 <div class="eq"><div class="body">
@@ -2057,31 +2064,32 @@ maximise ∑<sub>i,j</sub> A<sub>ij</sub> · Uplift<sub>ij</sub>
 ∑<sub>j</sub> A<sub>ij</sub> ≤ B<sub>i</sub> ,
 ∑<sub>i,j</sub> A<sub>ij</sub> c<sub>ij</sub> ≤ B ,
 A<sub>ij</sub> = 0 for j ∉ eligible
-</div><div class="tag">(36)</div></div>
+</div><div class="tag">(39)</div></div>
 
 <p>a bipartite assignment problem with a knapsack constraint, whose linear relaxation is
 integral when only the per-household cardinality constraint binds and which is otherwise
 solved to a small gap by standard methods. The modelling work is entirely in
 <span class="v">Uplift<sub>ij</sub></span>: it must be an interventional quantity (tier 2,
-§23), it must account for cannibalisation within the category and pull-through across
-categories (Eq. 32), and it must be a <em>household × product</em> object rather than a
+§22), it must account for cannibalisation within the category and pull-through across
+categories (Eq. 37), and it must be a <em>household × product</em> object rather than a
 population average, which is what the household loadings
 <span class="v">γ<sup>d</sup><sub>i</sub></span> supply.</p>
 
-<p>Note what Eq. 36 optimises: incremental revenue net of coupon cost. The uplift can be
+<p>Note what Eq. 17 optimises: incremental revenue net of coupon cost. The uplift can be
 negative — a coupon on a product the household would have bought at full price is pure
 discount — and the model represents that correctly because
 <span class="v">Uplift</span> subtracts the no-coupon counterfactual. That is the entire
 value of a causal model here, and it is why tier 3 must not be used for it.</p>
 
+
 <div class="part"><div class="pn">Part VI</div><div class="pt">Assumptions, risks, and what would falsify this</div></div>
 
-<h2><span class="num">30</span>Every assumption, grouped by what fails without it</h2>
+<h2><span class="num">28</span>Every assumption, grouped by what fails without it</h2>
 
 <h3>Needed for the basket law to exist and be computable</h3>
 <ul>
   <li><strong>The interaction is symmetric.</strong> Automatic here:
-  <span class="v">W</span> in Eq. 10 is symmetric by construction. Unlike version 2 this is
+  <span class="v">W</span> in Eq. 6 is symmetric by construction. Unlike version 2 this is
   not a restriction imposed to repair an inherited asymmetry; it is what writing a joint
   means.</li>
   <li><strong>The attractive part is positive semi-definite.</strong> Required by
@@ -2098,8 +2106,8 @@ value of a causal model here, and it is why tier 3 must not be used for it.</p>
 <h3>Needed for the estimates to mean anything</h3>
 <ul>
   <li><strong>Household parameters are ancillary, or pooled, or integrated.</strong> None is
-  supplied (§20). Unchanged from version 2 and not improved by anything here.</li>
-  <li><strong>Monte Carlo bias is small at the fitted parameters</strong> (§18). Measurable,
+  supplied (§19). Unchanged from version 2 and not improved by anything here.</li>
+  <li><strong>Monte Carlo bias is small at the fitted parameters</strong> (§17). Measurable,
   unmeasured.</li>
   <li><strong>The assortment <span class="v">𝒞<sub>s</sub>(c)</span> is what the shopper
   could have bought.</strong> It is defined as "sold at least once in training", which is
@@ -2108,34 +2116,34 @@ value of a causal model here, and it is why tier 3 must not be used for it.</p>
   shrinks a within-category denominator, it changes <span class="v">Z</span>. Version 2's
   measured sensitivity — the allocation elasticity running from −0.57 to 0.00 as the inclusion
   threshold tightens — should be re-run under version 3 before any elasticity is quoted.</li>
-  <li><strong>Assumption U</strong>, units do not feed back (§10). Testable, untested.</li>
+  <li><strong>Assumption U</strong>, units do not feed back (§8). Testable, untested.</li>
 </ul>
 
 <h3>Needed for the causal claims</h3>
 <ul>
-  <li><strong>Assumption C</strong> (§21), conditional ignorability of shelf price.
+  <li><strong>Assumption C</strong> (§20), conditional ignorability of shelf price.
   <strong>Believed false</strong>, with three independent pieces of measured evidence. Tier-3
   parameters are therefore not used for policy.</li>
-  <li><strong>Assumption D</strong> (§22), the coupon exclusion. Weaker, partially testable
+  <li><strong>Assumption D</strong> (§21), the coupon exclusion. Weaker, partially testable
   by a pre-window placebo, and the basis of everything interventional in this document.</li>
   <li><strong>Coupon and shelf-price responses are exchangeable</strong>, if a coupon-identified
-  coefficient is used to simulate a markdown (§23). Testable and untested; the highest-value
+  coefficient is used to simulate a markdown (§22). Testable and untested; the highest-value
   experiment available.</li>
 </ul>
 
 <h3>Needed for the environment</h3>
 <ul>
   <li><strong>Axiom S</strong>, state closure, and <strong>Axiom O</strong>, provenance
-  (§5.1). Satisfied by construction after the inventory state was removed; the cost is the
-  imposed form of Eqs. 3 and 4, which is unvalidated.</li>
-  <li><strong>The four substitutions of §5.2</strong> — imputed prices, outcome-defined
+  (§10). Satisfied by construction after the inventory state was removed; the cost is the
+  imposed form of Eqs. 21 and 22, which is unvalidated.</li>
+  <li><strong>The four substitutions of §10.1</strong> — imputed prices, outcome-defined
   assortment, assumed coupon depth, assumed margin. Each is information the data does not
   contain.</li>
-  <li><strong>The trip hazard, Eq. 33.</strong> Imposed entirely.</li>
-  <li><strong>An assumed margin rate</strong> for any margin objective (§27).</li>
+  <li><strong>The trip hazard, Eq. 19.</strong> Imposed entirely.</li>
+  <li><strong>An assumed margin rate</strong> for any margin objective (§25).</li>
 </ul>
 
-<h2><span class="num">31</span>Risks, honestly ranked</h2>
+<h2><span class="num">29</span>Risks, honestly ranked</h2>
 
 <ol>
   <li><strong>The stability risk is the largest, and it is unresolved.</strong> §14 shows
@@ -2158,21 +2166,21 @@ value of a causal model here, and it is why tier 3 must not be used for it.</p>
   agreement stops being evidence for the model — it becomes a fitted target. Evidence must
   come from the quantities <span class="v">ρ<sub>0</sub></span> does not control: co-occurrence
   structure, cross-price signs, and held-out set likelihood.</li>
-  <li><strong>Forward-buying may not be representable at all.</strong> §5.1 removed the
+  <li><strong>Forward-buying may not be representable at all.</strong> §10 removed the
   inventory state because dunnhumby has no inventory data, and replaced it with a proxy whose
   only new content is the size of the last purchase. If test 8 fails, the environment cannot
   represent promotional pull-forward, and every markdown policy it evaluates will
   <em>over-value</em> promotions — seeing the lift and never the payback. That is a
   directional bias, not noise, and it is the most policy-relevant gap that remains.</li>
-  <li><strong>The coupon face value does not exist in the data</strong> (§6), so any result
+  <li><strong>The coupon face value does not exist in the data</strong> (§3), so any result
   expressed per log point of price carries an assumed <span class="v">δ̄</span>. Rankings and
   signs survive; magnitudes do not. This was discovered while checking the document and it
-  changed §23 from an equivalence test into a bounded one.</li>
-  <li><strong>Monte Carlo maximum likelihood maximises an upper bound</strong> (§18).</li>
-  <li><strong>Neyman–Scott</strong> (§20), inherited and unaddressed.</li>
+  changed §22 from an equivalence test into a bounded one.</li>
+  <li><strong>Monte Carlo maximum likelihood maximises an upper bound</strong> (§17).</li>
+  <li><strong>Neyman–Scott</strong> (§19), inherited and unaddressed.</li>
 </ol>
 
-<h2><span class="num">32</span>What would falsify this, and in what order to check</h2>
+<h2><span class="num">30</span>What would falsify this, and in what order to check</h2>
 
 <p>Each of these is a decision point at which the design should be abandoned or changed, not
 a list of nice-to-haves. They are ordered by cost, cheapest first, so that the cheap
@@ -2182,25 +2190,25 @@ falsifiers run before anything expensive is built.</p>
 <thead><tr><th class="num">#</th><th>test</th><th>refutes if</th><th>cost</th></tr></thead>
 <tbody>
 <tr><td class="num">1</td><td>Measure version 2's generated basket-size variance and its aggregate response to a uniform price shift; check Proposition 1 holds on the fitted model</td><td>the two disagree — then Proposition 1 is being misapplied and §12's argument collapses</td><td>no refit</td></tr>
-<tr><td class="num">2</td><td>Fit Eq. 9 on the synthetic generator already built for the joint branch, recovering known <span class="v">φ, ρ<sub>c</sub>, ρ<sub>0</sub></span></td><td>recovery is no better than version 2's on the same data</td><td>hours</td></tr>
+<tr><td class="num">2</td><td>Fit Eq. 5 on the synthetic generator already built for the joint branch, recovering known <span class="v">φ, ρ<sub>c</sub>, ρ<sub>0</sub></span></td><td>recovery is no better than version 2's on the same data</td><td>hours</td></tr>
 <tr><td class="num">3</td><td>Log <span class="v">λ<sub>max</sub>(Λ)</span> and ESS on a short real-data fit</td><td>ESS collapses or <span class="v">λ</span> pins near 1 with <span class="v">ρ<sub>0</sub></span> free — risk 1 realised</td><td>hours</td></tr>
 <tr><td class="num">4</td><td>Coupon pre-window placebo under Assumption D</td><td>a non-zero "effect" before the window opens</td><td>no model</td></tr>
-<tr><td class="num">5</td><td>Free coupon versus shelf-price coefficients, tested for equality (§23)</td><td>they differ enough that neither disciplines the other</td><td>one fit</td></tr>
+<tr><td class="num">5</td><td>Free coupon versus shelf-price coefficients, tested for equality (§22)</td><td>they differ enough that neither disciplines the other</td><td>one fit</td></tr>
 <tr><td class="num">6</td><td>Held-out whole-basket log-likelihood, version 3 against version 2, both computed as exact set probabilities</td><td>version 3 does not win, having removed a stage version 2 needed</td><td>two fits</td></tr>
 <tr><td class="num">7</td><td>Co-occurrence lift and its rank correlation against real, the quantity <span class="v">ρ<sub>0</sub></span> cannot fit</td><td>no improvement on version 2's rank correlation of +0.099</td><td>generation</td></tr>
-<tr><td class="num">9</td><td>Held-out <em>category-incidence</em> likelihood, version 3 against version 2 (§16)</td><td>version 3 loses specifically on incidence — then Eq. 36's forced entry response is refuted and the architecture needs a free damping channel</td><td>two fits</td></tr>
-<tr><td class="num">8</td><td><strong>Run.</strong> Does <span class="v">Q<sub>ic</sub></span> predict the next purchase given its timing? (§5.1)</td><td><strong>Survives, weakly.</strong> β = +0.0097 (t = +8.2) in the forward-buying direction, but only +0.000387 nats held out</td><td>done</td></tr>
+<tr><td class="num">9</td><td>Held-out <em>category-incidence</em> likelihood, version 3 against version 2 (section 16)</td><td>version 3 loses specifically on incidence — then Eq. 17's forced entry response is refuted and the architecture needs a free damping channel</td><td>two fits</td></tr>
+<tr><td class="num">8</td><td><strong>Run.</strong> Does <span class="v">Q<sub>ic</sub></span> predict the next purchase given its timing? (§10)</td><td><strong>Survives, weakly.</strong> β = +0.0097 (t = +8.2) in the forward-buying direction, but only +0.000387 nats held out</td><td>done</td></tr>
 </tbody></table></div>
 
 <p>Test 1 costs nothing and is the one that decides whether the central argument of Part III
 is sound. It should be run first.</p>
 
-<h2><span class="num">33</span>What is genuinely new here, and what is inherited</h2>
+<h2><span class="num">31</span>What is genuinely new here, and what is inherited</h2>
 
 <p>Stated plainly so the contribution is not overclaimed.</p>
 
 <p><strong>New in this document.</strong> The single-energy formulation with no composition
-stage (§8); Theorem 1 with the size potential and its verification (§9); the response
+stage (§5); Theorem 1 with the size potential and its verification (§6); the response
 identity <span class="v">d𝔼[n]/dδ = Var(n)</span> and its consequence that distributional and
 counterfactual fidelity are one property (§12) — the identity itself is the standard
 second-cumulant property of an exponential family, and what is new is only the use made of it;
@@ -2208,8 +2216,8 @@ the dispersion–stability bound
 <span class="v">λ<sub>max</sub> ≥ 1 − Λ<sub>0</sub>/Var(n)</span>, which holds in any latent
 dimension, and the argument that it forces an enumerated size potential (§14); the three-tier
 separation of parameters by identification status and the rule that the simulator uses tier 2
-(§23); Axioms S and O and the provenance audit that follows from them (§5.1, §5.2); the
-accuracy target derived from Proposition 4 (§28).</p>
+(§22); Axioms S and O and the provenance audit that follows from them (§10, §10.1); the
+accuracy target derived from Proposition 4 (§26).</p>
 
 <p><strong>Inherited.</strong> The Hubbard–Stratonovich route to a low-rank normaliser, the
 elementary-symmetric-polynomial recursion, the fixed-point mode finder, the Laplace proposal,
@@ -2223,6 +2231,7 @@ elasticity becomes identified; that twelve-step policy values become trustworthy
 number in Part IV or V has been fitted. This document is a theory with its mathematics
 verified and its feasibility costed. Nothing in it has been trained on dunnhumby.</p>
 
+
 <div class="part"><div class="pn">Appendix</div><div class="pt">Reference</div></div>
 
 <h2><span class="num">A</span>Symbols</h2>
@@ -2235,25 +2244,25 @@ verified and its feasibility costed. Nothing in it has been trained on dunnhumby
 <div class="scroll"><table>
 <thead><tr><th>symbol</th><th>shape</th><th>enters</th><th>meaning</th></tr></thead>
 <tbody>
-<tr><td class="sym">S, x, n<sub>c</sub>, n</td><td class="shape">—</td><td>Eq. 5</td><td>purchased set, its indicator vector, its category counts, its size</td></tr>
-<tr><td class="sym">g, π<sub>g</sub>, a<sub>g</sub>, ϑ<sub>g</sub></td><td class="shape">G, G, G, G×K</td><td>Eq. 7</td><td>trip type, its probability, its level shift, its attribute tilt</td></tr>
-<tr><td class="sym">λ<sub>j</sub></td><td class="shape">J</td><td>Eq. 7</td><td>product intercept</td></tr>
-<tr><td class="sym">θ<sub>i</sub>, α<sub>j</sub></td><td class="shape">N×K, J×K</td><td>Eq. 7</td><td>household taste, product attributes — taste only, no longer carrying co-purchase</td></tr>
-<tr><td class="sym">φ<sub>j</sub></td><td class="shape">J×K<sub>z</sub></td><td>Eqs. 8, 11</td><td>co-purchase loading; the Gaussian latent's loading</td></tr>
-<tr><td class="sym">ρ<sub>c</sub></td><td class="shape">C</td><td>Eq. 8</td><td>within-category pairwise term; positive is substitution</td></tr>
-<tr><td class="sym">ρ<sub>0</sub>(n)</td><td class="shape">n<sub>max</sub></td><td>Eq. 8</td><td>free basket-size potential; <span class="v">ρ<sub>0</sub>(0) = 0</span></td></tr>
-<tr><td class="sym">z</td><td class="shape">K<sub>z</sub></td><td>Eq. 12</td><td>auxiliary Gaussian; not a parameter, integrated out</td></tr>
-<tr><td class="sym">γ<sub>i</sub>, β<sub>j</sub></td><td class="shape">N×K<sub>p</sub>, J×K<sub>p</sub></td><td>Eq. 7</td><td>shelf-price sensitivity — tier 3, associational only</td></tr>
-<tr><td class="sym">γ<sup>d</sup><sub>i</sub>, β<sup>d</sup><sub>j</sub></td><td class="shape">N×K<sub>p</sub>, J×K<sub>p</sub></td><td>Eq. 7</td><td>utility shift from holding a coupon — tier 2, interventional</td></tr>
-<tr><td class="sym">d<sub>ijt</sub></td><td class="shape">sparse binary</td><td>Eqs. 6, 7</td><td>coupon eligibility indicator, data. <strong>Not</strong> a depth — no face value exists in the release (§6)</td></tr>
-<tr><td class="sym">δ̄</td><td class="shape">scalar</td><td>§23</td><td>assumed coupon depth in log points; a nuisance constant the data does not supply</td></tr>
-<tr><td class="sym">h<sub>it</sub>, ω<sub>ijt</sub>, f<sub>ijt</sub></td><td class="shape">—</td><td>Eq. 3</td><td>state: purchase share and log count — recursions on observed purchases, not frozen lookups</td></tr>
-<tr><td class="sym">x<sup>sup</sup><sub>ict</sub>, Q<sub>ic</sub>, g<sub>c</sub></td><td class="shape">C, C, C</td><td>Eq. 4</td><td>days-of-supply proxy; units on the last occasion; median repurchase gap. All observed or defined — <strong>there is no inventory variable</strong></td></tr>
+<tr><td class="sym">S, x, n<sub>c</sub>, n</td><td class="shape">—</td><td>Eq. 1</td><td>purchased set, its indicator vector, its category counts, its size</td></tr>
+<tr><td class="sym">g, π<sub>g</sub>, a<sub>g</sub>, ϑ<sub>g</sub></td><td class="shape">G, G, G, G×K</td><td>Eq. 3</td><td>trip type, its probability, its level shift, its attribute tilt</td></tr>
+<tr><td class="sym">λ<sub>j</sub></td><td class="shape">J</td><td>Eq. 3</td><td>product intercept</td></tr>
+<tr><td class="sym">θ<sub>i</sub>, α<sub>j</sub></td><td class="shape">N×K, J×K</td><td>Eq. 3</td><td>household taste, product attributes — taste only, no longer carrying co-purchase</td></tr>
+<tr><td class="sym">φ<sub>j</sub></td><td class="shape">J×K<sub>z</sub></td><td>Eqs. 4, 7</td><td>co-purchase loading; the Gaussian latent's loading</td></tr>
+<tr><td class="sym">ρ<sub>c</sub></td><td class="shape">C</td><td>Eq. 4</td><td>within-category pairwise term; positive is substitution</td></tr>
+<tr><td class="sym">ρ<sub>0</sub>(n)</td><td class="shape">n<sub>max</sub></td><td>Eq. 4</td><td>free basket-size potential; <span class="v">ρ<sub>0</sub>(0) = 0</span></td></tr>
+<tr><td class="sym">z</td><td class="shape">K<sub>z</sub></td><td>Eq. 8</td><td>auxiliary Gaussian; not a parameter, integrated out</td></tr>
+<tr><td class="sym">γ<sub>i</sub>, β<sub>j</sub></td><td class="shape">N×K<sub>p</sub>, J×K<sub>p</sub></td><td>Eq. 3</td><td>shelf-price sensitivity — tier 3, associational only</td></tr>
+<tr><td class="sym">γ<sup>d</sup><sub>i</sub>, β<sup>d</sup><sub>j</sub></td><td class="shape">N×K<sub>p</sub>, J×K<sub>p</sub></td><td>Eq. 3</td><td>utility shift from holding a coupon — tier 2, interventional</td></tr>
+<tr><td class="sym">d<sub>ijt</sub></td><td class="shape">sparse binary</td><td>Eqs. 2, 3</td><td>coupon eligibility indicator, data. <strong>Not</strong> a depth — no face value exists in the release (§3)</td></tr>
+<tr><td class="sym">δ̄</td><td class="shape">scalar</td><td>§22</td><td>assumed coupon depth in log points; a nuisance constant the data does not supply</td></tr>
+<tr><td class="sym">h<sub>it</sub>, ω<sub>ijt</sub>, f<sub>ijt</sub></td><td class="shape">—</td><td>Eq. 21</td><td>state: purchase share and log count — recursions on observed purchases, not frozen lookups</td></tr>
+<tr><td class="sym">x<sup>sup</sup><sub>ict</sub>, Q<sub>ic</sub>, g<sub>c</sub></td><td class="shape">C, C, C</td><td>Eq. 22</td><td>days-of-supply proxy; units on the last occasion; median repurchase gap. All observed or defined — <strong>there is no inventory variable</strong></td></tr>
 
-<tr><td class="sym">Λ(z), λ<sub>max</sub></td><td class="shape">K<sub>z</sub>×K<sub>z</sub></td><td>Eq. 23</td><td>stability matrix and its top eigenvalue</td></tr>
-<tr><td class="sym">Λ<sub>0</sub>, u</td><td class="shape">1, K<sub>z</sub></td><td>Eq. 25</td><td>conditional size variance, and its gradient in <span class="v">z</span></td></tr>
-<tr><td class="sym">A<sub>n</sub>(z), G<sub>c</sub>(u;z), e<sub>r</sub></td><td class="shape">—</td><td>Eqs. 11, 12</td><td>size coefficients, category generating polynomial, elementary symmetric polynomial</td></tr>
-<tr><td class="sym">τ<sub>·</sub>, Ω<sub>ist</sub></td><td class="shape">—</td><td>Eqs. 33, 34</td><td>trip hazard coefficients; promotional exposure</td></tr>
+<tr><td class="sym">Λ(z), λ<sub>max</sub></td><td class="shape">K<sub>z</sub>×K<sub>z</sub></td><td>Eq. 26</td><td>stability matrix and its top eigenvalue</td></tr>
+<tr><td class="sym">Λ<sub>0</sub>, u</td><td class="shape">1, K<sub>z</sub></td><td>Eq. 28</td><td>conditional size variance, and its gradient in <span class="v">z</span></td></tr>
+<tr><td class="sym">A<sub>n</sub>(z), G<sub>c</sub>(u;z), e<sub>r</sub></td><td class="shape">—</td><td>Eqs. 7, 8</td><td>size coefficients, category generating polynomial, elementary symmetric polynomial</td></tr>
+<tr><td class="sym">τ<sub>·</sub>, Ω<sub>ist</sub></td><td class="shape">—</td><td>Eqs. 19, 20</td><td>trip hazard coefficients; promotional exposure</td></tr>
 </tbody></table></div>
 
 <p><strong>Symbols are not unique, and pretending otherwise would be worse than listing the
@@ -2261,44 +2270,44 @@ collisions.</strong> A single document covering an exponential family, a causal 
 decision process cannot avoid overloading the alphabet; what it can do is enumerate the
 overloads. Disambiguated by position:</p>
 <ul>
-  <li><span class="v">d</span> — coupon eligibility indicator (Eqs. 6, 7, 32) and the
-  price-direction vector <span class="v">d<sub>j</sub></span> of Proposition 1 (Eqs. 21, 22).
+  <li><span class="v">d</span> — coupon eligibility indicator (Eqs. 2, 3, 37) and the
+  price-direction vector <span class="v">d<sub>j</sub></span> of Proposition 1 (Eqs. 24, 25).
   Both indexed by product.</li>
   <li><span class="v">Λ</span> — the stability matrix <span class="v">Λ(z)</span> and
-  <span class="v">Λ<sub>0</sub></span> (Eqs. 23, 25, 26) and the units rate
-  <span class="v">Λ<sup>qty</sup></span> (Eqs. 19, 31).</li>
+  <span class="v">Λ<sub>0</sub></span> (Eqs. 26, 28, 30) and the units rate
+  <span class="v">Λ<sup>qty</sup></span> (Eqs. 18, 36).</li>
   <li><span class="v">G</span> — the number of trip types and the generating polynomial
-  <span class="v">G<sub>c</sub>(u;z)</span> (Eq. 11). Both appear in §19's cost formula.</li>
+  <span class="v">G<sub>c</sub>(u;z)</span> (Eq. 7). Both appear in §18's cost formula.</li>
   <li><span class="v">π</span> — the mixture weight <span class="v">π<sub>g</sub></span>
-  (Eq. 27) and the inclusion probability <span class="v">π<sub>j</sub></span> (Eqs. 18, 23).</li>
-  <li><span class="v">r</span> — a within-category count (Eqs. 11, 18), a consumption rate
-  (Eq. 4), and the negative-binomial dispersion (Eq. 19).</li>
-  <li><span class="v">δ</span> — the uniform shift (Eq. 21), the week vector
-  <span class="v">δ<sub>w</sub></span> (Eq. 7), markdown log points (§23), and the assumed
-  coupon depth <span class="v">δ̄</span> (§23).</li>
+  (Eq. 32) and the inclusion probability <span class="v">π<sub>j</sub></span> (Eqs. 14, 26).</li>
+  <li><span class="v">r</span> — a within-category count (Eqs. 7, 14), a consumption rate
+  (Eq. 22), and the negative-binomial dispersion (Eq. 18).</li>
+  <li><span class="v">δ</span> — the uniform shift (Eq. 24), the week vector
+  <span class="v">δ<sub>w</sub></span> (Eq. 3), markdown log points (§22), and the assumed
+  coupon depth <span class="v">δ̄</span> (§22).</li>
   <li><span class="v">e</span> — the elementary symmetric polynomial
   <span class="v">e<sub>r</sub></span> and the unit vector in Proposition 3b's proof, which
   sit two lines apart.</li>
-  <li><span class="v">a</span> — <span class="v">a<sub>g</sub></span> (Eq. 7),
-  <span class="v">a<sub>j</sub></span> (Eq. 19), and the common loading in §14.2.</li>
+  <li><span class="v">a</span> — <span class="v">a<sub>g</sub></span> (Eq. 3),
+  <span class="v">a<sub>j</sub></span> (Eq. 18), and the common loading in §14.2.</li>
   <li><span class="v">s</span> — store index, the consumption scale
   <span class="v">s<sub>i</sub></span>, and the MDP state <span class="v">s<sub>t</sub></span>.</li>
   <li><span class="v">C</span> — the number of categories and the binomial coefficient
-  <span class="v">C(n<sub>c</sub>,2)</span> inside Eqs. 15 and 16.</li>
+  <span class="v">C(n<sub>c</sub>,2)</span> inside Eqs. 11 and 12.</li>
   <li><span class="v">μ</span>, <span class="v">F</span>, <span class="v">w</span> — the
   seasonality loading and the Gaussian measure of Proposition 2; the log integrand of §14.1
-  and the retailer's decision function of Eq. 30; week-of-year, the weight
+  and the retailer's decision function of Eq. 35; week-of-year, the weight
   <span class="v">w<sub>j</sub>(z)</span>, and the loadings
   <span class="v">w<sup>loy</sup><sub>j</sub></span> and the rest.</li>
 </ul>
 <p>Others, previously noted:
 <span class="v">n</span> is basket size and never a count of anything else;
-<span class="v">r</span> is a within-category count in Eqs. 11 and 18 and a consumption rate
-in Eq. 4; <span class="v">λ<sub>j</sub></span> is a product intercept while
+<span class="v">r</span> is a within-category count in Eqs. 7 and 14 and a consumption rate
+in Eq. 22; <span class="v">λ<sub>j</sub></span> is a product intercept while
 <span class="v">λ<sub>max</sub></span> is an eigenvalue; <span class="v">u</span> is the
-polynomial variable in Eq. 11 and the size-gradient vector in Eq. 25.
+polynomial variable in Eq. 7 and the size-gradient vector in Eq. 28.
 <span class="v">κ</span> does not appear as a model parameter at all — version 2's nesting
-coefficient has no counterpart here, and <span class="v">κ<sub>conf</sub></span> in §24 is a
+coefficient has no counterpart here, and <span class="v">κ<sub>conf</sub></span> in §23 is a
 sensitivity parameter, not a fitted one.</p>
 
 <h2><span class="num">B</span>Verification</h2>
@@ -2310,23 +2319,23 @@ enumeration of the full subset space. The scripts are in
 <div class="scroll"><table>
 <thead><tr><th>claim</th><th>where</th><th>script</th><th class="num">residual</th></tr></thead>
 <tbody>
-<tr><td>Theorem 1, no size term</td><td>§9</td><td><code>verify_normaliser.py</code></td><td class="num">3.9 × 10<sup>−15</sup></td></tr>
-<tr><td>Theorem 1, with free-form <span class="v">ρ<sub>0</sub></span></td><td>§9</td><td><code>verify_size_term.py</code></td><td class="num">2.0 × 10<sup>−15</sup></td></tr>
+<tr><td>Theorem 1, no size term</td><td>§6</td><td><code>verify_normaliser.py</code></td><td class="num">3.9 × 10<sup>−15</sup></td></tr>
+<tr><td>Theorem 1, with free-form <span class="v">ρ<sub>0</sub></span></td><td>§6</td><td><code>verify_size_term.py</code></td><td class="num">2.0 × 10<sup>−15</sup></td></tr>
 <tr><td><span class="v">P(∅) = 1/Z</span></td><td>Cor. 1</td><td><code>verify_normaliser.py</code></td><td class="num">3.8 × 10<sup>−15</sup></td></tr>
-<tr><td>Inclusion probabilities, Eq. 18, no size term</td><td>Cor. 2</td><td><code>verify_normaliser.py</code></td><td class="num">3.9 × 10<sup>−15</sup></td></tr>
-<tr><td>Inclusion probabilities under the coupled law, Eq. 18a</td><td>Cor. 2</td><td><code>verify_size_term.py</code></td><td class="num">3.7 × 10<sup>−15</sup></td></tr>
+<tr><td>Inclusion probabilities, Eq. 14, no size term</td><td>Cor. 2</td><td><code>verify_normaliser.py</code></td><td class="num">3.9 × 10<sup>−15</sup></td></tr>
+<tr><td>Inclusion probabilities under the coupled law, Eq. 15</td><td>Cor. 2</td><td><code>verify_size_term.py</code></td><td class="num">3.7 × 10<sup>−15</sup></td></tr>
 <tr><td><span class="v">P(j∈S|z) = ∂log f/∂log w<sub>j</sub></span>, finite differences</td><td>Cor. 2</td><td><code>verify_size_term.py</code></td><td class="num">7.3 × 10<sup>−11</sup></td></tr>
-<tr><td>Within-category count law</td><td>Eq. 18</td><td><code>verify_normaliser.py</code></td><td class="num">1.3 × 10<sup>−15</sup></td></tr>
-<tr><td>Basket-size law</td><td>§14.4</td><td><code>verify_size_term.py</code></td><td class="num">3.9 × 10<sup>−16</sup></td></tr>
+<tr><td>Within-category count law</td><td>Eq. 14</td><td><code>verify_normaliser.py</code></td><td class="num">1.3 × 10<sup>−15</sup></td></tr>
+<tr><td>Basket-size law</td><td>§14.5</td><td><code>verify_size_term.py</code></td><td class="num">3.9 × 10<sup>−16</sup></td></tr>
 <tr><td>Exact sampler, 9 configurations</td><td>Cor. 3</td><td>both</td><td class="num">TV at the noise floor</td></tr>
 <tr><td><span class="v">d𝔼[n]/dδ = Var(n)</span></td><td>Prop. 1</td><td><code>verify_response.py</code></td><td class="num">1.5 × 10<sup>−10</sup></td></tr>
 <tr><td>Stability, bifurcation, ESS collapse</td><td>Prop. 3, §14.2</td><td><code>verify_response.py</code></td><td class="num">table in §14.2</td></tr>
 <tr><td>Dispersion bound <span class="v">Var(n) ≤ Λ<sub>0</sub>/(1−λ<sub>max</sub>)</span></td><td>Prop. 3b</td><td><code>verify_dispersion_bound.py</code></td><td class="num">0 of 12 violated</td></tr>
-<tr><td>Mixture sizing</td><td>§14.3</td><td><code>size_decomposition.py</code></td><td class="num">table in §14.3</td></tr>
-<tr><td>Aligned worst case <strong>with <span class="v">ρ<sub>0</sub></span> active</strong></td><td>§14.5</td><td><code>verify_aligned_worstcase.py</code></td><td class="num">table in §14.5</td></tr>
-<tr><td>Proposition 5, the entry-response identity</td><td>§16</td><td>inline, five configurations</td><td class="num">4 × 10<sup>−11</sup></td></tr>
-<tr><td>Test 8, forward-buying in the real data</td><td>§5.1</td><td><code>test8_forward_buying.py</code></td><td class="num">β = +0.0097, t = +8.2</td></tr>
-<tr><td>Mode, <span class="v">λ<sub>max</sub></span> and ESS <strong>with <span class="v">ρ<sub>0</sub></span> active</strong></td><td>Prop. 3, §18</td><td><code>verify_estimator.py</code></td><td class="num">log Z within 0.005 nats, ESS ≥ 0.955</td></tr>
+<tr><td>Mixture sizing</td><td>§14.4</td><td><code>size_decomposition.py</code></td><td class="num">table in §14.4</td></tr>
+<tr><td>Aligned worst case <strong>with <span class="v">ρ<sub>0</sub></span> active</strong></td><td>§14.6</td><td><code>verify_aligned_worstcase.py</code></td><td class="num">table in §14.6</td></tr>
+<tr><td>Proposition 5, the entry-response identity</td><td>§7.2</td><td>inline, five configurations</td><td class="num">4 × 10<sup>−11</sup></td></tr>
+<tr><td>Test 8, forward-buying in the real data</td><td>§10</td><td><code>test8_forward_buying.py</code></td><td class="num">β = +0.0097, t = +8.2</td></tr>
+<tr><td>Mode, <span class="v">λ<sub>max</sub></span> and ESS <strong>with <span class="v">ρ<sub>0</sub></span> active</strong></td><td>Prop. 3, §17</td><td><code>verify_estimator.py</code></td><td class="num">log Z within 0.005 nats, ESS ≥ 0.955</td></tr>
 <tr><td>The SIR step of Corollary 3, actually run</td><td>Cor. 3</td><td><code>verify_estimator.py</code></td><td class="num">TV at the noise floor, 12 of 12</td></tr>
 </tbody></table></div>
 
@@ -2340,12 +2349,12 @@ characterisation and the second a worst-case inequality — and are proved in pl
   are algebraically right and that the code implements them. They say nothing about 3,041
   products at <span class="v">K<sub>z</sub></span> = 16, where the integrand's shape, the
   effective sample size and the location of <span class="v">λ<sub>max</sub></span> are all
-  open — which is why §32's tests 2 and 3 exist.</li>
+  open — which is why §30's tests 2 and 3 exist.</li>
   <li><strong>The bifurcation table of §14.2 is at <span class="v">ρ<sub>0</sub> ≡ 0</span>
-  deliberately</strong> — §14.5 now re-runs the same aligned worst case with the size
+  deliberately</strong> — §14.6 now re-runs the same aligned worst case with the size
   potential on, so this is no longer a gap, and the answer there is "delays but does not
   abolish"<span style="display:none">.</span> — it exists to characterise the purely-Gaussian-latent
-  model that §14.4 rejects. <code>verify_estimator.py</code> now recomputes the mode,
+  model that §14.5 rejects. <code>verify_estimator.py</code> now recomputes the mode,
   <span class="v">λ<sub>max</sub></span> and ESS <em>with</em>
   <span class="v">ρ<sub>0</sub></span> active: over four loading scales and two size
   potentials, log Z lands within 0.005 nats of the enumerated truth and ESS stays above 0.955.
@@ -2366,6 +2375,23 @@ characterisation and the second a worst-case inequality — and are proved in pl
 are now closed and the third — the aligned worst case with
 <span class="v">ρ<sub>0</sub></span> on — is named rather than left implicit.</p>
 
+<h2><span class="num">C</span>References</h2>
+
+<ul>
+  <li>Ruiz, Athey and Blei (2020), <em>SHOPPER: A probabilistic model of consumer choice with
+  substitutes and complements</em>, Annals of Applied Statistics. Source of the interaction
+  form, the <span class="v">1/(i−1)</span> divisor, and the sequential semantics that version
+  2 dropped.</li>
+  <li>Donnelly, Ruiz, Blei and Athey (2023), <em>Counterfactual inference for consumer choice
+  across many product categories</em>. Source of the per-category additive structure.</li>
+  <li>Besag (1974), on pseudo-likelihood and on Brook's telescoping argument — used by version
+  2, not needed here.</li>
+  <li>Geyer (1991, 1994), Monte Carlo maximum likelihood, which is what §17 is.</li>
+  <li>Kearns and Singh (2002); Ross and Bagnell (2012), for the simulation lemma of
+  Proposition 4.</li>
+</ul>
+
+</div>
 <h2><span class="num">D</span>Relation to prior work, and to version 2</h2>
 
 <p>This appendix is where the comparative material lives. Nothing in Parts I to VI depends on
@@ -2455,12 +2481,12 @@ strictly <em>inside</em> a composition drawn without it.</p>
 that the joint it defines has a marginal over compositions,</p>
 <div class="eq"><div class="body">
 P<sub>v2</sub>(𝒦) = ∏<sub>c</sub> P(y<sub>c</sub>) · ∏<sub>c : y<sub>c</sub>=1</sub> P(k<sub>c</sub>|y<sub>c</sub>=1)
-</div><div class="tag">(1)</div></div>
+</div><div class="tag">(40)</div></div>
 <p>which is unrelated to the composition marginal that the energy
 <span class="v">E</span> itself implies,</p>
 <div class="eq"><div class="body">
 P<sub>E</sub>(𝒦) ∝ ∑<sub>S ∈ 𝒮(𝒦)</sub> exp E(S) .
-</div><div class="tag">(2)</div></div>
+</div><div class="tag">(41)</div></div>
 <p>The parameters <span class="v">α</span> are estimated as though they described
 complementarity, but they are estimated only from Eq. v2′, which is conditional on
 <span class="v">𝒦</span>. <strong>An interaction that cannot change what composition you buy
@@ -2515,8 +2541,8 @@ it is the binding constraint on the whole design.</p>
 <div class="scroll"><table>
 <thead><tr><th>symptom</th><th>version 2's record</th><th>cause</th></tr></thead>
 <tbody>
-<tr><td>Category level of <span class="v">b</span> is unidentified</td><td>§17, invariance 4: adding a constant to every <span class="v">b<sub>ijt</sub></span> in a category leaves the item objective unchanged, so the level is pinned only through the noisy, Jensen-biased inclusive-value estimator</td><td>the item conditional normalises <em>within</em> a category, because the composition is already fixed. Nothing compares a category against not buying from it.</td></tr>
-<tr><td><span class="v">κ</span> is not identified by what the theory says identifies it</td><td>§17: a fourfold reduction in inclusive-value noise moves <span class="v">κ̂</span> by −0.045 when attenuation theory predicts +0.28; seed spread 0.0011 against nuisance sensitivity 0.045</td><td><span class="v">κ</span> exists only to reconnect the composition stage to the item values. It is a repair for the separation, and it inherits the separation's identification problem.</td></tr>
+<tr><td>Category level of <span class="v">b</span> is unidentified</td><td>§16, invariance 4: adding a constant to every <span class="v">b<sub>ijt</sub></span> in a category leaves the item objective unchanged, so the level is pinned only through the noisy, Jensen-biased inclusive-value estimator</td><td>the item conditional normalises <em>within</em> a category, because the composition is already fixed. Nothing compares a category against not buying from it.</td></tr>
+<tr><td><span class="v">κ</span> is not identified by what the theory says identifies it</td><td>§16: a fourfold reduction in inclusive-value noise moves <span class="v">κ̂</span> by −0.045 when attenuation theory predicts +0.28; seed spread 0.0011 against nuisance sensitivity 0.045</td><td><span class="v">κ</span> exists only to reconnect the composition stage to the item values. It is a repair for the separation, and it inherits the separation's identification problem.</td></tr>
 <tr><td>The estimator is not a likelihood</td><td>§11: components are means not sums, weighting incidence 24.5× low; §13: no consistency argument survives the reweighting or the incidental parameters</td><td>four factors with shared parameters and no computable joint normaliser leave nothing to maximise but a weighted composite.</td></tr>
 <tr><td>Generation needs a Markov chain with no diagnostic</td><td>§14: <span class="v">T = 4</span> Gibbs sweeps, "no autocorrelation or coupling check has been run"</td><td>the normaliser of Eq. v2′ is a sum over up to 10<sup>124</sup> sets, so only ratios are available and sampling must be iterative.</td></tr>
 </tbody></table></div>
@@ -2531,7 +2557,7 @@ constraint. The factorisation was.</strong></p>
 
 <h3><span class="num">D.5</span>Special cases: the models this one contains</h3>
 
-<p>Eq. 8 contains its predecessors as restrictions, which is the cleanest evidence that it
+<p>Eq. 4 contains its predecessors as restrictions, which is the cleanest evidence that it
 is a generalisation and not a different guess.</p>
 
 <div class="scroll"><table>
@@ -2554,15 +2580,15 @@ where it occurs.</p>
 <div class="scroll"><table>
 <thead><tr><th>what was wrong</th><th>severity</th><th>where it is discussed</th></tr></thead>
 <tbody>
-<tr><td>Proposition 3b defined <span class="v">Λ<sub>0</sub> = ∑π(1−π)</span>, which is <span class="v">Var(n|z)</span> only under conditional independence — false whenever <span class="v">ρ<sub>c</sub></span> or <span class="v">ρ<sub>0</sub></span> is active. The bound was violated twelve-fold by an explicit counterexample, and it contradicted §14.4.</td><td>fatal</td><td>§14.2</td></tr>
-<tr><td>A state variable for inventory, which dunnhumby does not record: an unidentified rate and initial condition, reconstructed and then conditioned on as though observed. Removed; Axiom O added to forbid the category of error.</td><td>fatal</td><td>§5.1, §5.2</td></tr>
+<tr><td>Proposition 3b defined <span class="v">Λ<sub>0</sub> = ∑π(1−π)</span>, which is <span class="v">Var(n|z)</span> only under conditional independence — false whenever <span class="v">ρ<sub>c</sub></span> or <span class="v">ρ<sub>0</sub></span> is active. The bound was violated twelve-fold by an explicit counterexample, and it contradicted §14.5.</td><td>fatal</td><td>§14.2</td></tr>
+<tr><td>A state variable for inventory, which dunnhumby does not record: an unidentified rate and initial condition, reconstructed and then conditioned on as though observed. Removed; Axiom O added to forbid the category of error.</td><td>fatal</td><td>§10, §10.1</td></tr>
 <tr><td>The sign of the Laplace variance error was stated backwards — it understates at every sub-critical <span class="v">λ</span>, so the required <span class="v">λ</span> is lower, not higher.</td><td>major</td><td>§14.2</td></tr>
-<tr><td>Corollary 3 was called exact sampling; its first step is importance resampling, which is exact only in the limit, and the verification had never exercised it.</td><td>major</td><td>§9.1, App. B</td></tr>
-<tr><td>Coupon depth was treated as data. <code>coupon.csv</code> carries no face value; only redeemed lines carry a discount.</td><td>major</td><td>§6, §23</td></tr>
+<tr><td>Corollary 3 was called exact sampling; its first step is importance resampling, which is exact only in the limit, and the verification had never exercised it.</td><td>major</td><td>§6.1, App. B</td></tr>
+<tr><td>Coupon depth was treated as data. <code>coupon.csv</code> carries no face value; only redeemed lines carry a discount.</td><td>major</td><td>§3, §22</td></tr>
 <tr><td>Proposition 1 was stated for a uniform value shift and applied to price changes, whose loadings vary by product.</td><td>major</td><td>§12</td></tr>
-<tr><td>The cost model omitted the trip-type multiplier, the mode-finder and the covariance assembly, and mixed two conventions in one table.</td><td>major</td><td>§19</td></tr>
+<tr><td>The cost model omitted the trip-type multiplier, the mode-finder and the covariance assembly, and mixed two conventions in one table.</td><td>major</td><td>§18</td></tr>
 <tr><td>A conditional variance was compared with a marginal dispersion, overstating version 2's shortfall as tenfold when it is about fourfold.</td><td>moderate</td><td>§12</td></tr>
-<tr><td>Poisson-mixture figures were attributed to a script that fits only negative binomials; the 5.10-versus-4.35 comparison is not nested.</td><td>moderate</td><td>§14.3</td></tr>
+<tr><td>Poisson-mixture figures were attributed to a script that fits only negative binomials; the 5.10-versus-4.35 comparison is not nested.</td><td>moderate</td><td>§14.4</td></tr>
 <tr><td>Appendix A claimed each symbol denoted exactly one object. Eleven collisions are now listed.</td><td>minor</td><td>App. A</td></tr>
 <tr><td>Smaller numeric and cross-reference errors: a fivefold improvement called twentyfold, a mean reported as a maximum, a censoring bias signed the wrong way, a doubled <span class="v">1/D</span>, five references pointing at the wrong section.</td><td>minor</td><td>throughout</td></tr>
 </tbody></table></div>
@@ -2570,20 +2596,3 @@ where it occurs.</p>
 <p>Two of the three verification gaps this appendix once listed are now closed (App. B). The
 list above is not expected to be final.</p>
 
-<h2><span class="num">C</span>References</h2>
-
-<ul>
-  <li>Ruiz, Athey and Blei (2020), <em>SHOPPER: A probabilistic model of consumer choice with
-  substitutes and complements</em>, Annals of Applied Statistics. Source of the interaction
-  form, the <span class="v">1/(i−1)</span> divisor, and the sequential semantics that version
-  2 dropped.</li>
-  <li>Donnelly, Ruiz, Blei and Athey (2023), <em>Counterfactual inference for consumer choice
-  across many product categories</em>. Source of the per-category additive structure.</li>
-  <li>Besag (1974), on pseudo-likelihood and on Brook's telescoping argument — used by version
-  2, not needed here.</li>
-  <li>Geyer (1991, 1994), Monte Carlo maximum likelihood, which is what §18 is.</li>
-  <li>Kearns and Singh (2002); Ross and Bagnell (2012), for the simulation lemma of
-  Proposition 4.</li>
-</ul>
-
-</div>
