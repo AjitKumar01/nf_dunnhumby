@@ -87,6 +87,48 @@ def esp_newton(w, row_of, n_rows, R, row_size=None):
     return out
 
 
+def esp_bucketed(w, row_of, n_rows, R, row_size, item_pos, buckets=(8, 32, 96, 256)):
+    """e_0..e_R per row by the STABLE O(N R) recursion, without padding everything.
+
+    Newton's identities build e_r from power sums as an alternating sum; at order 12 or 23
+    the terms reach 1e30 and cancel catastrophically -- measured log Z errors of 1e62 and
+    1e264 against the dense kernel, while the e_2 cancellation diagnostic still read a
+    healthy 0.6.  The recursion e_r <- e_r + w_i e_{r-1} has no subtraction at all and is
+    unconditionally stable at any R, but it needs a per-row loop over items.
+
+    So rows are BUCKETED by size and padded only to their bucket's maximum.  A padded slot
+    carries weight 0, which is invisible to the recursion, so no masking is needed.  With a
+    median row of 18 products and a maximum of 225, bucketing to (8, 32, 96, 256) wastes
+    about 2x rather than the 25x that padding everything to 225 would cost.
+    """
+    lead = w.shape[:-1]
+    out = torch.zeros(lead + (n_rows, R + 1), dtype=w.dtype, device=w.device)
+    out[..., 0] = 1.0
+    lo = 0
+    for hi in buckets:
+        sel_r = (row_size > lo) & (row_size <= hi)
+        lo = hi
+        if not bool(sel_r.any()):
+            continue
+        ridx = torch.nonzero(sel_r, as_tuple=True)[0]
+        loc = torch.full((n_rows,), -1, dtype=torch.long, device=w.device)
+        loc[ridx] = torch.arange(len(ridx), device=w.device)
+        sel_i = sel_r[row_of]
+        wi = w[..., sel_i]                                          # [..., T_b]
+        flat = loc[row_of[sel_i]] * hi + item_pos[sel_i]            # [T_b]
+        P = torch.zeros(lead + (len(ridx) * hi,), dtype=w.dtype, device=w.device)
+        P = P.index_copy(-1, flat, wi).view(lead + (len(ridx), hi))
+        e = [torch.ones(lead + (len(ridx),), dtype=w.dtype, device=w.device)]
+        e += [torch.zeros(lead + (len(ridx),), dtype=w.dtype, device=w.device)
+              for _ in range(R)]
+        for i in range(hi):
+            x = P[..., i]
+            for r in range(min(R, i + 1), 0, -1):
+                e[r] = e[r] + x * e[r - 1]
+        out = out.index_copy(-2, ridx, torch.stack(e, dim=-1))
+    return out
+
+
 def cancellation(w, row_of, n_rows):
     """(p1^2 - p2)/p1^2 per row: how much of the leading term survives the subtraction."""
     p1 = seg_sum(w, row_of, n_rows)
@@ -132,6 +174,11 @@ class RaggedIndex:
                       - run[self.row_trip[order]])
         self.row_pos = pos
         self.row_size = torch.bincount(self.row_of, minlength=self.n_rows)
+        # position of each item inside its row, for the bucketed scatter
+        starts = torch.cat([torch.zeros(1, dtype=torch.long, device=device),
+                            torch.cumsum(self.row_size, 0)[:-1]])
+        self.item_pos = (torch.arange(len(self.row_of), device=device)
+                         - starts[self.row_of])
         self.item_trip = self.row_trip[self.row_of]
         self.flat_slot = self.row_trip * self.Cpad + self.row_pos
 
@@ -153,7 +200,7 @@ def log_f_ragged(model, z, ix, drop_empty=False):
     # ONE scale per (trip, draw): a per-row scale would not survive the convolution
     M = seg_max(logw, ix.item_trip, ix.B)                          # [D, B]
     w = torch.exp(logw - M.index_select(-1, ix.item_trip))         # [D, T]
-    e = esp_newton(w, ix.row_of, ix.n_rows, model.R, ix.row_size)  # [D, n_rows, R+1]
+    e = esp_bucketed(w, ix.row_of, ix.n_rows, model.R, ix.row_size, ix.item_pos)
     r = torch.arange(model.R + 1, dtype=w.dtype, device=w.device)
     a = torch.exp(-model.rho_c[ix.row_cat].unsqueeze(-1) * r * (r - 1) / 2.0)
     G = a.unsqueeze(0) * e                                          # [D, n_rows, R+1]
