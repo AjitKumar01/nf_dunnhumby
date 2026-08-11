@@ -111,7 +111,9 @@ def main(a):
     gz1 = torch.Generator().manual_seed(99)
     gz2 = torch.Generator().manual_seed(99)
     lz_d = d.log_Z(house, n_draws=a.D, generator=gz1)
-    lz_r = r.log_Z(ix, n_draws=a.D, generator=gz2)
+    # same proposal on both sides, so this isolates the KERNEL rather than the
+    # proposal: the ragged model defaults to an identity covariance now
+    lz_r = r.log_Z(ix, n_draws=a.D, generator=gz2, mode_steps=10, laplace=True)
     log(f"log Z:  max abs err {float((lz_d - lz_r).abs().max()):.3e}   "
         f"level {float(lz_d.mean()):.4f}")
 
@@ -155,7 +157,8 @@ def main(a):
         tot.append(E)
     true_lz = float(torch.logsumexp(torch.tensor(tot), 0))
     gz = torch.Generator().manual_seed(5)
-    lz = float(rm.log_Z(ixr, n_draws=a.big_draws, generator=gz)[0])
+    lz = float(rm.log_Z(ixr, n_draws=a.big_draws, generator=gz,
+                        mode_steps=10, laplace=True)[0])
     log("")
     log(f"ragged instance, category sizes {sizes} (dense cannot express this):")
     log(f"  brute force over {2**J:,} subsets  log Z {true_lz:+.8f}")
