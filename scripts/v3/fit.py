@@ -97,6 +97,29 @@ class Batcher:
                 torch.as_tensor(np.concatenate(lu), dtype=torch.long))
 
 
+def _size_coeffs(m, z, ix):
+    """mean_b log A_n(z) at the given z -- the combinatorial part of the size law, before
+    rho_0 tilts it."""
+    from ragged import esp_bucketed, poly_mul_trunc, seg_max
+    phi_i = m.phi[ix.item]
+    bt = m.b_flat(ix) - 0.5 * (phi_i ** 2).sum(-1)
+    proj = (z[ix.item_trip] * phi_i.unsqueeze(1)).sum(-1)
+    logw = (bt.unsqueeze(1) + proj).transpose(0, 1)
+    M = seg_max(logw, ix.item_trip, ix.B)
+    w = torch.exp(logw - M.index_select(-1, ix.item_trip))
+    e = esp_bucketed(w, ix.row_of, ix.n_rows, m.R, ix.row_size, ix.item_pos)
+    r = torch.arange(m.R + 1, dtype=w.dtype)
+    G = torch.exp(-m.rho_c[ix.row_cat].unsqueeze(-1) * r * (r - 1) / 2.0).unsqueeze(0) * e
+    Gp = torch.zeros(1, ix.B * ix.Cpad, m.R + 1, dtype=w.dtype)
+    Gp[:, :, 0] = 1.0
+    Gp = Gp.index_copy(1, ix.flat_slot, G).view(1, ix.B, ix.Cpad, m.R + 1)
+    A = Gp[:, :, 0, :]
+    for c in range(1, ix.Cpad):
+        A = poly_mul_trunc(A, Gp[:, :, c, :], m.nmax)
+    n_ax = torch.arange(A.shape[-1], dtype=w.dtype)
+    return (torch.log(A.clamp_min(1e-300)) + n_ax * M.unsqueeze(-1))[0].mean(0)
+
+
 def evaluate(m, B, trips, draws, gen, chunk=48, use_units=True):
     """Returns (set per basket, set per line, units per basket, total per basket).
 
@@ -152,6 +175,32 @@ def main(a):
     npar = sum(p.numel() for p in m.parameters())
     log(f"parameters: {npar:,}  (K={a.K}, Kz={a.Kz}, Kp={a.Kp}, nmax={a.nmax}, R={a.R})")
 
+    if a.init_rho0:
+        # Initialise the size potential at the empirical basket-size law.
+        #
+        # P(n | z) is proportional to exp(-rho_0(n)) A_n(z), so setting
+        # rho_0(n) = log A_n(0) - log target(n) makes the size law equal `target` at z = 0.
+        # The BEMB-style multinomial baseline is exactly this model with phi = 0,
+        # rho_c = 0 and rho_0 set that way, and it is HANDED the empirical law -- while
+        # this model was being made to rediscover it from a zero initialisation, through
+        # the normaliser, on a Monte Carlo gradient.  That is a large share of the
+        # optimisation spent recovering something computable in closed form from one pass
+        # over the training data.
+        n_tr = D["trip_nlines"][tr]
+        cnt = np.bincount(np.clip(n_tr, 0, a.nmax), minlength=a.nmax + 1) + 0.5
+        tgt = torch.log(torch.as_tensor(cnt / cnt.sum()))
+        with torch.no_grad():
+            sub = tr[np.random.default_rng(0).choice(len(tr), size=64, replace=False)]
+            ix0, ctx0, lctx0, hh0, *_ = B.make(sub)
+            m.house, m.ctx = hh0, ctx0
+            zz = torch.zeros(ix0.B, 1, m.Kz, dtype=torch.float64)
+            from ragged import log_f_ragged           # noqa: F401  (kept local)
+            lg = _size_coeffs(m, zz, ix0)             # [nmax+1], mean log A_n at z = 0
+            r0 = lg[: a.nmax + 1] - tgt
+            r0 = r0 - r0[0]                            # rho_0(0) = 0 fixes the scale
+            m.rho_0_free.copy_(r0[1:])
+        log(f"rho_0 initialised at the empirical size law "
+            f"(mean {float((cnt/cnt.sum() * np.arange(a.nmax+1)).sum()):.2f} lines)")
     if a.resume:
         m.load_state_dict(torch.load(a.resume))
         log(f"resumed from {a.resume}")
@@ -169,7 +218,7 @@ def main(a):
     log("")
     log(f"timing probe: {a.probe} iterations at batch {a.batch}, {a.draws} draws")
     t0 = time.time()
-    hist, ess_hist, n_skip = [], [], 0
+    hist, ess_hist, emin_hist, n_skip = [], [], [], 0
     m.project(a.phi_max)
     for it in range(1, a.iters + 1):
         sub = tr[rng.choice(len(tr), size=a.batch, replace=False)]
@@ -184,8 +233,13 @@ def main(a):
         # rewards (section 17).  The diverged run had ESS 0.016 on exactly the trips whose
         # energy had run away.  A batch below the floor carries no usable gradient, so it
         # is skipped rather than followed.
-        e_bar = float(ess.mean())
-        if e_bar < a.ess_floor:
+        # Gate on the WORST trip, not the batch mean.  Measured on a trained checkpoint:
+        # per-trip log Z standard deviation over independent seeds ran to 2.28 nats on one
+        # trip against a median of 0.041 -- a 56x spread -- and that trip reported ESS
+        # 0.891, comfortably above any floor.  A batch mean of 0.95 hides it completely,
+        # so a few trips were contributing most of the gradient noise unnoticed.
+        e_bar, e_min = float(ess.mean()), float(ess.min())
+        if e_min < a.ess_floor_min or e_bar < a.ess_floor:
             n_skip += 1
             opt.zero_grad()
         else:
@@ -198,6 +252,7 @@ def main(a):
             sched.step()
         hist.append(float(loss))
         ess_hist.append(e_bar)
+        emin_hist.append(e_min)
         if it == a.probe:
             dt = time.time() - t0
             per = dt / a.probe
@@ -207,7 +262,8 @@ def main(a):
             log(f"  implied wall clock: {per * a.iters / 3600:.2f} h for {a.iters:,} "
                 f"iterations")
             log(f"  loss {np.mean(hist[-20:]):.3f}   ESS {np.mean(ess_hist[-20:]):.3f}"
-                f"   |phi| {float(m.phi.norm(dim=1).mean()):.3f}   skipped {n_skip}")
+                f"   |phi| {float(m.phi.norm(dim=1).mean()):.3f}   skipped {n_skip}"
+                f"   ESS min {np.min(emin_hist):.3f}")
             if a.probe_only:
                 json.dump(dict(sec_per_iter=per, iters=a.iters, n_par=npar,
                                slots=int(ix.item.numel()), ess=float(ess.mean())),
@@ -224,7 +280,8 @@ def main(a):
             ep = it * a.batch / max(len(tr), 1)
             log(f"  it {it:5d} ep {ep:5.3f}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
                 f"set/bskt {vb:8.3f}  units/bskt {vu:7.3f}  total {vt:8.3f}  "
-                f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f}  "
+                f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f} "
+                f"(min {np.min(emin_hist[-a.eval_every:]):.3f})  "
                 f"|phi| {float(m.phi.norm(dim=1).mean()):.3f}  "
                 f"lam_max {lam_max:.3f}  skip {n_skip}  {(time.time()-t0)/60:.1f} min")
             if vb > 0:
@@ -258,12 +315,14 @@ if __name__ == "__main__":
     p.add_argument("--probe", type=int, default=25)
     p.add_argument("--probe-only", action="store_true")
     p.add_argument("--resume", default="")
+    p.add_argument("--init-rho0", type=int, default=1)
     p.add_argument("--cosine", type=int, default=1)
     p.add_argument("--lr-floor", type=float, default=0.02)
     p.add_argument("--units", type=int, default=1)
     p.add_argument("--wd", type=float, default=1e-5)
-    p.add_argument("--phi-max", type=float, default=0.25)   # 0.35 measures lambda_max 0.67
+    p.add_argument("--phi-max", type=float, default=0.20)   # 0.25 collapses ESS   # 0.35 measures lambda_max 0.67
     p.add_argument("--ess-floor", type=float, default=0.30)
+    p.add_argument("--ess-floor-min", type=float, default=0.15)
     p.add_argument("--clip", type=float, default=2.0)
     p.add_argument("--seed", type=int, default=0)
     main(p.parse_args())

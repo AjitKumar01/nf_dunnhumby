@@ -296,7 +296,7 @@ class RaggedModel(torch.nn.Module):
         return self.b_at(ix.item, ix.item_trip, self.ctx)
 
     def log_Z(self, ix, n_draws=32, mode_steps=3, generator=None, return_ess=False,
-              drop_empty=False, laplace=False):
+              drop_empty=False, laplace=False, antithetic=False):
         """log Z by importance sampling from a Gaussian centred at the mode.
 
         The proposal covariance is the IDENTITY by default rather than the Laplace
@@ -342,8 +342,17 @@ class RaggedModel(torch.nn.Module):
                 sd = (1.0 / curv.clamp_min(0.05)).sqrt().clamp(0.05, 5.0)
             else:
                 sd = torch.ones(B, self.Kz, dtype=zh.dtype, device=zh.device)
-            noise = torch.randn(B, n_draws, self.Kz, dtype=zh.dtype, device=zh.device,
-                                generator=generator)
+            if antithetic:
+                # Antithetic pairs: draw D/2 vectors and use both z and -z.  log f is close
+                # to quadratic near the mode, so the odd-order error cancels exactly
+                # between a pair and the estimator's variance falls at no extra cost.  The
+                # proposal is symmetric about the mode, so the pairing is valid.
+                h = torch.randn(B, (n_draws + 1) // 2, self.Kz, dtype=zh.dtype,
+                                device=zh.device, generator=generator)
+                noise = torch.cat([h, -h], dim=1)[:, :n_draws]
+            else:
+                noise = torch.randn(B, n_draws, self.Kz, dtype=zh.dtype, device=zh.device,
+                                    generator=generator)
             zs = zh + noise * sd.unsqueeze(1)
             L2P = float(math.log(2 * math.pi))
             log_q = (-0.5 * (noise ** 2).sum(-1) - sd.log().sum(-1, keepdim=True)
@@ -358,7 +367,7 @@ class RaggedModel(torch.nn.Module):
         with torch.no_grad():
             ww = torch.softmax(lw, dim=1)
             ess = 1.0 / (ww ** 2).sum(1) / n_draws
-        return lz, ess
+        return lz, ess          # PER TRIP -- the caller must not reduce it to a mean
 
     def energy(self, line_item, line_trip, line_cat, B, line_ctx=None):
         """E(S) from the observed lines, using the SAME item values as the normaliser."""
