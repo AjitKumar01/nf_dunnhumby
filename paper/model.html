@@ -105,7 +105,7 @@ Journey — including where the model is beaten.</p>
   <li>Choices with no derivation behind them are marked in amber.</li>
 </ul>
 <p>Every equation states what <code>scripts/v3/</code> computes. Where the code and this
-document have disagreed, the disagreement produced a bug; §21 lists the ones found so far.</p>
+document have disagreed, the disagreement produced a bug; §22 lists the ones found so far.</p>
 
 <div class="part"><div class="pn">Part I</div><div class="pt">The model</div></div>
 
@@ -236,6 +236,7 @@ sparse store deviation over 244,880 cells); <span class="v">D</span> and
 <div class="eq"><div class="body">
 b<sub>ijt</sub> = λ<sub>j</sub>
 + θ<sub>i</sub><sup>⊤</sup>α<sub>j</sub>
++ ψ<sub>j</sub><sup>⊤</sup>x<sup>rec</sup><sub>ijt</sub>
 − ( γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub> ) Δlog p<sub>jst</sub>
 + ( γ<sup>d⊤</sup><sub>i</sub>β<sup>d</sup><sub>j</sub> ) d<sub>ijt</sub>
 + w<sup>dsp</sup><sub>j</sub>D<sub>jsw</sub>
@@ -244,7 +245,18 @@ b<sub>ijt</sub> = λ<sub>j</sub>
 + ζ<sub>j</sub><sup>⊤</sup>ξ<sub>s</sub>
 </div><div class="tag">(2)</div></div>
 
-<p>with <span class="v">w = (WEEK_NO − 1) mod 52</span> the week of year.</p>
+<p>with <span class="v">w = (WEEK_NO − 1) mod 52</span> the week of year and
+<span class="v">x<sup>rec</sup></span> the four recency functions of §9.1 — an indicator for
+no earlier purchase and three decays in the days since the household last bought that
+sub-commodity, one of them scaled by the sub-commodity's own median repurchase gap.</p>
+
+<div class="flag good">
+<p class="label">Measured: what the recency block is worth</p>
+<p>Two fits differing only in this term, matched in every other respect. The recency block
+leads at every one of eight checkpoints and the lead grows: 1.08, 1.44, 1.60, 1.80, 1.59,
+1.77, 1.76 nats per basket. It is the largest single contribution of any covariate block,
+and it had been specified and left unimplemented.</p>
+</div>
 
 <div class="flag">
 <p class="label">One function, and nothing else may compute an item value</p>
@@ -776,7 +788,42 @@ row of 18 products and a maximum of 225 that wastes about 2× rather than the 25
 everything.</p>
 </div>
 
-<h2><span class="num">17</span>Cost, and what consistency does not hold</h2>
+<h2><span class="num">17</span>The optimiser was the binding constraint, not the model</h2>
+
+<p>Every fit reported here before this section used a <strong>constant</strong> learning rate,
+and every one of them appeared to converge at roughly half an epoch. That appearance was
+false. The training loss stops falling at about a third of an epoch and then oscillates,
+while held-out likelihood swings across a 1.4-nat band with no trend:</p>
+
+<div class="scroll"><table>
+<thead><tr><th class="num">iteration</th><th class="num">epoch</th><th class="num">train</th><th class="num">held-out / basket</th></tr></thead>
+<tbody>
+<tr><td class="num">2,200</td><td class="num">0.335</td><td class="num">51.65</td><td class="num">−45.69</td></tr>
+<tr><td class="num">2,600</td><td class="num">0.396</td><td class="num">51.01</td><td class="num">−44.80</td></tr>
+<tr><td class="num">3,000</td><td class="num">0.457</td><td class="num">51.60</td><td class="num">−44.63</td></tr>
+<tr><td class="num">3,400</td><td class="num">0.518</td><td class="num">51.70</td><td class="num">−45.54</td></tr>
+</tbody></table></div>
+
+<p>That is a step size too large for the stage, not a model at capacity. Resuming from the
+0.52-epoch checkpoint with the rate dropped from 0.005 to 0.0006 under cosine decay broke
+the floor within <strong>150 iterations</strong>: training loss 51.70 → 50.61 and held-out
+−45.54 → <strong>−44.11</strong>, a gain of 1.43 nats after 1,200 iterations of no
+progress.</p>
+
+<div class="flag neg">
+<p class="label">What this invalidated</p>
+<p>Three separate "convergences" reported earlier were the optimiser stalling. Worse for the
+comparison: <strong>every baseline was trained the same way</strong>, with the same optimiser
+and the same constant rate, so any margin measured between them was measuring a shared
+defect. Every number in §19 is therefore re-run with cosine decay at matched compute, and
+figures from before that change are not comparable to figures after it.</p>
+<p>This is the second time the same error appeared in a different guise. The first was
+compute: baselines trained for 0.09 epochs against this model's 0.46, which moved SHOPPER by
+2.99 nats and the multinomial by 4.64 once corrected. Both times the fault was holding one
+model to a standard the others were not held to.</p>
+</div>
+
+<h2><span class="num">18</span>Cost, and what consistency does not hold</h2>
 
 <p>Measured at <span class="v">R</span> = 23,
 <span class="v">n<sub>max</sub></span> = 120, <span class="v">K<sub>z</sub></span> = 12,
@@ -794,7 +841,7 @@ interval must come from a household block bootstrap over refits, which has not b
 
 <div class="part"><div class="pn">Part IV</div><div class="pt">What is established</div></div>
 
-<h2><span class="num">18</span>Verification</h2>
+<h2><span class="num">19</span>Verification</h2>
 
 <div class="scroll"><table>
 <thead><tr><th>claim</th><th>where</th><th class="num">residual</th></tr></thead>
@@ -816,7 +863,7 @@ interval must come from a household block bootstrap over refits, which has not b
 establish that the identities are right and the code implements them; they say nothing about
 5,420 products, which is what the fit is for.</p>
 
-<h2><span class="num">19</span>Held-out comparison</h2>
+<h2><span class="num">20</span>Held-out comparison</h2>
 
 <p>Every model below produces an exactly normalised <span class="v">P(S)</span> on the same
 support, conditioned on non-empty — which rules out top-<span class="v">k</span> recall,
@@ -849,7 +896,7 @@ training and improving; the ranking is not settled, but there is no basis for cl
 wins.</p>
 </div>
 
-<h2><span class="num">20</span>What is not established</h2>
+<h2><span class="num">21</span>What is not established</h2>
 <ul>
   <li><strong>The causal layer.</strong> Nothing has been estimated. The shelf-price
   coefficient is not identified from this data by any modelling choice — the retailer sets
@@ -864,10 +911,10 @@ wins.</p>
   evaluation on logged data for the value.</li>
   <li><strong>Proposition 5's prediction</strong>, which is the architecture's sharpest and
   most falsifiable claim.</li>
-  <li><strong>Consistency</strong>, per §17.</li>
+  <li><strong>Consistency</strong>, per §18.</li>
 </ul>
 
-<h2><span class="num">21</span>Defects found, and how</h2>
+<h2><span class="num">22</span>Defects found, and how</h2>
 
 <p>Kept because a specification whose mistakes are invisible is harder to trust than one
 whose mistakes are listed. Every one was a place where code and specification disagreed.</p>

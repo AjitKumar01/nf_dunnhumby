@@ -179,6 +179,10 @@ class RaggedIndex:
                             torch.cumsum(self.row_size, 0)[:-1]])
         self.item_pos = (torch.arange(len(self.row_of), device=device)
                          - starts[self.row_of])
+        # largest row size appearing at each slot position, for the degree cap
+        sd = torch.zeros(self.Cpad, dtype=torch.long, device=device)
+        sd.index_reduce_(0, self.row_pos, self.row_size, "amax", include_self=True)
+        self.slot_deg = sd
         self.item_trip = self.row_trip[self.row_of]
         self.flat_slot = self.row_trip * self.Cpad + self.row_pos
 
@@ -208,9 +212,14 @@ def log_f_ragged(model, z, ix, drop_empty=False):
     Gp = torch.zeros(D, ix.B * ix.Cpad, model.R + 1, dtype=w.dtype, device=w.device)
     Gp[:, :, 0] = 1.0
     Gp = Gp.index_copy(1, ix.flat_slot, G).view(D, ix.B, ix.Cpad, model.R + 1)
-    A = Gp[:, :, 0, :]
+    # Per-slot degree cap: a category with N products cannot contribute more than N, and
+    # coefficients above its row size are already zero.  Slicing to the batch maximum at
+    # each slot cuts the convolution -- the dominant cost -- by about 4x at R = 23, since
+    # the median category never exceeds 3 items in any observed basket.  Exact, not an
+    # approximation: it declines to multiply by known zeros.
+    A = Gp[:, :, 0, :ix.slot_deg[0] + 1]
     for c in range(1, ix.Cpad):
-        A = poly_mul_trunc(A, Gp[:, :, c, :], model.nmax)          # [D, B, nmax+1]
+        A = poly_mul_trunc(A, Gp[:, :, c, :ix.slot_deg[c] + 1], model.nmax)
     n = torch.arange(A.shape[-1], dtype=w.dtype, device=w.device)
     lg = (torch.log(A.clamp_min(1e-300)) - model.rho_0()[: A.shape[-1]]
           + n * M.unsqueeze(-1))
@@ -241,6 +250,7 @@ class RaggedModel(torch.nn.Module):
         self.w_mlr = torch.nn.Parameter(torch.zeros(J))
         self.mu = torch.nn.Parameter(torch.randn(J, Kt, generator=g) * 0.1)
         self.delta = torch.nn.Parameter(torch.randn(n_week, Kt, generator=g) * 0.1)
+        self.psi = torch.nn.Parameter(torch.zeros(J, 4))       # recency loading
         self.zeta = torch.nn.Parameter(torch.randn(J, Ks, generator=g) * 0.1)
         self.xi = torch.nn.Parameter(torch.randn(S, Ks, generator=g) * 0.1)
         # --- units, Eq. 19: P(q_j | j in S) = NB(q_j - 1 ; Lambda_ij, r_j) ------------
@@ -277,6 +287,8 @@ class RaggedModel(torch.nn.Module):
         b = b + self.w_dsp[it] * c["disp"] + self.w_mlr[it] * c["mail"]
         b = b + (self.mu[it] * self.delta[c["week"]]).sum(-1)
         b = b + (self.zeta[it] * self.xi[c["store"]]).sum(-1)
+        if "rec" in c:
+            b = b + (self.psi[it] * c["rec"]).sum(-1)
         return b
 
     def b_flat(self, ix):

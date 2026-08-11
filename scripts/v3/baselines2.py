@@ -111,6 +111,35 @@ class NDPP(torch.nn.Module):
         return torch.stack(out)
 
 
+def esp_tree(W, nmax):
+    """e_0..e_nmax over a padded [B, P] weight matrix, by a balanced product tree.
+
+    The generating polynomial is prod_j (1 + w_j u) and e_n is its degree-n coefficient.
+    The sequential recursion needs P steps -- 5,420 at a dunnhumby store -- which in torch
+    means 5,420 kernel launches per batch and was 12x slower than every other baseline.
+    Multiplying the degree-1 factors pairwise in a tree needs log2(P) ~ 13 rounds instead,
+    at somewhat more arithmetic but far fewer launches.  Padded slots carry w = 0, whose
+    factor is (1, 0), the identity -- so no masking is needed.
+    """
+    B, P = W.shape
+    poly = torch.stack([torch.ones_like(W), W], dim=-1)          # [B, P, 2]
+    while poly.shape[1] > 1:
+        n, d = poly.shape[1], poly.shape[-1]
+        if n % 2:                                                 # pad with the identity
+            idp = torch.zeros(B, 1, d, dtype=W.dtype, device=W.device)
+            idp[:, :, 0] = 1.0
+            poly = torch.cat([poly, idp], dim=1)
+            n += 1
+        a, b = poly[:, 0::2], poly[:, 1::2]
+        nd = min(2 * d - 1, nmax + 1)
+        out = torch.zeros(B, n // 2, nd, dtype=W.dtype, device=W.device)
+        for r in range(min(d, nd)):
+            take = min(d, nd - r)
+            out[..., r:r + take] = out[..., r:r + take] + a[..., :take] * b[..., r:r + 1]
+        poly = out
+    return poly[:, 0, :]
+
+
 class Multinomial(torch.nn.Module):
     """BEMB-style: n distinct items drawn with weights w, size from the empirical law.
 
@@ -125,19 +154,21 @@ class Multinomial(torch.nn.Module):
     def loglik(self, d):
         w = self.idx(d["item"], d["st"], d["house"], d["ctx"])
         wl = self.idx(d["li"], d["lt"], d["house"], d["lctx"])
-        out = []
-        for b in range(d["B"]):
-            lw = w[d["st"] == b]
-            n = int((d["lt"] == b).sum())
-            M = lw.max()
-            e = torch.zeros(n + 1, dtype=lw.dtype)
-            e[0] = 1.0
-            for x in torch.exp(lw - M):                      # O(N n) recursion
-                e[1:] = e[1:].clone() + x * e[:-1].clone()
-            num = wl[d["lt"] == b].sum()
-            out.append(self.log_pn[min(n, len(self.log_pn) - 1)]
-                       + num - (torch.log(e[n].clamp_min(1e-300)) + n * M))
-        return torch.stack(out)
+        B = d["B"]
+        cnt = torch.bincount(d["st"], minlength=B)
+        P = int(cnt.max())
+        off = torch.cat([torch.zeros(1, dtype=torch.long), torch.cumsum(cnt, 0)[:-1]])
+        pos = torch.arange(len(w)) - off[d["st"]]
+        M = torch.full((B,), -float("inf"), dtype=w.dtype).index_reduce_(
+            0, d["st"], w, "amax", include_self=True)
+        W = torch.zeros(B * P, dtype=w.dtype).index_copy(
+            0, d["st"] * P + pos, torch.exp(w - M[d["st"]])).view(B, P)
+        n = torch.bincount(d["lt"], minlength=B)
+        e = esp_tree(W, int(n.max()))                                  # [B, nmax+1]
+        num = torch.zeros(B, dtype=w.dtype).index_add_(0, d["lt"], wl)
+        le = torch.log(e.gather(1, n.unsqueeze(1)).squeeze(1).clamp_min(1e-300))
+        return (self.log_pn[n.clamp(max=len(self.log_pn) - 1)]
+                + num - (le + n.to(w.dtype) * M))
 
 
 class Shopper(torch.nn.Module):
@@ -196,6 +227,12 @@ def size_law(D, nmax=120):
 
 def run(name, model, Bt, tr, va, a, **kw):
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, weight_decay=a.wd)
+    # Cosine decay, for the same reason the main model needed it: at a constant step size
+    # the training loss stops falling well before an epoch and then oscillates, and a
+    # comparison between models all stuck that way measures the optimiser, not the models.
+    sched = (torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.iters,
+                                                        eta_min=a.lr * 0.02)
+             if a.cosine else None)
     rng = np.random.default_rng(0)
     t0 = time.time()
     for it in range(1, a.iters + 1):
@@ -205,9 +242,12 @@ def run(name, model, Bt, tr, va, a, **kw):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
         opt.step()
+        if sched is not None:
+            sched.step()
         if it % max(1, a.iters // 3) == 0:
             vb, vl = ev(model, Bt, va[:a.n_val], **kw)
-            log(f"   {name:10s} it {it:4d}  train {float(loss):9.3f}  "
+            ep = it * a.batch / len(tr)
+            log(f"   {name:10s} it {it:4d} ep {ep:5.3f}  train {float(loss):9.3f}  "
                 f"val/basket {vb:9.3f}  val/line {vl:7.4f}  {(time.time()-t0)/60:.1f} min")
     return ev(model, Bt, va[:a.n_val], **kw)
 
@@ -234,25 +274,39 @@ def main(a):
     log(f"{len(tr):,} training trips; evaluating on {min(a.n_val, len(va)):,}")
     res = {}
 
-    if "multinomial" not in a.skip:
-        m = Multinomial(J, N, S, size_law(D), K=a.K, Kp=a.Kp)
-        vb, vl = run("multinom", m, Bt, tr, va, a)
-        res["multinomial"] = dict(val_per_basket=vb, val_per_line=vl,
-                                  n_par=sum(p.numel() for p in m.parameters()))
+    if "shopper" not in a.skip:
+        m = Shopper(J, N, S, K=a.K, Kp=a.Kp)
+        vb, vl = run("shopper", m, Bt, tr, va, a, n_orders=a.orders)
+        # P(S) = n! E_pi[P(pi)] is unbiased for P(S), so log of it is biased LOW.  The
+        # bias falls with the number of sampled orderings; report a ladder rather than
+        # quote one point and hope.
+        torch.save(m.state_dict(), os.path.join(OUT, "v3_shopper.pt"))
+        # The ladder must be run on the SAME trips as the headline number, and far enough
+        # out to show whether it has converged.  An earlier version stopped at 256 on a
+        # 192-trip subset and read 0.198 / 0.041 / 0.077 -- steps that do not shrink
+        # monotonically, which is noise rather than convergence.
+        ladder = {}
+        for no in a.ladder:
+            ladder[no] = ev(m, Bt, va[:a.n_val], n_orders=no)[0]
+            log(f"   shopper, {no:4d} orderings on {a.n_val} trips: {ladder[no]:8.3f}")
+        # the headline is the ladder's converged rung, not the cheap training-time
+        # evaluation: they differed by 0.25 nats last time and the json carried the worse one
+        vb = ladder[max(ladder)]
+        res["shopper"] = dict(val_per_basket=vb, val_per_line=vl,
+                              ladder={str(k): v for k, v in ladder.items()},
+                              orders=a.orders,
+                              n_par=sum(p.numel() for p in m.parameters()))
+
     if "ndpp" not in a.skip:
         m = NDPP(J, N, S, rank=a.rank, srank=a.srank, K=a.K, Kp=a.Kp)
         vb, vl = run("ndpp", m, Bt, tr, va, a)
         res["ndpp"] = dict(val_per_basket=vb, val_per_line=vl,
                            n_par=sum(p.numel() for p in m.parameters()))
-    if "shopper" not in a.skip:
-        m = Shopper(J, N, S, K=a.K, Kp=a.Kp)
-        vb, vl = run("shopper", m, Bt, tr, va, a, n_orders=a.orders)
-        vb2, _ = ev(m, Bt, va[:min(128, a.n_val)], n_orders=a.orders * 4)
-        res["shopper"] = dict(val_per_basket=vb, val_per_line=vl,
-                              val_more_orders=vb2, orders=a.orders,
-                              n_par=sum(p.numel() for p in m.parameters()))
-        log(f"   shopper ordering bias: {a.orders} orders {vb:.3f} vs "
-            f"{a.orders*4} orders {vb2:.3f} (on 128 trips)")
+    if "multinomial" not in a.skip:
+        m = Multinomial(J, N, S, size_law(D), K=a.K, Kp=a.Kp)
+        vb, vl = run("multinom", m, Bt, tr, va, a)
+        res["multinomial"] = dict(val_per_basket=vb, val_per_line=vl,
+                                  n_par=sum(p.numel() for p in m.parameters()))
 
     log("")
     log(f"  {'model':14s} {'val/basket':>11s} {'val/line':>9s} {'params':>10s}")
@@ -276,7 +330,10 @@ if __name__ == "__main__":
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--wd", type=float, default=1e-5)
+    p.add_argument("--cosine", type=int, default=1)
     p.add_argument("--n-val", type=int, default=256)
     p.add_argument("--skip", nargs="*", default=[])
     p.add_argument("--tag", default="")
+    p.add_argument("--ladder", type=int, nargs="*",
+                   default=[8, 32, 128, 512, 2048])
     main(p.parse_args())

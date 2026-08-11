@@ -31,6 +31,8 @@ is not comparable to one that has them.
 """
 import os
 
+import math
+
 import numpy as np
 import torch
 
@@ -66,6 +68,14 @@ class Features:
         log(f"store price deviations: {len(key):,} cells "
             f"({len(key) / (n_item * n_store * 52):.2%} of the grid)")
 
+        st = np.load(os.path.join(BI, "state.npz"))
+        self.st_keys = torch.from_numpy(st["keys"])
+        self.item_sub = torch.from_numpy(st["item_sub"].astype(np.int64))
+        self.sub_gap = torch.from_numpy(st["sub_gap"])
+        self.n_sub = int(self.item_sub.max()) + 1
+        log(f"recency: {len(self.st_keys):,} purchase events over {self.n_sub} "
+            f"sub-commodities; median gap {float(self.sub_gap.median()):.1f} days")
+
         pr = np.load(os.path.join(BI, "promo.npz"))
         o = np.argsort(pr["keys"])
         self.pk = torch.from_numpy(pr["keys"][o])
@@ -73,6 +83,34 @@ class Features:
         self.pm = torch.from_numpy(pr["mail"][o].astype(np.float32))
         log(f"promotion cells: {len(self.pk):,}; "
             f"display rate {float(self.pd_.mean()):.3f}, mailer {float(self.pm.mean()):.3f}")
+
+    def recency(self, item, user, day):
+        """The four recency functions of the specification, at every assortment slot.
+
+        Purchase events are stored as sorted keys (user * n_sub + sub) * 1024 + DAY, so a
+        strictly-before lookup is one searchsorted.  The previous key belongs to the same
+        (household, sub-commodity) group only if its group field matches, which is what
+        separates "no earlier purchase" from "the previous event is someone else's".
+
+        This is the block version 2 measures as its largest single ablation, and it was the
+        largest thing missing here.
+        """
+        sub = self.item_sub[item]
+        group = user.to(torch.int64) * self.n_sub + sub
+        key = group * 1024 + day
+        idx = torch.searchsorted(self.st_keys, key)
+        prev = (idx - 1).clamp(0, len(self.st_keys) - 1)
+        pk = self.st_keys[prev]
+        same = (idx > 0) & (torch.div(pk, 1024, rounding_mode="floor") == group)
+        since = torch.where(same, (day - pk % 1024).double(),
+                            torch.zeros(1, dtype=torch.float64))
+        gap = self.sub_gap[sub].double().clamp_min(1.0)
+        z = torch.zeros(1, dtype=torch.float64)
+        return torch.stack([
+            (~same).double(),
+            torch.where(same, torch.exp(-since / 7.0), z),
+            torch.where(same, torch.exp(-since / gap), z),
+            torch.where(same, torch.log1p(since) / math.log(100.0), z)], dim=-1)
 
     @staticmethod
     def _lookup(keys, vals, q):

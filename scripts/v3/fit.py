@@ -72,8 +72,10 @@ class Batcher:
         dlp, disp, mail = self.F.gather(ix.item, st_i, dy_i, wk_i)
         # week-of-year, per the spec: (WEEK_NO - 1) mod 52.  Clamping instead, as an earlier
         # version did, collapsed 54.6% of trips onto one seasonal parameter.
+        user = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
         ctx = dict(dlp=dlp.double(), disp=disp.double(), mail=mail.double(),
-                   week=(wk_i - 1) % 52, store=st_i)
+                   week=(wk_i - 1) % 52, store=st_i,
+                   rec=self.F.recency(ix.item, user[ix.item_trip], dy_i))
         li, lt, lc, lu = [], [], [], []
         for bi, t in enumerate(trips):
             a, b = int(self.lptr[t]), int(self.lptr[t + 1])
@@ -87,7 +89,8 @@ class Batcher:
         # each product identically
         dlp_l, disp_l, mail_l = self.F.gather(LI, store[LT], day[LT], week[LT])
         lctx = dict(dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
-                    week=(week[LT] - 1) % 52, store=store[LT])
+                    week=(week[LT] - 1) % 52, store=store[LT],
+                    rec=self.F.recency(LI, user[LT], day[LT]))
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
         return (ix, ctx, lctx, house,
                 LI, LT, torch.as_tensor(np.concatenate(lc), dtype=torch.long),
@@ -149,7 +152,17 @@ def main(a):
     npar = sum(p.numel() for p in m.parameters())
     log(f"parameters: {npar:,}  (K={a.K}, Kz={a.Kz}, Kp={a.Kp}, nmax={a.nmax}, R={a.R})")
 
+    if a.resume:
+        m.load_state_dict(torch.load(a.resume))
+        log(f"resumed from {a.resume}")
     opt = torch.optim.Adam(m.parameters(), lr=a.lr, weight_decay=a.wd)
+    # Cosine decay.  The previous run's training loss stopped falling at about a third of
+    # an epoch and then oscillated, with held-out likelihood swinging over 1.4 nats and no
+    # trend -- the signature of a step size too large for the stage, not of a model at
+    # capacity.  A constant learning rate was the only schedule used until now.
+    sched = (torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.iters,
+                                                        eta_min=a.lr * a.lr_floor)
+             if a.cosine else None)
     rng = np.random.default_rng(a.seed)
     gen = torch.Generator().manual_seed(a.seed)
 
@@ -181,6 +194,8 @@ def main(a):
             torch.nn.utils.clip_grad_norm_(m.parameters(), a.clip)
             opt.step()
             m.project(a.phi_max)           # keep lambda_max(Lambda) in the stable regime
+        if sched is not None:
+            sched.step()
         hist.append(float(loss))
         ess_hist.append(e_bar)
         if it == a.probe:
@@ -206,7 +221,8 @@ def main(a):
             lam_max = m.lambda_max(ix)
             vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 2, gen, use_units=a.units)
             m.house, m.ctx = hh, ctx
-            log(f"  it {it:5d}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
+            ep = it * a.batch / max(len(tr), 1)
+            log(f"  it {it:5d} ep {ep:5.3f}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
                 f"set/bskt {vb:8.3f}  units/bskt {vu:7.3f}  total {vt:8.3f}  "
                 f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f}  "
                 f"|phi| {float(m.phi.norm(dim=1).mean()):.3f}  "
@@ -241,9 +257,12 @@ if __name__ == "__main__":
     p.add_argument("--n-val", type=int, default=768)
     p.add_argument("--probe", type=int, default=25)
     p.add_argument("--probe-only", action="store_true")
+    p.add_argument("--resume", default="")
+    p.add_argument("--cosine", type=int, default=1)
+    p.add_argument("--lr-floor", type=float, default=0.02)
     p.add_argument("--units", type=int, default=1)
     p.add_argument("--wd", type=float, default=1e-5)
-    p.add_argument("--phi-max", type=float, default=0.15)   # 0.35 measures lambda_max 0.67
+    p.add_argument("--phi-max", type=float, default=0.25)   # 0.35 measures lambda_max 0.67
     p.add_argument("--ess-floor", type=float, default=0.30)
     p.add_argument("--clip", type=float, default=2.0)
     p.add_argument("--seed", type=int, default=0)

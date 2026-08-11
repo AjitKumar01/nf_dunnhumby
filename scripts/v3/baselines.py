@@ -220,6 +220,12 @@ def freq_loglik(D, Bt, trips, prior=1.0):
 
 def run(name, model, Bt, tr, va, a):
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, weight_decay=a.wd)
+    # Cosine decay, for the same reason the main model needed it: at a constant step size
+    # the training loss stops falling well before an epoch and then oscillates, and a
+    # comparison between models all stuck that way measures the optimiser, not the models.
+    sched = (torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.iters,
+                                                        eta_min=a.lr * 0.02)
+             if a.cosine else None)
     rng = np.random.default_rng(0)
     t0 = time.time()
     for it in range(1, a.iters + 1):
@@ -229,9 +235,12 @@ def run(name, model, Bt, tr, va, a):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
         opt.step()
+        if sched is not None:
+            sched.step()
         if it % max(1, a.iters // 4) == 0:
             vb, vl = evaluate(model, Bt, va[:a.n_val])
-            log(f"   {name:10s} it {it:4d}  train {float(loss):8.3f}  "
+            ep = it * a.batch / len(tr)
+            log(f"   {name:10s} it {it:4d} ep {ep:5.3f}  train {float(loss):8.3f}  "
                 f"val/basket {vb:8.3f}  val/line {vl:7.4f}  "
                 f"{(time.time()-t0)/60:.1f} min")
     return evaluate(model, Bt, va[:a.n_val])
@@ -293,6 +302,7 @@ if __name__ == "__main__":
     p.add_argument("--batch", type=int, default=32)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--wd", type=float, default=1e-5)
+    p.add_argument("--cosine", type=int, default=1)
     p.add_argument("--n-val", type=int, default=512)
     p.add_argument("--skip", nargs="*", default=[])
     main(p.parse_args())
