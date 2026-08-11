@@ -196,6 +196,16 @@ class RaggedModel(torch.nn.Module):
         self.delta = torch.nn.Parameter(torch.randn(n_week, Kt, generator=g) * 0.1)
         self.zeta = torch.nn.Parameter(torch.randn(J, Ks, generator=g) * 0.1)
         self.xi = torch.nn.Parameter(torch.randn(S, Ks, generator=g) * 0.1)
+        # --- units, Eq. 19: P(q_j | j in S) = NB(q_j - 1 ; Lambda_ij, r_j) ------------
+        # A separate factor, and the factorisation is DERIVED rather than assumed: if the
+        # energy does not depend on q, summing q out of P(S, q) leaves exactly P(S), so
+        # P(S, q) = P(S) prod_j P(q_j).  Without it the model cannot say how many of
+        # anything, which makes revenue -- price times units -- uncomputable, so a
+        # simulator that omits it cannot price a promotion.
+        self.a_q = torch.nn.Parameter(torch.zeros(J))
+        self.gamma_q = torch.nn.Parameter(torch.randn(N, Kp, generator=g) * 0.1)
+        self.beta_q = torch.nn.Parameter(torch.randn(J, Kp, generator=g) * 0.1)
+        self.log_r = torch.nn.Parameter(torch.zeros(1))
         self.house = None      # [B] set per batch, with .ctx below
         self.ctx = None        # dict of per-slot features, set per batch
 
@@ -284,14 +294,34 @@ class RaggedModel(torch.nn.Module):
         n = torch.bincount(line_trip, minlength=B).clamp(max=self.nmax)
         return lin + pair - pen_c - self.rho_0()[n]
 
+    def units_loglik(self, line_item, line_trip, units, line_ctx, B):
+        """log P(q | S), summed per trip.  Shifted negative binomial: q - 1 ~ NB(mu, r).
+
+        Version 2 measures the shifted POISSON as the wrong law here -- q is under-dispersed
+        (0.62) while q - 1 is over-dispersed (2.35), which a one-parameter Poisson cannot do
+        -- and the negative binomial cuts units-per-line total variation from 0.045 to
+        0.016 for one extra parameter."""
+        hh = self.house[line_trip]
+        z = self.a_q[line_item] - (self.gamma_q[hh] * self.beta_q[line_item]).sum(-1) \
+            * line_ctx["dlp"]
+        mu = torch.exp(z.clamp(-6.0, 4.0))
+        r = torch.nn.functional.softplus(self.log_r) + 1e-6
+        k = (units - 1).to(mu.dtype).clamp_min(0.0)
+        ll = (torch.lgamma(k + r) - torch.lgamma(r) - torch.lgamma(k + 1.0)
+              + r * (torch.log(r) - torch.log(r + mu))
+              + k * (torch.log(mu.clamp_min(1e-12)) - torch.log(r + mu)))
+        return torch.zeros(B, dtype=mu.dtype, device=mu.device).index_add_(0, line_trip, ll)
+
     def loglik(self, ix, line_item, line_trip, line_cat, n_draws=32,
-               generator=None, return_ess=False, line_ctx=None):
+               generator=None, return_ess=False, line_ctx=None, units=None):
         """log P(S | S non-empty) = E(S) - log(Z - 1), with log(Z - 1) computed directly
         rather than by subtracting 1 from Z."""
         out = self.log_Z(ix, n_draws=n_draws, generator=generator,
                          return_ess=return_ess, drop_empty=True)
         lz1, ess = out if return_ess else (out, None)
         ll = self.energy(line_item, line_trip, line_cat, ix.B, line_ctx) - lz1
+        if units is not None:
+            ll = ll + self.units_loglik(line_item, line_trip, units, line_ctx, ix.B)
         return (ll, ess) if return_ess else ll
 
     def lambda_max(self, ix):

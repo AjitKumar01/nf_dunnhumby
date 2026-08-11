@@ -74,11 +74,12 @@ class Batcher:
         # version did, collapsed 54.6% of trips onto one seasonal parameter.
         ctx = dict(dlp=dlp.double(), disp=disp.double(), mail=mail.double(),
                    week=(wk_i - 1) % 52, store=st_i)
-        li, lt, lc = [], [], []
+        li, lt, lc, lu = [], [], [], []
         for bi, t in enumerate(trips):
             a, b = int(self.lptr[t]), int(self.lptr[t + 1])
             li.append(D["line_item"][a:b])
             lc.append(D["line_cat"][a:b])
+            lu.append(D["line_units"][a:b])
             lt.append(np.full(b - a, bi, np.int64))
         LI = torch.as_tensor(np.concatenate(li), dtype=torch.long)
         LT = torch.as_tensor(np.concatenate(lt), dtype=torch.long)
@@ -89,21 +90,28 @@ class Batcher:
                     week=(week[LT] - 1) % 52, store=store[LT])
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
         return (ix, ctx, lctx, house,
-                LI, LT, torch.as_tensor(np.concatenate(lc), dtype=torch.long))
+                LI, LT, torch.as_tensor(np.concatenate(lc), dtype=torch.long),
+                torch.as_tensor(np.concatenate(lu), dtype=torch.long))
 
 
-def evaluate(m, B, trips, draws, gen, chunk=48):
-    tot, n_b, n_l = 0.0, 0, 0
+def evaluate(m, B, trips, draws, gen, chunk=48, use_units=True):
+    """Returns (set per basket, set per line, units per basket, total per basket).
+
+    The SET component is reported apart from the units component because the baselines
+    model sets only; quoting a total against them would be comparing different objects."""
+    tot_s, tot_u, n_b, n_l = 0.0, 0.0, 0, 0
     for k in range(0, len(trips), chunk):
         sub = trips[k:k + chunk]
-        ix, ctx, lctx, hh, li, lt, lc = B.make(sub)
+        ix, ctx, lctx, hh, li, lt, lc, lq = B.make(sub)
         m.house, m.ctx = hh, ctx
         with torch.no_grad():
             ll = m.loglik(ix, li, lt, lc, n_draws=draws, generator=gen, line_ctx=lctx)
-        tot += float(ll.sum())
+            tot_s += float(ll.sum())
+            if use_units:
+                tot_u += float(m.units_loglik(li, lt, lq, lctx, ix.B).sum())
         n_b += len(sub)
         n_l += len(li)
-    return tot / n_b, tot / n_l
+    return tot_s / n_b, tot_s / n_l, tot_u / n_b, (tot_s + tot_u) / n_b
 
 
 def main(a):
@@ -152,10 +160,11 @@ def main(a):
     m.project(a.phi_max)
     for it in range(1, a.iters + 1):
         sub = tr[rng.choice(len(tr), size=a.batch, replace=False)]
-        ix, ctx, lctx, hh, li, lt, lc = B.make(sub)
+        ix, ctx, lctx, hh, li, lt, lc, lq = B.make(sub)
         m.house, m.ctx = hh, ctx
         ll, ess = m.loglik(ix, li, lt, lc, n_draws=a.draws, generator=gen,
-                           return_ess=True, line_ctx=lctx)
+                           return_ess=True, line_ctx=lctx,
+                           units=lq if a.units else None)
         loss = -ll.mean()
         # ESS GATE.  log Z is estimated by importance sampling; where the sampler has
         # collapsed the estimate is unreliable and biased DOWNWARD, which the objective
@@ -191,10 +200,14 @@ def main(a):
                 log("  wrote out/v3_probe.json; stopping (--probe-only)")
                 return
         if it % a.eval_every == 0:
-            vb, vl = evaluate(m, B, va[:a.n_val], a.draws * 2, gen)
+            # lambda_max BEFORE evaluate(): evaluate reassigns m.house/m.ctx to the
+            # validation chunks, and ix here is the training batch.  Calling it after
+            # indexes a 40-trip batch into a 32-trip household tensor.
             lam_max = m.lambda_max(ix)
+            vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 2, gen, use_units=a.units)
+            m.house, m.ctx = hh, ctx
             log(f"  it {it:5d}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
-                f"val/basket {vb:8.3f}  val/line {vl:7.4f}  "
+                f"set/bskt {vb:8.3f}  units/bskt {vu:7.3f}  total {vt:8.3f}  "
                 f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f}  "
                 f"|phi| {float(m.phi.norm(dim=1).mean()):.3f}  "
                 f"lam_max {lam_max:.3f}  skip {n_skip}  {(time.time()-t0)/60:.1f} min")
@@ -203,10 +216,11 @@ def main(a):
                     "The objective is being maximised through a defect, not a fit.")
                 return
             torch.save(m.state_dict(), os.path.join(OUT, f"v3_{a.label}.pt"))
-    vb, vl = evaluate(m, B, va[:a.n_val], a.draws * 4, gen)
-    log(f"final  val/basket {vb:.4f}  val/line {vl:.4f}")
+    vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 4, gen, use_units=a.units)
+    log(f"final  set/basket {vb:.4f}  set/line {vl:.4f}  units/basket {vu:.4f}  total/basket {vt:.4f}")
     torch.save(m.state_dict(), os.path.join(OUT, f"v3_{a.label}.pt"))
-    json.dump(dict(val_per_basket=vb, val_per_line=vl, n_par=npar, iters=a.iters),
+    json.dump(dict(set_per_basket=vb, set_per_line=vl, units_per_basket=vu,
+                   total_per_basket=vt, n_par=npar, iters=a.iters),
               open(os.path.join(OUT, f"v3_{a.label}.json"), "w"), indent=2)
     log(f"wrote out/v3_{a.label}.pt")
 
@@ -227,8 +241,9 @@ if __name__ == "__main__":
     p.add_argument("--n-val", type=int, default=768)
     p.add_argument("--probe", type=int, default=25)
     p.add_argument("--probe-only", action="store_true")
+    p.add_argument("--units", type=int, default=1)
     p.add_argument("--wd", type=float, default=1e-5)
-    p.add_argument("--phi-max", type=float, default=0.35)
+    p.add_argument("--phi-max", type=float, default=0.15)   # 0.35 measures lambda_max 0.67
     p.add_argument("--ess-floor", type=float, default=0.30)
     p.add_argument("--clip", type=float, default=2.0)
     p.add_argument("--seed", type=int, default=0)
