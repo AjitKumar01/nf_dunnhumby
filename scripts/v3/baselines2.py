@@ -259,8 +259,10 @@ def main(a):
     for k, v in res.items():
         log(f"  {k:14s} {v['val_per_basket']:11.3f} {v['val_per_line']:9.4f} "
             f"{v['n_par']:10,d}")
-    json.dump(res, open(os.path.join(OUT, "v3_baselines2.json"), "w"), indent=2)
-    log("wrote out/v3_baselines2.json")
+    tag = a.tag or "all"
+    json.dump(res, open(os.path.join(OUT, f"v3_baselines2_{tag}.json"), "w"),
+              indent=2)
+    log(f"wrote out/v3_baselines2_{tag}.json")
 
 
 if __name__ == "__main__":
@@ -276,4 +278,5 @@ if __name__ == "__main__":
     p.add_argument("--wd", type=float, default=1e-5)
     p.add_argument("--n-val", type=int, default=256)
     p.add_argument("--skip", nargs="*", default=[])
+    p.add_argument("--tag", default="")
     main(p.parse_args())
