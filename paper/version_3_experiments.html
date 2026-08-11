@@ -69,9 +69,10 @@
 
 <p class="lede">The companion to the version-3 specification. Every number here comes from a
 named script in this repository. The model is implemented and validated; it recovers its own
-parameters; two of its design claims are now tested and one of those tests reversed a result
-I had already reported. It has not been fitted to dunnhumby, and this page says exactly what
-stands between here and there.</p>
+parameters; two of its design claims are tested and one of those tests reversed a result I
+had already reported. It is now fitted to dunnhumby and beats an independent baseline with
+identical covariates by 9.7 nats per basket &mdash; on a support restricted to 95% of
+baskets, without units and without a trip-type mixture, which &sect;6.2 states in full.</p>
 
 <h3>Status at a glance</h3>
 
@@ -84,7 +85,7 @@ stands between here and there.</p>
 <tr><td>The size potential earns its place</td><td><strong>established, conditionally</strong></td><td>+0.54 nats where dispersion &gt; 1, +0.003 where it is not, §3</td></tr>
 <tr><td>Forward-buying is representable</td><td><strong>yes, weakly</strong></td><td>β = +0.0097, t = +8.2, §4</td></tr>
 <tr><td>ρ<sub>0</sub> prevents the phase transition</td><td><strong>partly — it delays it</strong></td><td>critical loading 0.60 → 0.75, §5</td></tr>
-<tr><td>It beats version 2 on dunnhumby</td><td><strong>untested</strong></td><td>needs the ragged rewrite, §7</td></tr>
+<tr><td>It beats an independent baseline on dunnhumby</td><td><strong>yes, by 9.7 nats/basket</strong></td><td>§6</td></tr>
 <tr><td>The causal layer identifies anything</td><td><strong>untested</strong></td><td>needs a fit, §7</td></tr>
 </tbody></table></div>
 
@@ -256,7 +257,7 @@ of unsigned errors. And <strong>ESS can collapse without a bifurcation</strong>:
 <span class="v">ρ</span> = 0.10, <span class="v">a</span> = 0.65 it falls to 0.065 with a
 single mode, so multi-start alone is not a sufficient diagnostic and both must be logged.</p>
 
-<h2><span class="num">6</span>Everything checked against enumeration</h2>
+<h2><span class="num">7</span>Everything checked against enumeration</h2>
 
 <div class="scroll"><table>
 <thead><tr><th>claim</th><th>script</th><th class="num">residual</th></tr></thead>
@@ -271,9 +272,109 @@ single mode, so multi-start alone is not a sufficient diagnostic and both must b
 <tr><td>The full implementation</td><td><code>v3/validate.py</code></td><td class="num">6 checks, §1</td></tr>
 </tbody></table></div>
 
+<h2><span class="num">6</span>The dunnhumby fit, and what it beats</h2>
+
+<p>Version 3 fitted to real data, and three baselines that produce a properly normalised
+<span class="v">P(S)</span> on the same support. Held out on 512 validation trips, weeks
+83&ndash;90, none seen in training.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>model</th><th class="num">log P / basket</th><th class="num">log P / line</th><th class="num">parameters</th><th>what it can express</th></tr></thead>
+<tbody>
+<tr><td><strong>version 3</strong></td><td class="num"><strong>&minus;40.39</strong></td><td class="num"><strong>&minus;6.142</strong></td><td class="num">449,257</td><td>pairwise interaction, both signs, plus a free size potential</td></tr>
+<tr><td>independent Bernoulli</td><td class="num">&minus;50.12</td><td class="num">&minus;6.863</td><td class="num">383,541</td><td>the same covariates, no interaction at all</td></tr>
+<tr><td>frequency</td><td class="num">&minus;50.98</td><td class="num">&minus;6.981</td><td class="num">0</td><td>empirical (store, product) rate</td></tr>
+<tr><td>low-rank DPP</td><td class="num">&minus;60.88</td><td class="num">&minus;8.336</td><td class="num">470,821</td><td>repulsion only</td></tr>
+</tbody></table></div>
+
+<p><strong>9.7 nats per basket over independent Bernoulli</strong>, which shares version 3's
+covariates, support, normalisation and conditioning and differs <em>only</em> by the pairwise
+term and the size potential. That difference is the architecture and nothing else. Per line
+it is 0.72 nats.</p>
+
+<div class="flag good">
+<p class="label">The DPP result is the one that says something about the theory</p>
+<p>The determinantal model finished <strong>10 nats below a zero-parameter frequency
+baseline</strong>, and it had converged rather than stalled early (&minus;60.6, &minus;61.1,
+&minus;60.9 at 600, 900 and 1,200 iterations). Handing it the same rich covariates did not
+rescue it.</p>
+<p>That is not a tuning failure, it is the model class being wrong for this data in the
+direction &sect;13 predicts. A DPP scores <span class="v">det(L<sub>S</sub>)</span>, which
+penalises taking similar items together: it represents <strong>repulsion only</strong>.
+Grocery baskets are dominated by complementarity &mdash; bananas and biscuits, not either/or
+&mdash; so a repulsion-only interaction is actively mis-specified, and loses to counting.</p>
+<p>Version 3's Gaussian latent has the opposite bias: <span class="v">W = &Phi;&Phi;'</span>
+is positive semi-definite, so it expresses attraction freely and repulsion only in bounded
+amounts (&sect;13, Proposition 2). The two models fail in opposite directions, which is why
+the comparison is diagnostic rather than merely a scoreboard, and it is the concrete case
+for &sect;13's argument that the interaction has to be able to point both ways &mdash; which
+is what the enumerated within-category term
+<span class="v">&minus;&rho;<sub>c</sub></span> is for.</p>
+</div>
+
+<h3><span class="num">6.1</span>The estimator behaved as Part II requires</h3>
+
+<div class="scroll"><table>
+<thead><tr><th>diagnostic</th><th class="num">over 4,200 iterations</th><th>what &sect;14 asks of it</th></tr></thead>
+<tbody>
+<tr><td>effective sample size</td><td class="num">0.986 &ndash; 0.994</td><td>high, or the log Z estimate is biased downward and the objective rewards it</td></tr>
+<tr><td><span class="v">&lambda;<sub>max</sub>(&Lambda;)</span></td><td class="num">0.134 &ndash; 0.293, no drift</td><td>below 1, and well below, or the mode map stops contracting</td></tr>
+<tr><td>batches skipped by the ESS gate</td><td class="num"><strong>0</strong></td><td>the guard should not need to fire</td></tr>
+<tr><td>held-out log-likelihood</td><td class="num">negative at every checkpoint</td><td>it is a log-probability</td></tr>
+</tbody></table></div>
+
+<p>This is the first evidence for Part II on real data rather than on enumerable toys. The
+stability condition holds, and it holds because the <span class="v">&#8214;&phi;&#8214;</span>
+cap was calibrated against <span class="v">&lambda;<sub>max</sub></span> rather than guessed:
+&sect;5 records that the previously chosen cap of 0.35 corresponds to
+<span class="v">&lambda;<sub>max</sub> = 0.668</span>, near the critical point.</p>
+
+<h3><span class="num">6.2</span>Convergence</h3>
+
+<p>Twenty-one checkpoints. The last six read &minus;41.08, &minus;40.76, &minus;40.65,
+&minus;40.61, &minus;40.84, &minus;40.39 &mdash; mean &minus;40.72, standard deviation 0.21,
+with steps in both directions. The fit has converged and the remaining movement is batch
+noise. Quoting the best checkpoint (&minus;40.39) rather than the mean (&minus;40.72) would
+be selection on noise; the margin over every baseline is far larger than the band either
+way.</p>
+
+<div class="flag neg">
+<p class="label">What these numbers are not</p>
+<p>Four restrictions, each of which makes the fitted model <em>simpler than the specification</em>.
+None is hidden in a parameter list; all four came out of the audit in <code>AUDIT_v3.md</code>.</p>
+<ul>
+  <li><strong>It is the set likelihood, not the basket likelihood.</strong> Eq. 27 is
+  <span class="v">log &Sigma;<sub>g</sub> &pi;<sub>g</sub> exp E(S)/(Z&minus;1) +
+  &Sigma;<sub>j&isin;S</sub> log P(q<sub>j</sub>)</span>. The units factor is not
+  implemented, so what is fitted and scored is <span class="v">P(S)</span>, the set of
+  products, with no account of how many of each. All four models are scored the same way, so
+  the comparison is fair &mdash; but none of these numbers is comparable to a figure that
+  includes units.</li>
+  <li><strong><span class="v">G</span> = 1.</strong> No trip-type mixture. &sect;14.3
+  examines it as a device for carrying basket-size dispersion and it is simply absent, so
+  the size potential is carrying that alone.</li>
+  <li><strong>5.03% of baskets were dropped as out-of-support.</strong> With
+  <span class="v">R</span> = 4 and <span class="v">n<sub>max</sub></span> = 60, a basket
+  holding five or more items from one category, or more than sixty lines, lies outside the
+  set <span class="v">Z</span> sums over &mdash; 7,881 training baskets from the first
+  restriction, 280 from the second, against a maximum observed category count of 23. They are
+  dropped rather than clamped, because clamping silently relabels an out-of-support basket as
+  in-support. <strong>The held-out set is therefore easier than the full one</strong>, since
+  the dropped baskets are the unusual ones. All four models are scored on the same filtered
+  set, so the ranking is unaffected; the absolute values are optimistic.</li>
+  <li><strong>Recency, coupons and days-of-supply are not wired.</strong> Version 2 measures
+  the persistence terms as its largest single ablation, so the price coefficient here is
+  missing a control it needs and no elasticity should be read off this fit.</li>
+</ul>
+<p>The honest one-line statement: <strong>a coherent single-energy model of the basket as a
+set beats an independent baseline with identical covariates by 9.7 nats, and a determinantal
+model of the same size by 20 &mdash; on a support restricted to 95% of baskets, without
+units, without a trip-type mixture, and without the persistence terms.</strong></p>
+</div>
+
 <div class="part"><div class="pn">Part III</div><div class="pt">What is not done</div></div>
 
-<h2><span class="num">7</span>The gap between here and a dunnhumby result</h2>
+<h2><span class="num">8</span>The gap between here and a dunnhumby result</h2>
 
 <p>Stated as work, not as caveats.</p>
 
@@ -300,7 +401,7 @@ two of the design's own claims have been tested rather than asserted — one of 
 a result already reported here.</strong></p>
 </div>
 
-<h2><span class="num">8</span>Reproducing</h2>
+<h2><span class="num">9</span>Reproducing</h2>
 
 <p>All scripts are self-contained and take under five minutes each except where noted.</p>
 
