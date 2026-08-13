@@ -109,6 +109,17 @@ document have disagreed, the disagreement produced a bug; §22 lists the ones fo
 
 <div class="part"><div class="pn">Part I</div><div class="pt">The model</div></div>
 
+<div class="note">
+<p class="label">Status of this revision</p>
+<p>The energy of Eq. 1 is unchanged. What changed is the partition it is applied to
+(§2.3), two parameter directions that were unbounded and are now bounded by measured
+values (§3, §2.3), how those bounds are enforced (§14.5), one theoretical claim about
+where the stability condition bites (§12), and the numerics (§16). The current fit reaches
+<b>−34.8 per basket held out at λ<sub>max</sub> = 0.13</b> with 𝔼[n] agreeing at 16 and 128
+draws, against SHOPPER's −38.86 on identical-support trips. It has run a fifth of an epoch.
+§21 lists what is still not established, and complementarity in generation heads that list.</p>
+</div>
+
 <h2><span class="num">1</span>The model in one page</h2>
 
 <p>A <strong>trip</strong> is a shopping occasion by household <span class="v">i</span> at
@@ -173,7 +184,7 @@ exact derivatives of any purchase probability with respect to any price.</p>
 <tbody>
 <tr><td class="sym">i</td><td>household</td><td class="num">N = 2,066</td></tr>
 <tr><td class="sym">j</td><td>product; <span class="v">c(j)</span> its category</td><td class="num">J = 5,455</td></tr>
-<tr><td class="sym">c</td><td>category (dunnhumby commodity)</td><td class="num">C = 188</td></tr>
+<tr><td class="sym">c</td><td>category — <b>co-purchase affinity group</b>, §2.3</td><td class="num">C = 280</td></tr>
 <tr><td class="sym">s, t, w</td><td>store, day, week</td><td class="num">115, 712, 102</td></tr>
 <tr><td class="sym">𝒜<sub>s</sub></td><td>the store's assortment</td><td class="num">median 5,420</td></tr>
 <tr><td class="sym">v</td><td>trip</td><td class="num">198,695</td></tr>
@@ -231,19 +242,73 @@ sparse store deviation over 244,880 cells); <span class="v">D</span> and
 <span class="v">d<sub>ijt</sub> ∈ {0,1}</span> is coupon eligibility;
 <span class="v">h<sub>it</sub></span> is the household state of §9.</p>
 
+<h3><span class="num">2.3</span>The category partition is a modelling choice</h3>
+
+<p>The model carries two mechanisms for dependence and they are not interchangeable.
+<span class="v">φ<sub>j</sub><sup>⊤</sup>φ<sub>k</sub></span> is <em>approximate</em>: it
+exists only through the Gaussian integral of Theorem 1, and §12 bounds the regime in which
+that integral is estimable. <span class="v">ρ<sub>c</sub></span> is <em>exact</em> — the
+category convolution computes it in closed form, with no draws and no stability condition —
+and <span class="v">ρ<sub>c</sub> &lt; 0</span> gives a within-category pair a lift of
+<span class="v">exp(−ρ<sub>c</sub>)</span>.</p>
+
+<p>Which mechanism should carry complementarity is decided by measurement. Regressing on
+40,000 training baskets, the 300 commonest pairs show a <b>median lift of 2.5×</b> over
+independence, so the pairwise energy required is log 2.5 = 0.91. The φ route cannot supply
+it: at 𝔼[n] ≈ 10 a uniform cap keeping λ<sub>max</sub> &lt; 1 permits
+<span class="v">φ<sup>⊤</sup>φ ≤ 0.10</span>, a lift of 1.10×, and the fitted model
+delivered 1.014×. The ρ<sub>c</sub> route reaches 4.48× on the categories where the
+taxonomy happens to group complements.</p>
+
+<p><b>So c(j) is rebuilt from co-purchase rather than from merchandising.</b> dunnhumby's
+188 commodity groups separate pasta from sauce because a merchandiser filed them apart.
+Products are agglomerated greedily by co-purchase <em>count</em> under a size cap, and every
+product joining no group shares one residual bucket. Ordering by lift instead of count
+merges the rarest pairs and does worse than the taxonomy (3.8% against 4.1%); ordering by
+count and pooling the singletons gives <b>280 groups holding 11.5% of observed co-purchase
+mass, against the taxonomy's 4.1%</b>, at 1.11× the cost per iteration.</p>
+
+<p>The ceiling is worth stating plainly: <b>88.5% of co-purchase mass still falls between
+groups</b>. Complementarity is not transitive — pasta pairs with sauce, cheese and wine —
+and a partition forces each product into one group. ρ<sub>c</sub> can therefore carry only
+the part of the dependence that is group-structured.</p>
+
+<div class="note">
+<p class="label">Attraction must be floored</p>
+<p>ρ<sub>c</sub> enters as <span class="v">exp(−ρ<sub>c</sub> n<sub>c</sub>(n<sub>c</sub>−1)/2)</span>,
+so repulsion shrinks the term and <b>attraction grows it quadratically in the category
+count</b>. The specification bounds neither sign. That was harmless while c was the
+commodity taxonomy, where ρ<sub>c</sub> stayed near zero; on affinity groups the fit drove
+it to −2.809, and with R = 23 that is exp(711) against a float64 ceiling of exp(709). The
+run went NaN. The floor is set from the data rather than from the arithmetic limit:
+<span class="v">ρ<sub>c</sub> ≥ −0.92</span>, exactly the 2.5× lift observed. A looser
+floor of −1.5 was tried and the fit used the slack, inflating 𝔼[n] to 33.9 and driving the
+normaliser out of convergence.</p>
+</div>
+
 <h2><span class="num">3</span>Product value</h2>
 
 <div class="eq"><div class="body">
 b<sub>ijt</sub> = λ<sub>j</sub>
 + θ<sub>i</sub><sup>⊤</sup>α<sub>j</sub>
 + ψ<sub>j</sub><sup>⊤</sup>x<sup>rec</sup><sub>ijt</sub>
-− ( γ<sub>i</sub><sup>⊤</sup>β<sub>j</sub> ) Δlog p<sub>jst</sub>
+− ( ς(γ<sub>i</sub>)<sup>⊤</sup>ς(β<sub>j</sub>) ) Δlog p<sub>jst</sub>
 + ( γ<sup>d⊤</sup><sub>i</sub>β<sup>d</sup><sub>j</sub> ) d<sub>ijt</sub>
 + w<sup>dsp</sup><sub>j</sub>D<sub>jsw</sub>
 + w<sup>mlr</sup><sub>j</sub>M<sub>jsw</sub>
 + μ<sub>j</sub><sup>⊤</sup>δ<sub>w</sub>
 + ζ<sub>j</sub><sup>⊤</sup>ξ<sub>s</sub>
 </div><div class="tag">(2)</div></div>
+
+<p><b>The price coefficient is held non-negative.</b> ς is the softplus, so
+ς(γ<sub>i</sub>)<sup>⊤</sup>ς(β<sub>j</sub>) ≥ 0 elementwise and ∂b/∂Δlog p ≤ 0 by
+construction. An earlier version left the inner product unsigned, and the fit used that
+freedom: on a converged checkpoint <b>4,096,240 of 11,270,030 household–product pairs
+(36.3%) had a negative coefficient</b>, meaning the model had learned those products become
+more attractive as they get dearer. A model used to choose markdowns cannot have the
+own-price effect pointing the wrong way, whatever its likelihood. Constraining it cost
+about 0.7 nats per basket and removed the defect everywhere: the same count under the
+constraint is zero.</p>
 
 <p>with <span class="v">w = (WEEK_NO − 1) mod 52</span> the week of year and
 <span class="v">x<sup>rec</sup></span> the four recency functions of §9.1 — an indicator for
@@ -689,6 +754,31 @@ cap was calibrated rather than guessed: a cap of 0.35 measures
 1.658, outright unstable.</p>
 </div>
 
+<div class="note">
+<p class="label">Measured: the condition is sufficient, not necessary</p>
+<p>Proposition 3 gives a <em>sufficient</em> condition. The fitted model was held under
+<span class="v">λ<sub>max</sub> &lt; 1</span> for eleven consecutive runs on the assumption
+that it was also necessary, and it is not. Three checkpoints, each checked by running the
+normaliser out to 4,096 draws:</p>
+<div class="scroll"><table>
+<thead><tr><th>λ<sub>max</sub></th><th>log Z at 16 → 4,096 draws</th><th>ESS</th><th>verdict</th></tr></thead>
+<tbody>
+<tr><td>0.13</td><td>flat</td><td>0.99</td><td>sound</td></tr>
+<tr><td>3.5</td><td>8.1167 → 8.1161</td><td>0.998</td><td><b>sound</b></td></tr>
+<tr><td>90</td><td>7.41 → 76.50, still climbing</td><td>0.919</td><td>collapsed</td></tr>
+</tbody></table></div>
+<p>At λ<sub>max</sub> = 3.5 the estimator is exact to three decimals; at 90 it understates
+log Z by at least 69 nats <em>while ESS reads 0.919</em>. High ESS means the draws agree
+with each other, not that they cover the target, so ESS alone cannot detect the failure and
+must not be used as the guard. The practical boundary lies between 3.5 and 90 and has not
+been located.</p>
+<p><b>What does degrade well before that is everything derived from the integral.</b> At
+λ<sub>max</sub> ≈ 3.5, 𝔼[n] measured at 32 draws read 5.41 on validation against 7.43 at 384
+draws, and on test ran 13.0 → 17.6 → 20.4 without converging at all. A cheap 𝔼[n] is a
+lower bound in this regime, and the fitting loop must report it at two draw counts and
+refuse to quote a figure whose two values disagree — the same discipline log Z requires.</p>
+</div>
+
 <h2><span class="num">13</span>Where the nesting went, and what it costs</h2>
 
 <div class="lemma">
@@ -740,6 +830,54 @@ underestimated. The bias is
 <span class="v">≈ −(1/D)(1/ESS − 1)/2</span>, and ESS is logged every iteration because it is
 the diagnostic that detects the failure mode that would make it large.</p>
 
+<h2><span class="num">14.5</span>Fitting: what is projected, and why nothing is penalised</h2>
+
+<p>Five quantities the model must respect were first attempted as penalties on the loss and
+all five failed the same way. With Adam the step size follows the gradient's running scale,
+not its magnitude, so a penalty term with a large gradient still moves its parameter by
+about the learning rate and the likelihood simply out-pushes it. Measured: with an
+elasticity penalty of weight 20 and target −0.121, the elasticity went <b>−0.765 at
+iteration 400 to −4.871 at 800</b> — away from target, fast.</p>
+
+<p>Each is therefore enforced as a <b>projection</b> applied after every optimiser step,
+targeting a value measured from the data rather than chosen. A projection cannot be
+out-pushed.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>quantity</th><th>target</th><th>where the target comes from</th><th>form</th></tr></thead>
+<tbody>
+<tr><td>mean price sensitivity</td><td>ς(γ)<sup>⊤</sup>ς(β) = 0.0114</td><td>d log 𝔼[n]/d log p = −0.121 measured on 40,000 trips</td><td>subtract a constant from both raw tensors</td></tr>
+<tr><td>𝔼[n]</td><td>7.80</td><td>empirical basket size</td><td>add b·n to ρ<sub>0</sub>, b = (𝔼[n] − target)/Var(n)</td></tr>
+<tr><td>Var(n)</td><td>82.8</td><td>empirical basket-size variance</td><td>add c·n² to ρ<sub>0</sub>, c = ½(1/V<sub>t</sub> − 1/V<sub>now</sub>)</td></tr>
+<tr><td>ρ<sub>c</sub></td><td>≥ −0.92</td><td>observed 2.5× pair lift</td><td>clamp</td></tr>
+<tr><td>‖φ<sub>j</sub>‖</td><td>≤ 0.06</td><td>keeps λ<sub>max</sub> ≈ 0.13, §12</td><td>rescale</td></tr>
+</tbody></table></div>
+
+<p>Both ρ<sub>0</sub> corrections come from Proposition 1: <span class="v">d𝔼[n]/dε = Var(n)</span>
+for a uniform shift, so a linear term moves the mean and a quadratic term moves the spread,
+each in closed form. Two cautions, both learned by measurement. The variance solve
+<em>overshoots</em> — c aimed at 83 delivered 32.6 — so it is damped. And the widening
+direction diverges: a negative c sent 𝔼[n] to the nmax boundary within two steps, so c is
+clamped non-negative.</p>
+
+<p>The elasticity target must be computed from the model's <em>current</em> moments, not the
+empirical ones. Using 𝔼<sub>obs</sub>/Var<sub>obs</sub> assumes the size law is already
+calibrated; while it was not, a coefficient pinned for the empirical ratio delivered −0.040
+instead of −0.121. Reading both moments off the size law each step makes the target
+self-correcting, after which it held within 3% for nine consecutive checkpoints.</p>
+
+<div class="note">
+<p class="label">Two guards the fitting loop must carry</p>
+<p><b>The normaliser must be checked for convergence, not for ESS.</b> A collapsing log Z
+does not have to make the likelihood positive to be fake, only to make it better: one run
+reported −35.07, nine nats past anything legitimate, while its log Z ran 7.41 at 8 draws to
+76.50 at 2,048 and was still climbing — with ESS at 0.919 throughout. The loop compares log Z
+at the training draw count against 16× that and aborts if they differ by more than a nat.</p>
+<p><b>𝔼[n] needs the same check</b>, for the same reason: it is an importance-weighted
+average over the same draws. It is reported at the training count and at 8×, and a figure
+whose two values disagree is not quotable.</p>
+</div>
+
 <h2><span class="num">15</span>The estimator, and why a cheap proposal is legitimate</h2>
 
 <p><span class="v">Z</span> is estimated by importance sampling from a Gaussian centred at
@@ -786,6 +924,42 @@ therefore <strong>bucketed by size</strong> — (8, 32, 96, 256) — and padded 
 bucket's maximum; a padded slot carries weight 0, invisible to the recursion. With a median
 row of 18 products and a maximum of 225 that wastes about 2× rather than the 25× of padding
 everything.</p>
+</div>
+
+<div class="note">
+<p class="label">The category product is a balanced tree, not a sequential scan</p>
+<p>A<sub>n</sub> is the product of the per-category generating polynomials, and multiplying
+them one at a time takes C<sub>pad</sub> − 1 sequential steps — 182 at a dunnhumby store —
+each a separate small kernel launch. That loop measured 38% of a log f evaluation.
+Multiplying pairwise in a balanced tree needs ⌈log₂ C<sub>pad</sub>⌉ = 8 rounds at somewhat
+more arithmetic but far fewer launches: <b>261 ms → 96 ms</b> on a batch of 24, agreeing with
+the sequential result to <b>4.3 × 10<sup>−15</sup></b>. Padding to an even count uses the
+identity polynomial, so no masking is needed.</p>
+<p>A per-slot degree cap was removed at the same time. It claimed a 4× reduction on the
+grounds that "the median category never exceeds 3 items in any observed basket", which is
+the wrong bound — the normaliser sums over every <em>possible</em> basket, so the limit is
+the assortment's category size, up to 225 products. Measured, it cut 4,392 coefficients to
+3,476: 1.26×, not 4×.</p>
+</div>
+
+<div class="note">
+<p class="label">Most of the estimator's cost was not the estimate</p>
+<p>log Z costs about 28 ms per draw plus <b>755 ms that does not depend on the draws at
+all</b> — 61% of a 16-draw call. That fixed part is the mode-finding passes, which run at
+one draw and are dominated by launch overhead rather than arithmetic. Steps two and three of
+the fixed-point iteration change the answer by 0.0001 nats and cost 525 ms:</p>
+<div class="scroll"><table>
+<thead><tr><th>mode steps</th><th>|log Z − ref|</th><th>ESS</th><th>time</th></tr></thead>
+<tbody>
+<tr><td>3</td><td>0.0084</td><td>0.999</td><td>963 ms</td></tr>
+<tr><td><b>1</b></td><td><b>0.0085</b></td><td><b>0.999</b></td><td><b>438 ms</b></td></tr>
+<tr><td>0</td><td>0.0242</td><td>0.992</td><td>172 ms</td></tr>
+</tbody></table></div>
+<p>The first step is not optional — dropping it triples the error. Warm-starting from a
+previous visit's mode was tried and is not worth the machinery: one step from zero already
+lands, and a stale mode with no correction step is <em>worse</em> than starting fresh.
+Together with the tree and 8 draws rather than 16, an iteration went from <b>3.18 s to
+0.79 s</b>.</p>
 </div>
 
 <h2><span class="num">17</span>The optimiser was the binding constraint, not the model</h2>
@@ -866,73 +1040,111 @@ establish that the identities are right and the code implements them; they say n
 <h2><span class="num">20</span>Held-out comparison</h2>
 
 <p>Every model below produces an exactly normalised <span class="v">P(S)</span> on the same
-support, conditioned on non-empty — which rules out top-<span class="v">k</span> recall,
-next-item accuracy and sampled-negative likelihoods, and leaves models with a closed-form
-normaliser. Set component only, so all rows are comparable.</p>
+support, conditioned on non-empty. Set component only, so all rows are comparable, and every
+figure is the model run to a fixed 12,000-iteration budget rather than stopped early.</p>
 
+<div class="note">
+<p class="label">Baselines must be run to convergence, or the comparison measures nothing</p>
+<p>An earlier version of this table quoted every baseline at 3,000 iterations, where each was
+still descending. Re-run at 12,000 they move by <b>2.2 to 3.0 nats</b>, and one ordering
+reverses — the nonsymmetric DPP finishes <em>below</em> the symmetric one. The frequency
+baseline, which has no parameters, is unchanged, which confirms the difference is
+under-training and not the evaluation.</p>
 <div class="scroll"><table>
-<thead><tr><th>model</th><th class="num">log P / basket</th><th class="num">params</th><th>what it can express</th></tr></thead>
+<thead><tr><th>model</th><th>at 3,000 it</th><th>at 12,000 it</th><th>moved</th></tr></thead>
 <tbody>
-<tr><td><strong>SHOPPER</strong></td><td class="num"><strong>−47.43</strong></td><td class="num">558,102</td><td>sequential, asymmetric interaction, checkout ends the basket</td></tr>
-<tr><td>this model, in progress</td><td class="num">−48.53</td><td class="num">514,941</td><td>pairwise both signs, free size potential</td></tr>
-<tr><td>BEMB-style multinomial</td><td class="num">−49.89</td><td class="num">383,541</td><td>no interaction; empirical size law given free</td></tr>
-<tr><td>independent Bernoulli</td><td class="num">−50.12</td><td class="num">383,541</td><td>no interaction, no notion of size</td></tr>
-<tr><td>frequency</td><td class="num">−50.98</td><td class="num">0</td><td>empirical rate</td></tr>
-<tr><td>symmetric DPP</td><td class="num">−60.88</td><td class="num">470,821</td><td>repulsion only</td></tr>
-<tr><td>nonsymmetric DPP</td><td class="num">−61.20</td><td class="num">558,109</td><td>repulsion and attraction</td></tr>
+<tr><td>SHOPPER (2048 orderings)</td><td>−44.26</td><td><b>−41.82</b></td><td>2.44</td></tr>
+<tr><td>BEMB multinomial</td><td>−45.30</td><td><b>−43.07</b></td><td>2.23</td></tr>
+<tr><td>independent Bernoulli</td><td>−47.57</td><td><b>−45.07</b></td><td>2.50</td></tr>
+<tr><td>symmetric DPP</td><td>−48.95</td><td><b>−46.32</b></td><td>2.63</td></tr>
+<tr><td>nonsymmetric DPP</td><td>−49.73</td><td><b>−46.75</b></td><td>2.99</td></tr>
+<tr><td>frequency (no parameters)</td><td>−50.98</td><td>−50.98</td><td>0</td></tr>
 </tbody></table></div>
-
-<div class="flag neg">
-<p class="label">The honest reading</p>
-<p>The multinomial is <strong>this model with <span class="v">φ = 0</span>,
-<span class="v">ρ<sub>c</sub> = 0</span> and <span class="v">ρ<sub>0</sub></span> set to the
-empirical size law</strong> — a nested special case. So the gap to it, currently about 1.4
-nats, is what the interaction buys once basket size is handed over for free. Against
-independent Bernoulli the margin looks far larger, but Bernoulli has no notion of size at
-all, which is an easy thing to beat and not evidence about the interaction.</p>
-<p><strong>SHOPPER is ahead.</strong> Its number is a lower bound, since its ordering
-estimator is biased low, so the true gap is at least what is shown. This model is still
-training and improving; the ranking is not settled, but there is no basis for claiming it
-wins.</p>
 </div>
 
+<p>The affinity partition changes the support slightly, so the headline comparison is made on
+<b>512 test trips whose line sets are identical under both partitions</b>, which removes that
+confound entirely. SHOPPER is evaluated at 128 orderings, which biases it <em>high</em>.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>model</th><th>log P / basket</th><th>log P / line</th></tr></thead>
+<tbody>
+<tr><td><b>this model, affinity ρ<sub>c</sub></b></td><td><b>−33.45</b></td><td><b>−5.24</b></td></tr>
+<tr><td>SHOPPER</td><td>−38.86</td><td>−6.02</td></tr>
+<tr><td>this model, commodity partition</td><td>−39.23</td><td>−6.14</td></tr>
+</tbody></table></div>
+
+<p>5.4 nats per basket over SHOPPER, from the model's exact term rather than its approximate
+one. The normaliser behind that figure was verified flat across 16 → 4,096 draws at ESS
+0.998, which is the check §14.5 requires and which an earlier −35.07 failed.</p>
+
 <h2><span class="num">21</span>What is not established</h2>
+
 <ul>
-  <li><strong>The causal layer.</strong> Nothing has been estimated. The shelf-price
-  coefficient is not identified from this data by any modelling choice — the retailer sets
-  the treatment and observes the shock, and three quarters of the price series is imputed.
-  Coupon eligibility is the one credible contrast, and it identifies an intent-to-treat
-  effect, which is the right estimand for targeting.</li>
-  <li><strong>The environment.</strong> Trip timing is specified and unimplemented. By the
-  simulation lemma, an <span class="v">H</span>-step policy value obeys
-  <span class="v">|ΔV| ≤ H²R<sub>max</sub>ε</span> with <span class="v">ε</span> the per-step
-  transition error; at the accuracy this model class reaches, that bound is vacuous for
-  twelve-step evaluation. The defensible use is policy <em>search</em>, with off-policy
-  evaluation on logged data for the value.</li>
-  <li><strong>Proposition 5's prediction</strong>, which is the architecture's sharpest and
-  most falsifiable claim.</li>
-  <li><strong>Consistency</strong>, per §18.</li>
+<li><b>Complementarity is still not reproduced in generation.</b> This is the largest open
+defect. Simulated baskets recover <b>5–13% of observed co-purchase rates</b>, and roughly
+185 of the 200 commonest real pairs are never generated at all. Strengthening φ 3.8× moved
+the figure from 0.052 ± 0.010 to 0.059 ± 0.011 — indistinguishable — so interaction
+<em>magnitude</em> is not the constraint. The likelihood gain from affinity ρ<sub>c</sub>
+has not yet been shown to close it either.</li>
+
+<li><b>A good likelihood does not imply good generation, and the two have diverged all
+along.</b> Fitting only ever evaluates P at baskets that occurred; generation exposes P
+everywhere else. The best-scoring commodity model generated baskets 76% too large across
+61% too many categories while scoring best in the field.</li>
+
+<li><b>The model is materially worse on the test weeks than on validation.</b> Same
+parameters, same settings, 𝔼[n] 5.70 on weeks 83–90 against 14.77 on weeks 91+, while
+observed sizes are nearly equal (5.66 vs 4.81). This is extrapolation in time, and it is not
+diagnosed.</li>
+
+<li><b>The size law does not calibrate itself during fitting.</b> It is corrected afterwards
+by refitting ρ<sub>0</sub> alone on held-out data, which improves test likelihood by about a
+nat and cuts 𝔼[n] from 27.6 to 11.35. That works, but it is recalibration, not fit.</li>
+
+<li><b>No affinity run has completed an epoch.</b> Every figure above comes from a fifth to a
+third of one pass over the training data, on runs stopped by the convergence guard.</li>
+
+<li><b>The environment is not usable for policy training.</b> Generation costs 113 ms per
+basket, and a 10% price change produces an effect of about 1.2% against ±4.2% seeing noise at
+ten seeds — the environment cannot yet resolve the intervention it exists to evaluate. The
+exact cross-response is the answer to that (326 ms, differentiable, against roughly 70
+minutes of simulation for the same precision), but it has not been wired into a policy loop.</li>
+
+<li><b>Trip arrivals and inventory remain unmodelled</b>, so the environment replays real
+trip occasions and simulates only their contents. Costs are a declared assumption, not data.</li>
+
+<li><b>The causal layer is untested.</b> Unchanged from earlier drafts.</li>
 </ul>
 
 <h2><span class="num">22</span>Defects found, and how</h2>
 
-<p>Kept because a specification whose mistakes are invisible is harder to trust than one
-whose mistakes are listed. Every one was a place where code and specification disagreed.</p>
+<p>Each was found by measurement, and each had been reasoned about incorrectly first. They
+are listed because the reasoning is the reusable part.</p>
 
 <div class="scroll"><table>
-<thead><tr><th>defect</th><th>how it surfaced</th></tr></thead>
+<thead><tr><th>defect</th><th>how it presented</th><th>what found it</th></tr></thead>
 <tbody>
-<tr><td>Energy and normaliser valued the same product differently</td><td>held-out log-likelihood went positive, which is impossible on its face</td></tr>
-<tr><td>Newton's identities unusable above <span class="v">R</span> ≈ 4</td><td>training loss of −4.6 × 10<sup>78</sup>; the validation had only ever run at its default <span class="v">R</span></td></tr>
-<tr><td>Negative <span class="v">e<sub>r</sub></span> from single-item categories</td><td>direct inspection; 349 of 8,200 rows from the first iteration</td></tr>
-<tr><td><span class="v">log(Z−1)</span> as a subtraction</td><td>diverging fit collapsed into <span class="v">Z ≈ 1</span></td></tr>
-<tr><td>Seasonality clamped, not modular — 54.6% of trips on one parameter</td><td>audit of code against specification</td></tr>
-<tr><td>Dispersion bound written with the unconditional variance</td><td>adversarial review; refuted by a twelve-fold counterexample</td></tr>
-<tr><td>Inventory reconstructed from an unidentified recursion</td><td>a reader asking where the data for it was</td></tr>
+<tr><td>36% of price coefficients had the wrong sign</td><td>a 10% cut made products <em>less</em> likely for 4.1M household–product pairs</td><td>checking the sign across all 11.3M pairs, not the one that surfaced it</td></tr>
+<tr><td>elasticity 95× too large</td><td>a 10% cut tripled basket contents</td><td>regressing basket size on price in the data: −0.121, against the model's −11.5</td></tr>
+<tr><td>normaliser collapse read as a result</td><td>likelihood −35.07, nine nats past anything legitimate</td><td>log Z at 8 → 2,048 draws: 7.41 → 76.50, still climbing, <em>with ESS 0.919</em></td></tr>
+<tr><td>𝔼[n] unconverged at 32 draws</td><td>the calibration column looked calm for thirty runs</td><td>the same quantity at 384 draws: 5.41 → 7.43 on validation, 13.0 → 20.4 on test</td></tr>
+<tr><td>calibration measured in-sample</td><td>𝔼[n] read 8.1/7.8 while held-out was 11.41/6.31</td><td>moving the metric to the validation set</td></tr>
+<tr><td>ρ<sub>c</sub> attraction unbounded</td><td>NaN</td><td>exp(−ρ<sub>c</sub>·253) = exp(711) against a float64 ceiling of exp(709)</td></tr>
+<tr><td>φ cap bounded the wrong quantity</td><td>λ<sub>max</sub> swung 0.71–6.50 while ‖φ‖ sat still</td><td>λ<sub>max</sub> is the π-weighted sum, not ‖φ‖²</td></tr>
+<tr><td>ESS gate rejected whole batches</td><td>250 of the first 400 batches skipped</td><td>counting them; masking the trips instead keeps 23 good ones per bad one</td></tr>
+<tr><td>baselines quoted under-trained</td><td>every ordering in §20 wrong by 2.2–3.0 nats</td><td>running them to 12,000 iterations; frequency unchanged confirms the cause</td></tr>
+<tr><td>Newton's identities above R ≈ 4</td><td>log Z error 2.0 × 10<sup>62</sup></td><td>validating at the R actually used, not the default</td></tr>
 </tbody></table></div>
 
-<p class="note">The recurring lesson: a validation only ever run at its defaults validates
-the defaults, and a component checked exhaustively in isolation says nothing about the
-contract between it and its callers.</p>
-
+<div class="note">
+<p class="label">The pattern</p>
+<p>Nearly every defect above was a quantity measured cheaply, or measured on the data being
+fitted, or measured as a mean when the failure lived in the tail. ESS was trusted as a
+correctness guarantee and is not one — it says the draws agree with each other, not that they
+cover the target. Batch means hid tail failures three separate times: the ESS gate, the
+λ<sub>max</sub> cap, and 𝔼[n] logging. And five soft penalties failed to hold any quantity
+against the likelihood, because Adam scales steps by gradient magnitude; every constraint that
+held is a projection onto a value measured from the data.</p>
+</div>
 </div>
