@@ -151,6 +151,55 @@ def check_goals(vals):
     return "  ".join(out)
 
 
+def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes):
+    """Everything needed to continue training, not just the weights.
+
+    Saving only m.state_dict() makes --resume a warm INITIALISATION rather than a
+    continuation: Adam's first and second moment estimates restart at zero, so the first
+    steps after a resume are effectively unscaled, and CosineAnnealingLR restarts at the
+    full learning rate however far through the schedule the run had got.  Both produce a
+    transient that is easy to mistake for the model doing something.
+
+    The two RNG streams are carried as well, so a resumed run draws the batches and the
+    proposal noise it would have drawn had it never stopped -- otherwise "resume" silently
+    replays the same trips from the start of the stream.
+
+    Written under a temporary name and renamed, because torch.save is not atomic and an
+    eval that is interrupted mid-write leaves a truncated file where the best checkpoint
+    used to be.
+    """
+    blob = dict(
+        format=2,
+        model=m.state_dict(),
+        opt=opt.state_dict(),
+        sched=sched.state_dict() if sched is not None else None,
+        iter=it,
+        best_vb=best_vb,
+        best_it=best_it,
+        lz_strikes=lz_strikes,
+        rng_np=rng.bit_generator.state,
+        rng_torch=gen.get_state(),
+    )
+    tmp = path + ".tmp"
+    torch.save(blob, tmp)
+    os.replace(tmp, path)
+
+
+def load_ckpt(path, m):
+    """Load a checkpoint of either format; returns the extra state or None.
+
+    format 2 is the dict written by save_ckpt.  Anything else is a bare state_dict from
+    run60 and earlier, which carries weights only -- those resume as before, and the log
+    says so rather than implying a continuation that cannot happen.
+    """
+    blob = torch.load(path, map_location="cpu", weights_only=False)
+    if isinstance(blob, dict) and blob.get("format") == 2:
+        missing, _ = m.load_state_dict(blob["model"], strict=False)
+        return blob, [k for k in missing if k != "cat_of"]
+    missing, _ = m.load_state_dict(blob, strict=False)
+    return None, [k for k in missing if k != "cat_of"]
+
+
 def evaluate(m, B, trips, draws, gen, chunk=48, use_units=True):
     """Returns (set per basket, set per line, units per basket, total per basket).
 
@@ -257,9 +306,17 @@ def main(a):
             m.rho_0_free.copy_(r0[1:])
         log(f"rho_0 initialised at the empirical size law "
             f"(mean {float((cnt/cnt.sum() * np.arange(a.nmax+1)).sum()):.2f} lines)")
+    resume_blob = None
     if a.resume:
-        m.load_state_dict(torch.load(a.resume))
-        log(f"resumed from {a.resume}")
+        resume_blob, _miss = load_ckpt(a.resume, m)
+        if _miss:
+            raise SystemExit(f"resume checkpoint is missing fitted parameters: {_miss}")
+        if resume_blob is None:
+            log(f"resumed WEIGHTS ONLY from {os.path.basename(a.resume)} "
+                f"(pre-format-2 checkpoint: no optimiser, schedule or RNG state to restore)")
+        else:
+            log(f"resumed from {os.path.basename(a.resume)} at iteration "
+                f"{resume_blob['iter']} -- optimiser, schedule and RNG restored")
     if a.freeze_rho0:
         # Freeze rho_0 at the empirical size law.
         #
@@ -283,6 +340,20 @@ def main(a):
              if a.cosine else None)
     rng = np.random.default_rng(a.seed)
     gen = torch.Generator().manual_seed(a.seed)
+    it0 = 0                                   # iterations already done, for a continuation
+    if resume_blob is not None:
+        opt.load_state_dict(resume_blob["opt"])
+        if sched is not None and resume_blob.get("sched") is not None:
+            sched.load_state_dict(resume_blob["sched"])
+        rng.bit_generator.state = resume_blob["rng_np"]
+        gen.set_state(resume_blob["rng_torch"])
+        it0 = int(resume_blob["iter"])
+        log(f"  continuing from iteration {it0}: lr {opt.param_groups[0]['lr']:.6f} "
+            f"(a fresh schedule would start at {a.lr:.6f}), "
+            f"Adam state for {len(opt.state)} tensors")
+        if it0 >= a.iters:
+            raise SystemExit(f"--iters {a.iters} is at or below the resumed iteration "
+                             f"{it0}; nothing left to run")
 
     log("")
     log(f"timing probe: {a.probe} iterations at batch {a.batch}, {a.draws} draws")
@@ -290,7 +361,13 @@ def main(a):
     hist, ess_hist, emin_hist, en_hist, enmax_hist, ce_hist = [], [], [], [], [], []
     el_hist = []
     n_skip = n_drop = n_redo = 0
+    # Carry the best-so-far across a resume.  Starting it at -inf would let the first eval
+    # of the continuation overwrite v3_<label>_best.pt with a WORSE model purely because it
+    # is the first one this process has seen.
     best_vb, best_it = -1e18, -1
+    if resume_blob is not None and resume_blob.get("best_vb") is not None:
+        best_vb, best_it = float(resume_blob["best_vb"]), int(resume_blob["best_it"])
+        log(f"  best-so-far carried over: set/basket {best_vb:.4f} at iteration {best_it}")
     # Start on the SAFE side.  lam_seen begins high so the mixture is on from iteration 1
     # and is switched off only once lambda_max has been MEASURED below the threshold.
     # Starting at 0 meant the first eval_every iterations always ran the single proposal --
@@ -300,6 +377,7 @@ def main(a):
     lam_seen = float("inf")
     obs_mean = float(np.mean(D["trip_nlines"][tr]))
     m.project(a.phi_max)
+    lz_strikes = int(resume_blob['lz_strikes']) if resume_blob else 0
     phi_mask = None
     if a.phi_mask:
         _mk = np.load(a.phi_mask)
@@ -311,7 +389,7 @@ def main(a):
             m.phi.mul_(phi_mask)          # applied at init too, not only after each step
         log(f"phi restricted to {int(_mk.sum())} of {_mk.shape[0]} products "
             f"({100.0*_mk.sum()/_mk.shape[0]:.2f}%) from {os.path.basename(a.phi_mask)}")
-    for it in range(1, a.iters + 1):
+    for it in range(it0 + 1, a.iters + 1):
         sub = tr[rng.choice(len(tr), size=a.batch, replace=False)]
         ix, ctx, lctx, hh, li, lt, lc, lq = B.make(sub)
         m.house, m.ctx = hh, ctx
@@ -771,24 +849,36 @@ def main(a):
                 ("data-kept", n_drop < 0.02 * it * a.batch),
             ))
             log(f"  GOALS  {check_goals(g_ok)}   sampled {samp_n:.1f} vs analytic {an_n:.1f}")
-            if gap > a.lz_gap:
+            # The gap is measured on ONE batch of 24 trips at one seed, so it is a noisy
+            # statistic, and aborting on a single crossing is a one-sample test.  run60's
+            # last twelve readings were
+            #   0.322 0.206 0.563 0.357 0.661 0.558 0.426 0.250 0.433 0.155 0.805 1.086
+            # -- noise around ~0.45 with no trend, where a genuine runaway looks like run59's
+            # 0.198 0.404 0.359 0.753 0.843 1.087.  run57 likewise spiked to 0.846 and fell
+            # straight back to 0.003.  Requiring consecutive violations separates the two
+            # without weakening the level: a real collapse is monotone and trips every
+            # checkpoint, while noise does not repeat.
+            lz_strikes = lz_strikes + 1 if gap > a.lz_gap else 0
+            if lz_strikes >= a.lz_strikes:
                 log(f"  ABORT: the normaliser is not converged at the training draw count "
                     f"({gap:+.3f} > {a.lz_gap}). Any likelihood gain from here is the "
                     f"estimate collapsing, not the model improving.")
                 return
-            torch.save(m.state_dict(), os.path.join(OUT, f"v3_{a.label}.pt"))
+            save_ckpt(os.path.join(OUT, f"v3_{a.label}.pt"), m, opt, sched, it,
+                      rng, gen, best_vb, best_it, lz_strikes)
             # Keep the BEST checkpoint, not just the last.  The file above is overwritten
             # every eval, so an aborted run leaves whatever the final passing eval held --
             # run37 happened to stop near its best by luck, not design.
             if vb > best_vb:
                 best_vb, best_it = vb, it
-                torch.save(m.state_dict(),
-                           os.path.join(OUT, f"v3_{a.label}_best.pt"))
+                save_ckpt(os.path.join(OUT, f"v3_{a.label}_best.pt"), m, opt, sched,
+                          it, rng, gen, best_vb, best_it, lz_strikes)
                 json.dump(dict(iter=it, set_per_basket=vb, epoch=ep),
                           open(os.path.join(OUT, f"v3_{a.label}_best.json"), "w"), indent=2)
     vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 4, gen, use_units=a.units)
     log(f"final  set/basket {vb:.4f}  set/line {vl:.4f}  units/basket {vu:.4f}  total/basket {vt:.4f}")
-    torch.save(m.state_dict(), os.path.join(OUT, f"v3_{a.label}.pt"))
+    save_ckpt(os.path.join(OUT, f"v3_{a.label}.pt"), m, opt, sched, a.iters,
+              rng, gen, best_vb, best_it, lz_strikes)
     json.dump(dict(set_per_basket=vb, set_per_line=vl, units_per_basket=vu,
                    total_per_basket=vt, n_par=npar, iters=a.iters),
               open(os.path.join(OUT, f"v3_{a.label}.json"), "w"), indent=2)
@@ -840,6 +930,7 @@ if __name__ == "__main__":
     p.add_argument("--phi-whiten", type=float, default=0.0)
     p.add_argument("--adapt-draws", type=int, default=1)
     p.add_argument("--lz-gap", type=float, default=1.0)
+    p.add_argument("--lz-strikes", type=int, default=1)
     p.add_argument("--rho-c-floor", type=float, default=-1.5)
     p.add_argument("--mix-lam", type=float, default=1.0)
     p.add_argument("--aniso", type=float, default=2.0)
