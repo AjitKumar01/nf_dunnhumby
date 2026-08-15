@@ -300,6 +300,17 @@ def main(a):
     lam_seen = float("inf")
     obs_mean = float(np.mean(D["trip_nlines"][tr]))
     m.project(a.phi_max)
+    phi_mask = None
+    if a.phi_mask:
+        _mk = np.load(a.phi_mask)
+        if _mk.shape[0] != m.phi.shape[0]:
+            raise SystemExit(f"mask covers {_mk.shape[0]} products, model has "
+                             f"{m.phi.shape[0]} -- wrong partition or catalogue")
+        phi_mask = torch.as_tensor(_mk, dtype=m.phi.dtype).unsqueeze(1)
+        with torch.no_grad():
+            m.phi.mul_(phi_mask)          # applied at init too, not only after each step
+        log(f"phi restricted to {int(_mk.sum())} of {_mk.shape[0]} products "
+            f"({100.0*_mk.sum()/_mk.shape[0]:.2f}%) from {os.path.basename(a.phi_mask)}")
     for it in range(1, a.iters + 1):
         sub = tr[rng.choice(len(tr), size=a.batch, replace=False)]
         ix, ctx, lctx, hh, li, lt, lc, lq = B.make(sub)
@@ -591,6 +602,17 @@ def main(a):
                     _mask = torch.zeros_like(_nrm, dtype=torch.bool)
                     _mask[_keep] = True
                     m.phi.mul_(_mask.unsqueeze(1).to(m.phi.dtype))
+            # A STATIC mask chosen from co-purchase, which is what --phi-topk should have
+            # been.  Selecting by current norm picks products where phi is unpenalised
+            # rather than useful: run57's mask drifted to rare items (median frequency rank
+            # 2138 of 5455) and ZERO of the 200 most co-purchased pairs had both products
+            # retained, so phi_j.phi_k was identically zero on every pair the evaluation
+            # scores.  Ranking by co-purchase count instead puts 98% of those pairs inside
+            # the mask at a 3% budget -- and, being fixed in advance, it can be checked
+            # before the run rather than diagnosed after it.
+            if phi_mask is not None:
+                with torch.no_grad():
+                    m.phi.mul_(phi_mask)
             # Var(n) is the quantity every other failure runs through; project it too.
             if a.var_target != 0:
                 _n = torch.arange(1, pn.shape[1] + 1, dtype=pn.dtype)
@@ -807,6 +829,7 @@ if __name__ == "__main__":
     p.add_argument("--elast-target", type=float, default=-0.121)
     p.add_argument("--phi-init", type=float, default=0.03)
     p.add_argument("--phi-topk", type=float, default=0.0)
+    p.add_argument("--phi-mask", default="")
     p.add_argument("--ess-floor", type=float, default=0.30)
     p.add_argument("--ess-floor-min", type=float, default=0.15)
     p.add_argument("--min-keep", type=float, default=0.5)
