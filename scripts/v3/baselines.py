@@ -302,6 +302,7 @@ if __name__ == "__main__":
     p.add_argument("--batch", type=int, default=32)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--wd", type=float, default=1e-5)
+    p.add_argument("--resume", type=int, default=0)
     p.add_argument("--cosine", type=int, default=1)
     p.add_argument("--n-val", type=int, default=512)
     p.add_argument("--skip", nargs="*", default=[])

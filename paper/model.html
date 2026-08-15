@@ -903,6 +903,23 @@ that makes the estimator correct is the condition that makes fitting its covaria
 unnecessary.</em> The mode itself still matters: dropping it costs ESS and an order of
 magnitude.</p>
 
+<div class="note">
+<p class="label">Annealed importance sampling was tried and is not needed</p>
+<p>When ESS fell during fitting, the natural reading was that the single-Gaussian proposal
+was failing against a multimodal posterior, and that annealing between
+<span class="v">N(0,I)</span> and the target would fix it. Both halves of that were wrong.
+The implementation double-counted — the importance weight already carries the whole of
+log f, and the annealing correction was added on top of it — so log Z drifted 20.3 → 20.8 →
+22.3 as steps went 4 → 8 → 16, diverging rather than converging, with ESS falling 0.584 →
+0.255.</p>
+<p>More usefully, the <em>premise</em> does not survive measurement. On the same trips,
+plain importance sampling gives 10.0178 at 8 draws, 10.0072 at 64, 10.0086 at 512 and
+10.0075 at 2,048 — converged to four decimals across a 256× increase, at ESS 0.998, on a
+model with λ<sub>max</sub> ≈ 2.5. The cheap proposal is not the problem in that regime. The
+estimator trouble is confined to a small set of trips, and to λ<sub>max</sub> far higher than
+the fitted model reaches.</p>
+</div>
+
 <h2><span class="num">16</span>Numerical requirements</h2>
 
 <div class="flag neg">
@@ -1036,6 +1053,22 @@ interval must come from a household block bootstrap over refits, which has not b
 <p class="note">Every enumerable check runs on 8–16 products in 1–4 categories. They
 establish that the identities are right and the code implements them; they say nothing about
 5,420 products, which is what the fit is for.</p>
+
+<div class="note">
+<p class="label">Where each figure comes from</p>
+<div class="scroll"><table>
+<thead><tr><th>figure</th><th>fit</th><th>state</th></tr></thead>
+<tbody>
+<tr><td>−33.45 / −38.86 / −39.23 on identical-support trips</td><td>affinity ρ<sub>c</sub> with ‖φ‖ ≤ 0.20; SHOPPER at 12,000 it; commodity model after ρ<sub>0</sub> recalibration</td><td>0.20 epoch, stopped by the convergence guard</td></tr>
+<tr><td>−34.0 at λ<sub>max</sub> = 0.11, 𝔼[n] 6.9/7.2 agreeing at 8× draws</td><td>affinity ρ<sub>c</sub> with ‖φ‖ ≤ 0.06</td><td>0.21 epoch, in progress</td></tr>
+<tr><td>baseline table at 12,000 iterations</td><td>six baselines, cosine schedule</td><td>1.83 epochs, complete</td></tr>
+<tr><td>co-occurrence 0.052–0.131, basket size 1.5–5.1× too large</td><td>commodity and affinity fits, sampled generation</td><td>various, all under one epoch</td></tr>
+<tr><td>elasticity −0.114 ± 0.002 against −0.121</td><td>commodity fit after recalibration</td><td>1.83 epochs, complete</td></tr>
+</tbody></table></div>
+<p>No fit of the affinity partition has yet completed an epoch, and the two strongest
+likelihood figures come from runs stopped early. They are reported because the quantities
+behind them were verified converged, not because the fits were finished.</p>
+</div>
 
 <h2><span class="num">20</span>Held-out comparison</h2>
 

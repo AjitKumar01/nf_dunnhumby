@@ -41,6 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..", "..")
 BI = os.path.join(ROOT, "basket_input")
 CACHE = os.path.join(BI, "v3_index.npz")
+CACHE_AFF = os.path.join(BI, "v3_index_affinity.npz")
 
 
 def log(m):
@@ -48,6 +49,9 @@ def log(m):
 
 
 def build(min_lines_per_store_cat=1, force=False):
+    global CACHE
+    if os.environ.get("V3_AFFINITY", "0") == "1":
+        CACHE = CACHE_AFF
     """Assortment index plus the trip table.  Cached; pass force=True to rebuild."""
     if os.path.exists(CACHE) and not force:
         z = np.load(CACHE, allow_pickle=True)
@@ -57,7 +61,20 @@ def build(min_lines_per_store_cat=1, force=False):
     meta = json.load(open(os.path.join(BI, "meta.json")))
     J, S, C = meta["n_items"], meta["n_stores"], meta["n_commodities"]
     b = pd.read_parquet(os.path.join(BI, "baskets.parquet"))
-    it = pd.read_parquet(os.path.join(BI, "items.parquet"))[["item_id", "cat_id"]]
+    # The category partition is a modelling choice, not a fact about the data.  rho_c is
+    # the model's EXACT dependence mechanism -- the convolution computes it with no draws
+    # and no stability condition -- while phi_j'phi_k needs the Gaussian integral and
+    # section 14's lambda_max < 1.  Real baskets need a 2.5x lift on common pairs; the phi
+    # route needs lambda_max ~ 9 and the normaliser collapses there, while rho_c already
+    # reaches 4.48x.  So the partition is rebuilt around what shoppers buy together instead
+    # of how a merchandiser filed things, letting the exact term carry the complementarity.
+    _aff = os.path.join(BI, "items_affinity.parquet")
+    if os.environ.get("V3_AFFINITY", "0") == "1" and os.path.exists(_aff):
+        it = pd.read_parquet(_aff)[["item_id", "cat_id"]]
+        C = int(it.cat_id.max()) + 1        # the partition sets C, not meta.json
+        log(f"category partition: AFFINITY groups from {os.path.basename(_aff)}, C = {C}")
+    else:
+        it = pd.read_parquet(os.path.join(BI, "items.parquet"))[["item_id", "cat_id"]]
     b = b.merge(it, on="item_id", how="left")
     log(f"{len(b):,} purchase rows, {J:,} products, {S} stores, {C} categories")
 

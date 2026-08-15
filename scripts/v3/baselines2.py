@@ -226,6 +226,16 @@ def size_law(D, nmax=120):
 
 
 def run(name, model, Bt, tr, va, a, **kw):
+    # Save, and be able to resume.
+    #
+    # Only SHOPPER wrote a checkpoint, so when it turned out that 12,000 iterations still
+    # left every baseline descending -- 0.12 nats/1000 for SHOPPER, 0.43 for the DPP --
+    # their training could not be continued and had to be thrown away and restarted.  Any
+    # model that might need a longer run must be resumable, which is all of them.
+    ck = os.path.join(OUT, f"v3_bl_{name}.pt")
+    if a.resume and os.path.exists(ck):
+        model.load_state_dict(torch.load(ck, map_location="cpu"))
+        log(f"   {name}: resumed from {os.path.basename(ck)}")
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, weight_decay=a.wd)
     # Cosine decay, for the same reason the main model needed it: at a constant step size
     # the training loss stops falling well before an epoch and then oscillates, and a
@@ -249,6 +259,10 @@ def run(name, model, Bt, tr, va, a, **kw):
             ep = it * a.batch / len(tr)
             log(f"   {name:10s} it {it:4d} ep {ep:5.3f}  train {float(loss):9.3f}  "
                 f"val/basket {vb:9.3f}  val/line {vl:7.4f}  {(time.time()-t0)/60:.1f} min")
+            os.makedirs(OUT, exist_ok=True)
+            torch.save(model.state_dict(), ck)
+    os.makedirs(OUT, exist_ok=True)
+    torch.save(model.state_dict(), ck)
     return ev(model, Bt, va[:a.n_val], **kw)
 
 
@@ -330,6 +344,7 @@ if __name__ == "__main__":
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--wd", type=float, default=1e-5)
+    p.add_argument("--resume", type=int, default=0)
     p.add_argument("--cosine", type=int, default=1)
     p.add_argument("--n-val", type=int, default=256)
     p.add_argument("--skip", nargs="*", default=[])
