@@ -939,14 +939,15 @@ class RaggedModel(torch.nn.Module):
     def loglik(self, ix, line_item, line_trip, line_cat, n_draws=32,
                generator=None, return_ess=False, line_ctx=None, units=None,
                return_size=False, z_init=None, return_mode=False, mode_steps=1,
-               mix_scales=None, aniso=0.0):
+               mix_scales=None, aniso=0.0, antithetic=False):
         """log P(S | S non-empty) = E(S) - log(Z - 1), with log(Z - 1) computed directly
         rather than by subtracting 1 from Z."""
         out = self.log_Z(ix, n_draws=n_draws, generator=generator,
                          return_ess=return_ess, drop_empty=True,
                          return_size=return_size, z_init=z_init,
                          return_mode=return_mode, mode_steps=mode_steps,
-                         mix_scales=mix_scales, aniso=aniso)
+                         mix_scales=mix_scales, aniso=aniso,
+                         antithetic=antithetic)
         out = list(out) if isinstance(out, tuple) else [out]
         lz1 = out.pop(0)
         ess = out.pop(0) if return_ess else None

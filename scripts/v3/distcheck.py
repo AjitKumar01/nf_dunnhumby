@@ -76,7 +76,18 @@ def main(a):
     # fails on them.  cat_of is a derived product -> category map, not a fitted parameter,
     # so it is rebuilt from the data exactly as fit.py does rather than left at zeros --
     # the point of a standalone evaluator is that it scores OLD runs on the same footing.
-    sd = torch.load(a.ckpt, map_location="cpu")
+    # Three checkpoint shapes now exist and all must score on the same footing:
+    #   run39 and earlier  a bare state_dict, no cat_of buffer
+    #   run60-run61        a bare state_dict, with cat_of
+    #   run62 onward       the format-2 dict from fit.save_ckpt, weights under "model"
+    # Reading a format-2 blob as a state_dict matches nothing, so every parameter comes back
+    # missing -- which the guard below turns into a hard stop rather than a silent scoring of
+    # an untrained model.
+    sd = torch.load(a.ckpt, map_location="cpu", weights_only=False)
+    if isinstance(sd, dict) and sd.get("format") == 2:
+        log(f"format-2 checkpoint: iteration {sd.get('iter')}, "
+            f"cum_iter {sd.get('cum_iter', '(pre-counter)')}")
+        sd = sd["model"]
     missing, unexpected = m.load_state_dict(sd, strict=False)
     with torch.no_grad():
         _co = torch.zeros(J, dtype=torch.long)

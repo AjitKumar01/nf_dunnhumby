@@ -151,7 +151,8 @@ def check_goals(vals):
     return "  ".join(out)
 
 
-def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes):
+def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes,
+              cum_iter=None):
     """Everything needed to continue training, not just the weights.
 
     Saving only m.state_dict() makes --resume a warm INITIALISATION rather than a
@@ -174,6 +175,13 @@ def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes):
         opt=opt.state_dict(),
         sched=sched.state_dict() if sched is not None else None,
         iter=it,
+        # Iterations of training this MODEL has had, across every lineage that
+        # produced it -- not this process's counter.  They diverge whenever a
+        # resume cannot restore `it`: run61 loaded run60's weights from a
+        # pre-format-2 file, restarted at 1, and silently dropped run60's 2,300
+        # iterations (0.351 epochs).  Every run after inherited the offset, so
+        # run63 reported 0.472 epochs against a true 0.823.
+        cum_iter=int(cum_iter if cum_iter is not None else it),
         best_vb=best_vb,
         best_it=best_it,
         lz_strikes=lz_strikes,
@@ -341,6 +349,7 @@ def main(a):
     rng = np.random.default_rng(a.seed)
     gen = torch.Generator().manual_seed(a.seed)
     it0 = 0                                   # iterations already done, for a continuation
+    cum_base = 0                              # ... including lineages before this one
     if resume_blob is not None:
         opt.load_state_dict(resume_blob["opt"])
         if sched is not None and resume_blob.get("sched") is not None:
@@ -348,6 +357,7 @@ def main(a):
         rng.bit_generator.state = resume_blob["rng_np"]
         gen.set_state(resume_blob["rng_torch"])
         it0 = int(resume_blob["iter"])
+        cum_base = int(resume_blob.get("cum_iter", it0))
         log(f"  continuing from iteration {it0}: lr {opt.param_groups[0]['lr']:.6f} "
             f"(a fresh schedule would start at {a.lr:.6f}), "
             f"Adam state for {len(opt.state)} tensors")
@@ -364,6 +374,8 @@ def main(a):
     # Carry the best-so-far across a resume.  Starting it at -inf would let the first eval
     # of the continuation overwrite v3_<label>_best.pt with a WORSE model purely because it
     # is the first one this process has seen.
+    e_ema = v_ema = None
+    n_bang = 0
     best_vb, best_it = -1e18, -1
     if resume_blob is not None and resume_blob.get("best_vb") is not None:
         best_vb, best_it = float(resume_blob["best_vb"]), int(resume_blob["best_it"])
@@ -459,6 +471,7 @@ def main(a):
             ll, ess, pn = m.loglik(ix, li, lt, lc, n_draws=_nd, generator=gen,
                            return_ess=True, return_size=True, line_ctx=lctx,
                            mode_steps=a.mode_steps, mix_scales=_mix, aniso=a.aniso,
+                                 antithetic=a.antithetic > 0,
                            units=lq if a.units else None)
         loss = -ll.mean()
         # Size-law calibration penalty.
@@ -555,6 +568,7 @@ def main(a):
                 ll2, ess2 = m.loglik(ix, li, lt, lc, n_draws=a.draws * a.adapt_draws,
                                      generator=gen, return_ess=True, line_ctx=lctx,
                                      mode_steps=a.mode_steps, mix_scales=_mix, aniso=a.aniso,
+                                 antithetic=a.antithetic > 0,
                                      units=lq if a.units else None)
                 ll = torch.where((ess < a.ess_floor_min), ll2, ll)
                 ess = torch.where((ess < a.ess_floor_min), ess2, ess)
@@ -696,9 +710,60 @@ def main(a):
                 _n = torch.arange(1, pn.shape[1] + 1, dtype=pn.dtype)
                 _e = (pn.detach() * _n).sum(1)
                 _v = float(((pn.detach() * _n ** 2).sum(1) - _e ** 2).mean())
-                m.project_var(_v, emp_var if a.var_target < 0 else a.var_target,
-                              damp=a.var_damp)
-                m.project_mean(float(_e.mean()), obs_mean, _v, damp=a.var_damp)
+                # Drive the projections from a SMOOTHED estimate, not this batch's.
+                #
+                # Both are feedback controllers on rho_0, and both were reading a 24-trip,
+                # 16-draw estimate -- far noisier than the 384-trip, 32-draw figure the
+                # checkpoint prints.  Whatever noise is in that reading is injected into
+                # rho_0 every iteration, so rho_0 random-walks even when the model is right
+                # on average.  Measured in run62, with the estimator itself converged
+                # (E[n]-converged passing at every checkpoint, e.g. 8.5 against 9.1 at 8x
+                # draws), E[n] still swung 8.5 -> 30.0 -> 12.9 -> 8.7 -> 13.8 across
+                # consecutive checkpoints.  A converged measurement that keeps moving is the
+                # parameters oscillating, not the estimate.
+                #
+                # Two things make it worse than ordinary noise.  project_mean divides by
+                # v_now, and the model runs narrow (var 18-21 against an observed 67), so
+                # the denominator is small and the step large.  And once b hits its +-0.5
+                # clamp the correction no longer shrinks as the error shrinks -- a fixed
+                # step applied every iteration, which is bang-bang control and settles at a
+                # limit cycle rather than at the target.
+                #
+                # An EMA leaves the fixed point exactly where it was (it converges to the
+                # same mean) and only removes the noise driving the loop.
+                _em = float(_e.mean())
+                if a.proj_ema > 1:
+                    _beta = 1.0 / a.proj_ema
+                    e_ema = _em if e_ema is None else (1 - _beta) * e_ema + _beta * _em
+                    v_ema = _v if v_ema is None else (1 - _beta) * v_ema + _beta * _v
+                    _em_use, _v_use = e_ema, v_ema
+                else:
+                    _em_use, _v_use = _em, _v
+                # project_var is OFF by default: it is a one-way ratchet that decalibrates
+                # the very quantity it targets.  c = 0.5*(1/v_target - 1/v_now) is clamped
+                # NON-NEGATIVE (the widening direction sent E[n] to the nmax boundary within
+                # two steps), so rho_0 can only ever gain positive n^2 curvature and the size
+                # law can be narrowed but never widened.  Driven by a noisy v_now, any batch
+                # whose estimate strays above target narrows the law permanently, and over
+                # thousands of steps that ratchets monotonically down.
+                #
+                # Measured over 150 iterations from a common checkpoint, against an observed
+                # Var(n) of 67:
+                #     project_var ON,  size_kl ON    var 37.7
+                #     project_var OFF, size_kl ON    var 65.3
+                #     project_var OFF, size_kl OFF   var 76.8
+                # The cross-entropy term calibrates the spread on its own; project_var then
+                # halves it.  project_mean stays on -- it is pulling E[n] the right way
+                # (14.2 with it against 17.2 without, observed 7.2) and its correction is
+                # signed, so it has no ratchet.
+                if a.var_project:
+                    m.project_var(_v_use, emp_var if a.var_target < 0 else a.var_target,
+                                  damp=a.var_damp)
+                _b = m.project_mean(_em_use, obs_mean, _v_use, damp=a.var_damp)
+                # Count clamp hits: if the mean correction is saturating, the controller is
+                # in bang-bang and no amount of damping will let it settle.
+                if abs(_b) >= 0.5 * a.var_damp - 1e-12:
+                    n_bang += 1
             # The data's aggregate elasticity is -0.121 and Proposition 1 gives
             # elasticity = -(gamma.beta) Var(n) / E[n], so the mean sensitivity it implies
             # is 0.121 * E[n] / Var(n).  Projected, not penalised -- see project_price.
@@ -783,11 +848,27 @@ def main(a):
                 ho_e8 = float(ev_e8.mean())
             m.house, m.ctx = sh, sc
             vobs = np.bincount(vLT.numpy(), minlength=vix.B)
-            ho_e, ho_v = float(ev_e.mean()), float(ev_v.mean())
+            # Var(n) must be the POPULATION variance, to match what vobs.var() measures.
+            #
+            # This printed mean(ev_v) -- E[Var(n | trip)], the average spread WITHIN a trip --
+            # and compared it against the variance of observed basket sizes ACROSS trips.
+            # Different quantities.  The law of total variance supplies the missing piece:
+            #     Var(n) = E[Var(n|trip)] + Var[E(n|trip)]
+            # Measured on run63's best checkpoint over 384 validation trips, the two terms
+            # were 28.4 and 73.4, so the model's population variance is 101.8 against an
+            # observed 63.4.  The old field read 28.4 and made the size law look far too
+            # NARROW when it is in fact too WIDE -- and every "too narrow" reading this
+            # session, including project_var's target of emp_var, inherited that inversion.
+            ho_e = float(ev_e.mean())
+            ho_v = float(ev_v.mean() + ev_e.var())
+            ho_v_within = float(ev_v.mean())        # kept, so the split stays visible
+            ho_e_spread = float(ev_e.var())
             vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 2, gen, use_units=a.units)
             m.house, m.ctx = hh, ctx
             ep = it * a.batch / max(len(tr), 1)
-            log(f"  it {it:5d} ep {ep:5.3f}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
+            cum_it = cum_base + (it - it0) + a.cum_offset
+            cum_ep = cum_it * a.batch / max(len(tr), 1)
+            log(f"  it {it:5d} ep {ep:5.3f} cum {cum_ep:5.3f}  train {np.mean(hist[-a.eval_every:]):8.3f}  "
                 f"set/bskt {vb:8.3f}  units/bskt {vu:7.3f}  total {vt:8.3f}  "
                 f"ESS {np.mean(ess_hist[-a.eval_every:]):.3f} "
                 f"(min {np.min(emin_hist[-a.eval_every:]):.3f})  "
@@ -796,10 +877,11 @@ def main(a):
                 f"zero {float((m.phi.norm(dim=1) < 1e-8).double().mean()):.0%} "
                 f"erank {float((lambda sv: (sv**2).sum()**2/(sv**4).sum())(torch.linalg.svdvals(m.phi.detach()))):.0f})  "
                 f"lam_max {lam_max:.3f}  E[n] {ho_e:.1f}/{vobs.mean():.1f} "
-                f"[{ho_e8:.1f}@8x] var {ho_v:.0f}/{vobs.var():.0f}  "
+                f"[{ho_e8:.1f}@8x] var {ho_v:.0f}/{vobs.var():.0f} "
+                f"(w{ho_v_within:.0f}+s{ho_e_spread:.0f})  "
                 f"elast {np.mean(el_hist[-a.eval_every:]) if el_hist else float('nan'):+.3f}"
                 f"/{a.elast_target:+.3f}  "
-                f"skip {n_skip}  drop {n_drop}  redo {n_redo}  "
+                f"skip {n_skip}  drop {n_drop}  redo {n_redo}  bang {n_bang}  "
                 f"{(time.time()-t0)/60:.1f} min")
             if vb > 0:
                 log("  ABORT: held-out log-likelihood is positive, which is impossible. "
@@ -815,10 +897,12 @@ def main(a):
             with torch.no_grad():
                 g_a = torch.Generator().manual_seed(11)
                 lz_lo = m.log_Z(ix, n_draws=_nd, generator=g_a, drop_empty=True,
-                                mix_scales=_mix, aniso=a.aniso)
+                                mix_scales=_mix, aniso=a.aniso,
+                                 antithetic=a.antithetic > 0)
                 g_b = torch.Generator().manual_seed(11)
                 lz_hi = m.log_Z(ix, n_draws=_nd * 16, generator=g_b, drop_empty=True,
-                                mix_scales=_mix, aniso=a.aniso)
+                                mix_scales=_mix, aniso=a.aniso,
+                                 antithetic=a.antithetic > 0)
                 gap = float((lz_hi - lz_lo).mean())
             log(f"  normaliser check: log Z at {_nd} draws vs {_nd*16} "
                 f"differs by {gap:+.3f} nats")
@@ -865,20 +949,22 @@ def main(a):
                     f"estimate collapsing, not the model improving.")
                 return
             save_ckpt(os.path.join(OUT, f"v3_{a.label}.pt"), m, opt, sched, it,
-                      rng, gen, best_vb, best_it, lz_strikes)
+                      rng, gen, best_vb, best_it, lz_strikes, cum_iter=cum_it)
             # Keep the BEST checkpoint, not just the last.  The file above is overwritten
             # every eval, so an aborted run leaves whatever the final passing eval held --
             # run37 happened to stop near its best by luck, not design.
             if vb > best_vb:
                 best_vb, best_it = vb, it
                 save_ckpt(os.path.join(OUT, f"v3_{a.label}_best.pt"), m, opt, sched,
-                          it, rng, gen, best_vb, best_it, lz_strikes)
+                          it, rng, gen, best_vb, best_it, lz_strikes,
+                          cum_iter=cum_it)
                 json.dump(dict(iter=it, set_per_basket=vb, epoch=ep),
                           open(os.path.join(OUT, f"v3_{a.label}_best.json"), "w"), indent=2)
     vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 4, gen, use_units=a.units)
     log(f"final  set/basket {vb:.4f}  set/line {vl:.4f}  units/basket {vu:.4f}  total/basket {vt:.4f}")
     save_ckpt(os.path.join(OUT, f"v3_{a.label}.pt"), m, opt, sched, a.iters,
-              rng, gen, best_vb, best_it, lz_strikes)
+              rng, gen, best_vb, best_it, lz_strikes,
+              cum_iter=cum_base + a.iters - it0 + a.cum_offset)
     json.dump(dict(set_per_basket=vb, set_per_line=vl, units_per_basket=vu,
                    total_per_basket=vt, n_par=npar, iters=a.iters),
               open(os.path.join(OUT, f"v3_{a.label}.json"), "w"), indent=2)
@@ -915,6 +1001,9 @@ if __name__ == "__main__":
     p.add_argument("--var-w", type=float, default=0.0)
     p.add_argument("--var-target", type=float, default=-1.0)
     p.add_argument("--var-damp", type=float, default=0.15)
+    p.add_argument("--proj-ema", type=int, default=1)
+    p.add_argument("--var-project", type=int, default=0)
+    p.add_argument("--cum-offset", type=int, default=0)
     p.add_argument("--elast-w", type=float, default=20.0)
     p.add_argument("--elast-target", type=float, default=-0.121)
     p.add_argument("--phi-init", type=float, default=0.03)
@@ -934,6 +1023,7 @@ if __name__ == "__main__":
     p.add_argument("--rho-c-floor", type=float, default=-1.5)
     p.add_argument("--mix-lam", type=float, default=1.0)
     p.add_argument("--aniso", type=float, default=2.0)
+    p.add_argument("--antithetic", type=int, default=0)
     p.add_argument("--lam-project", type=int, default=1)
     p.add_argument("--pseudo", type=int, default=0)
     p.add_argument("--freeze-rho0", type=int, default=0)
