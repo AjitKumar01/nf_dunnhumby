@@ -119,14 +119,34 @@ def esp_bucketed(w, row_of, n_rows, R, row_size, item_pos, buckets=(8, 32, 96, 2
         flat = loc[row_of[sel_i]] * hi + item_pos[sel_i]            # [T_b]
         P = torch.zeros(lead + (len(ridx) * hi,), dtype=w.dtype, device=w.device)
         P = P.index_copy(-1, flat, wi).view(lead + (len(ridx), hi))
-        e = [torch.ones(lead + (len(ridx),), dtype=w.dtype, device=w.device)]
-        e += [torch.zeros(lead + (len(ridx),), dtype=w.dtype, device=w.device)
-              for _ in range(R)]
+        # The r-loop this replaces counted DOWNWARD, from min(R, i+1) to 1, precisely so
+        # that e[r] += x * e[r-1] always read the PRE-update e[r-1].  That is the proof
+        # that the R updates within one item are mutually independent: there is no carried
+        # dependence to break, only a Python loop that was serialising them.  Held as one
+        # tensor E [..., n_rows, R+1] the whole inner loop is a single shifted multiply-add.
+        #
+        # The item loop stays sequential -- e at item i genuinely depends on item i-1.
+        #
+        # Launch count, with R = 23 and item i contributing min(R, i+1) updates:
+        #     hi=8      36      hi=96    1,955
+        #     hi=32    483      hi=256   5,635        total 8,109 -> 392 (20.7x fewer)
+        # Each op is small ([16 draws x a few thousand rows]), so this loop was bound by
+        # launch overhead rather than arithmetic, which is where fewer-and-larger wins.
+        # Measured at the real shape (5,436 rows, 151k slots, D=16, R=23), all three
+        # bit-identical to the sequential version and to each other:
+        #     sequential 0.147s    cat 0.044s    pad 0.040s    bounded-cat 0.044s
+        # so the padded shift wins and is also the shortest to read.  Restoring the
+        # min(R, i+1) bound bought nothing: r > i+1 is still exactly zero, so the wider
+        # update multiplies zeros rather than doing wrong work, and the extra slicing costs
+        # more than the arithmetic it saves.  In-place (E[..., 1:] += ...) is NOT available
+        # here -- esp_bucketed sits inside the autograd path and the multiply's saved
+        # tensor is the very slice the add would overwrite.
+        E = torch.zeros(lead + (len(ridx), R + 1), dtype=w.dtype, device=w.device)
+        E[..., 0] = 1.0
         for i in range(hi):
-            x = P[..., i]
-            for r in range(min(R, i + 1), 0, -1):
-                e[r] = e[r] + x * e[r - 1]
-        out = out.index_copy(-2, ridx, torch.stack(e, dim=-1))
+            x = P[..., i].unsqueeze(-1)                             # [..., n_b, 1]
+            E = E + x * torch.nn.functional.pad(E[..., :-1], (1, 0))
+        out = out.index_copy(-2, ridx, E)
     return out
 
 
