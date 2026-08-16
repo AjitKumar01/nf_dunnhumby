@@ -225,7 +225,7 @@ def size_law(D, nmax=120):
     return c / c.sum()
 
 
-def run(name, model, Bt, tr, va, a, **kw):
+def run(name, model, Bt, tr, va, a, te=None, **kw):
     # Save, and be able to resume.
     #
     # Only SHOPPER wrote a checkpoint, so when it turned out that 12,000 iterations still
@@ -254,8 +254,14 @@ def run(name, model, Bt, tr, va, a, **kw):
         opt.step()
         if sched is not None:
             sched.step()
-        if it % max(1, a.iters // 3) == 0:
-            vb, vl = ev(model, Bt, va[:a.n_val], **kw)
+        # Log on a fixed cadence, not iters//3.  At --iters 60000 that was one line every
+        # 20,000 iterations, so a run that might take 40 hours showed nothing for the first
+        # 13 -- no way to tell whether it was on track or to revise the plan.
+        if it % a.log_every == 0 or it == a.iters:
+            vb, vl = ev(model, Bt, va[:min(128,len(va))], **kw)
+            _el = time.time() - t0
+            log(f"   {name}: it {it}/{a.iters}  {_el/it:.3f} s/it  "
+                f"projected {_el/it*a.iters/3600:.1f} h  val/bskt {vb:.3f}")
             ep = it * a.batch / len(tr)
             log(f"   {name:10s} it {it:4d} ep {ep:5.3f}  train {float(loss):9.3f}  "
                 f"val/basket {vb:9.3f}  val/line {vl:7.4f}  {(time.time()-t0)/60:.1f} min")
@@ -263,7 +269,13 @@ def run(name, model, Bt, tr, va, a, **kw):
             torch.save(model.state_dict(), ck)
     os.makedirs(OUT, exist_ok=True)
     torch.save(model.state_dict(), ck)
-    return ev(model, Bt, va[:a.n_val], **kw)
+    vb, vl = ev(model, Bt, va, **kw)
+    if te is not None:
+        tb, tl = ev(model, Bt, te, **kw)
+        log(f"   {name}: valid/basket {vb:9.3f}  test/basket {tb:9.3f}  "
+            f"valid/line {vl:7.3f}  test/line {tl:7.3f}")
+        return vb, vl, tb, tl
+    return vb, vl
 
 
 @torch.no_grad()
@@ -284,13 +296,24 @@ def main(a):
     F = Features(J, S, 712)
     Bt = Batches(D, F)
     tr = np.flatnonzero(D["trip_split"] == 0)
-    va = np.flatnonzero(D["trip_split"] == 1)
-    log(f"{len(tr):,} training trips; evaluating on {min(a.n_val, len(va)):,}")
+    # SAMPLE the held-out sets, do not slice them.  Trips are stored in time order, so
+    # `va[:256]` is week 83 alone and the old test slice was week 91 alone -- and week 91 is
+    # an extreme outlier for the main model (+273% on E[n] against +2% for week 99).  Every
+    # baseline number published before this compared one week against one week.  TEST is
+    # scored too: nothing here had ever been evaluated on weeks 91+.
+    _rng = np.random.default_rng(0)
+    def _samp(split):
+        idx = np.flatnonzero(D["trip_split"] == split)
+        return np.sort(idx[_rng.choice(len(idx), size=min(a.n_val, len(idx)),
+                                       replace=False)])
+    va, te = _samp(1), _samp(2)
+    log(f"{len(tr):,} training trips; evaluating on {len(va):,} validation and "
+        f"{len(te):,} test trips, sampled across all weeks of each")
     res = {}
 
     if "shopper" not in a.skip:
         m = Shopper(J, N, S, K=a.K, Kp=a.Kp)
-        vb, vl = run("shopper", m, Bt, tr, va, a, n_orders=a.orders)
+        vb, vl, tb, tl = run("shopper", m, Bt, tr, va, a, te=te, n_orders=a.orders)
         # P(S) = n! E_pi[P(pi)] is unbiased for P(S), so log of it is biased LOW.  The
         # bias falls with the number of sampled orderings; report a ladder rather than
         # quote one point and hope.
@@ -301,31 +324,34 @@ def main(a):
         # monotonically, which is noise rather than convergence.
         ladder = {}
         for no in a.ladder:
-            ladder[no] = ev(m, Bt, va[:a.n_val], n_orders=no)[0]
+            ladder[no] = ev(m, Bt, va, n_orders=no)[0]
             log(f"   shopper, {no:4d} orderings on {a.n_val} trips: {ladder[no]:8.3f}")
         # the headline is the ladder's converged rung, not the cheap training-time
         # evaluation: they differed by 0.25 nats last time and the json carried the worse one
         vb = ladder[max(ladder)]
         res["shopper"] = dict(val_per_basket=vb, val_per_line=vl,
+                            test_per_basket=tb, test_per_line=tl,
                               ladder={str(k): v for k, v in ladder.items()},
                               orders=a.orders,
                               n_par=sum(p.numel() for p in m.parameters()))
 
     if "ndpp" not in a.skip:
         m = NDPP(J, N, S, rank=a.rank, srank=a.srank, K=a.K, Kp=a.Kp)
-        vb, vl = run("ndpp", m, Bt, tr, va, a)
+        vb, vl, tb, tl = run("ndpp", m, Bt, tr, va, a, te=te)
         res["ndpp"] = dict(val_per_basket=vb, val_per_line=vl,
+                            test_per_basket=tb, test_per_line=tl,
                            n_par=sum(p.numel() for p in m.parameters()))
     if "multinomial" not in a.skip:
         m = Multinomial(J, N, S, size_law(D), K=a.K, Kp=a.Kp)
-        vb, vl = run("multinom", m, Bt, tr, va, a)
+        vb, vl, tb, tl = run("multinom", m, Bt, tr, va, a, te=te)
         res["multinomial"] = dict(val_per_basket=vb, val_per_line=vl,
+                            test_per_basket=tb, test_per_line=tl,
                                   n_par=sum(p.numel() for p in m.parameters()))
 
     log("")
     log(f"  {'model':14s} {'val/basket':>11s} {'val/line':>9s} {'params':>10s}")
     for k, v in res.items():
-        log(f"  {k:14s} {v['val_per_basket']:11.3f} {v['val_per_line']:9.4f} "
+        log(f"  {k:14s} {v['val_per_basket']:11.3f} {v.get('test_per_basket',float('nan')):11.3f} {v['val_per_line']:9.4f} "
             f"{v['n_par']:10,d}")
     tag = a.tag or "all"
     json.dump(res, open(os.path.join(OUT, f"v3_baselines2_{tag}.json"), "w"),
@@ -349,6 +375,7 @@ if __name__ == "__main__":
     p.add_argument("--n-val", type=int, default=256)
     p.add_argument("--skip", nargs="*", default=[])
     p.add_argument("--tag", default="")
+    p.add_argument("--log-every", type=int, default=2000)
     p.add_argument("--ladder", type=int, nargs="*",
                    default=[8, 32, 128, 512, 2048])
     main(p.parse_args())

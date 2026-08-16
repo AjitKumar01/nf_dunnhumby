@@ -705,6 +705,30 @@ def main(a):
             if phi_mask is not None:
                 with torch.no_grad():
                     m.phi.mul_(phi_mask)
+            # Shrink the STORE context vector toward its mean over stores.
+            #
+            # Measured post-hoc on run65's best checkpoint, against an observed Var(n) of
+            # 114.2 and mean 8.71:
+            #     as-is             E[n] 11.11  w 32.1  s 258.4  varpop 290.5
+            #     xi -> its mean    E[n]  7.27  w 22.6  s 103.7  varpop 126.3
+            # so it takes the population variance from 2.5x the observed value to 1.1x, and
+            # the mean from +28% to -17%, the closest any configuration has come on both.
+            #
+            # It does NOT work through the common shift: sd(Delta) barely moves (0.304 ->
+            # 0.286).  It works because the store term inflates Var(n|trip) -- w falls 32.1
+            # -> 22.6 -- and s carries Var(n) SQUARED, so the between-trip spread follows.
+            #
+            # At full strength xi is constant across stores, which makes zeta_j . xi a
+            # per-product constant that lambda_j already spans; the store term is then
+            # redundant rather than merely damped.  That is a real loss of capacity and the
+            # reason this is a tunable projection rather than a deletion.
+            if a.xi_shrink > 0:
+                with torch.no_grad():
+                    # take the mean BEFORE mutating: mul_(1-alpha) at alpha=1 zeroes xi, and
+                    # the mean of a zeroed tensor is zero, which would delete the term rather
+                    # than flatten it.
+                    _xm = m.xi.mean(0, keepdim=True).clone()
+                    m.xi.mul_(1.0 - a.xi_shrink).add_(a.xi_shrink * _xm)
             # Var(n) is the quantity every other failure runs through; project it too.
             if a.var_target != 0:
                 _n = torch.arange(1, pn.shape[1] + 1, dtype=pn.dtype)
@@ -731,6 +755,12 @@ def main(a):
                 #
                 # An EMA leaves the fixed point exactly where it was (it converges to the
                 # same mean) and only removes the noise driving the loop.
+                # The Newton step for a GLOBAL correction to the POPULATION mean divides
+                # by the POPULATION variance, Var(n) = E[Var(n|trip)] + Var[E(n|trip)].
+                # Passing only the within-trip term made the denominator too small -- 26
+                # against 182 at run64's iteration 5000, so every step was 7x the true
+                # Newton step and the controller overshot by design.
+                _vpop = _v + float(_e.var())
                 _em = float(_e.mean())
                 if a.proj_ema > 1:
                     _beta = 1.0 / a.proj_ema
@@ -759,7 +789,7 @@ def main(a):
                 if a.var_project:
                     m.project_var(_v_use, emp_var if a.var_target < 0 else a.var_target,
                                   damp=a.var_damp)
-                _b = m.project_mean(_em_use, obs_mean, _v_use, damp=a.var_damp)
+                _b = m.project_mean(_em_use, obs_mean, _vpop, damp=a.var_damp)
                 # Count clamp hits: if the mean correction is saturating, the controller is
                 # in bang-bang and no amount of damping will let it settle.
                 if abs(_b) >= 0.5 * a.var_damp - 1e-12:
@@ -776,6 +806,12 @@ def main(a):
                 # gamma.beta pinned for the empirical ratio delivered -0.040 instead of
                 # -0.121.  Reading E and Var off pn each step makes the target self-correct
                 # as the size law converges.
+                # The Newton step for a GLOBAL correction to the POPULATION mean divides
+                # by the POPULATION variance, Var(n) = E[Var(n|trip)] + Var[E(n|trip)].
+                # Passing only the within-trip term made the denominator too small -- 26
+                # against 182 at run64's iteration 5000, so every step was 7x the true
+                # Newton step and the controller overshot by design.
+                _vpop = _v + float(_e.var())
                 _em = float(_e.mean()) if a.var_target != 0 else obs_mean
                 _vm = _v if a.var_target != 0 else emp_var
                 m.project_price(abs(a.elast_target) * max(_em, 1e-6) / max(_vm, 1e-6))
@@ -1004,6 +1040,7 @@ if __name__ == "__main__":
     p.add_argument("--proj-ema", type=int, default=1)
     p.add_argument("--var-project", type=int, default=0)
     p.add_argument("--cum-offset", type=int, default=0)
+    p.add_argument("--xi-shrink", type=float, default=0.0)
     p.add_argument("--elast-w", type=float, default=20.0)
     p.add_argument("--elast-target", type=float, default=-0.121)
     p.add_argument("--phi-init", type=float, default=0.03)

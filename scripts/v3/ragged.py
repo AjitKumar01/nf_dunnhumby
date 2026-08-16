@@ -1095,7 +1095,17 @@ class RaggedModel(torch.nn.Module):
         if v_now <= 0:
             return 0.0
         b = (e_now - e_target) / v_now
-        b = float(min(max(b, -b_max), b_max)) * damp
+        # Squash smoothly instead of clamping.  A hard clamp makes the step INDEPENDENT of
+        # the error once it binds: at |b| >= b_max the correction is a fixed b_max * damp in
+        # the rho_0 slope, which with dE[n]/db = -Var(n) ~ 182 moves E[n] by 3.6 per
+        # iteration whether the error is 1 or 40.  A fixed step cannot settle -- it can only
+        # limit-cycle, and run64 duly oscillated E[n] between 7.2 and 50.0 with the clamp
+        # binding on a rising share of iterations (`bang` 17 -> 126).
+        #
+        # b_max * tanh(b / b_max) is identical to b for small b (tanh x = x - x^3/3 + ...),
+        # bounded by b_max exactly as before, and -- the point -- still strictly increasing
+        # in the error, so the correction shrinks as the model approaches target.
+        b = float(b_max * math.tanh(b / b_max)) * damp
         n = torch.arange(1, self.rho_0_free.shape[0] + 1,
                          dtype=self.rho_0_free.dtype, device=self.rho_0_free.device)
         self.rho_0_free += b * n
