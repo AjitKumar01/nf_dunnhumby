@@ -534,6 +534,23 @@ def main(a):
             v_b = (pn * nax ** 2).sum(1) - e_b ** 2
             elast = -(gb * v_b.mean() / e_b.mean().clamp_min(1e-6))
             loss = loss + a.elast_w * (elast - a.elast_target) ** 2
+        # PARTIAL POOLING on the per-product price coefficient.
+        #
+        # The own-price elasticity is about -g_j (1 - pi_j) with g_j the product's price
+        # coefficient.  Fitted freely from limited price variation, g_j is noisy, and noise
+        # inflates its SPREAD without improving its ranking.  Measured on the fair arena, the
+        # unpooled models over-disperse elasticities ~2.4x against the truth (sd 0.37-0.51 vs
+        # 0.190) while still ranking products correctly (r = 0.890) -- and scored WORSE than a
+        # constant predictor (MAE 0.141 against 0.133).  Shrinking toward the mean fixed it:
+        #     arena, cap 0.96:  MAE 0.1410 -> 0.0989
+        #     arena, cap 2.5 :  MAE 0.2326 -> 0.1001
+        # at a cost of 0.003 nats of likelihood and no change to any pair lift.
+        #
+        # Toward the MEAN, not toward zero: the average price sensitivity is identified by
+        # the elasticity target and must not be shrunk, only its dispersion across products.
+        if a.pool_beta > 0:
+            _g = softplus(m.beta)
+            loss = loss + a.pool_beta * ((_g - _g.mean(0, keepdim=True)) ** 2).mean()
         # ESS GATE.  log Z is estimated by importance sampling; where the sampler has
         # collapsed the estimate is unreliable and biased DOWNWARD, which the objective
         # rewards (section 17).  The diverged run had ESS 0.016 on exactly the trips whose
@@ -1041,6 +1058,7 @@ if __name__ == "__main__":
     p.add_argument("--var-project", type=int, default=0)
     p.add_argument("--cum-offset", type=int, default=0)
     p.add_argument("--xi-shrink", type=float, default=0.0)
+    p.add_argument("--pool-beta", type=float, default=0.0)
     p.add_argument("--elast-w", type=float, default=20.0)
     p.add_argument("--elast-target", type=float, default=-0.121)
     p.add_argument("--phi-init", type=float, default=0.03)
