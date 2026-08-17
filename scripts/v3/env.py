@@ -125,6 +125,51 @@ class RetailEnv:
                     revenue=rev, cost=cost)
         return self._obs(), rev - cost, done, info
 
+    def step_expected(self, action):
+        """Same step, but the reward is COMPUTED rather than sampled.
+
+        Margin is a linear functional of the marginals:
+
+            E[margin] = sum_j  pi_j * E[units_j] * (price_j - cost_j)
+
+        so with an exact normaliser it needs one forward and one backward pass -- pi_quad --
+        instead of generating a basket per trip through Corollary 3's Python loop.  It is
+        also EXACT: no Monte Carlo noise, so two policies differing by 1% in margin can be
+        compared without averaging over seeds.  Use step() when a policy needs realised
+        baskets (inventory, stockouts); use this when it needs expected reward, which is
+        what a value function or a policy gradient consumes.
+        """
+        trips = self._trips_now()
+        if len(trips) == 0:
+            self.week += 1
+            return self._obs(), 0.0, True, dict(n_trips=0, units=0.0, revenue=0.0)
+        ix, ctx, lctx, hh, LI, LT, LC, LU = self.Bt.make(trips)
+        self.m.house, self.m.ctx = hh, ctx
+        shift = self._broadcast(action, ix)
+        ctx = dict(ctx)
+        ctx["dlp"] = ctx["dlp"] + shift
+        self.m.ctx = ctx
+        pi = self.m.pi_quad(ix)                                     # [T] exact marginals
+        day = torch.as_tensor(self.D["trip_day"][trips], dtype=torch.long)
+        dslot = day[ix.item_trip]
+        base = torch.exp(self.logp[ix.item, dslot])                 # observed shelf price
+        price = base * torch.exp(shift)
+        with torch.no_grad():
+            from torch.nn.functional import softplus
+            hs = self.m.house[ix.item_trip]
+            z = self.m.a_q[ix.item] - (softplus(self.m.gamma_q[hs])
+                                       * softplus(self.m.beta_q[ix.item])).sum(-1) * shift
+            eunits = 1.0 + torch.exp(z.clamp(-6.0, 4.0))            # E[units | line]
+        cost = base * (1.0 - self.margin0)
+        exp_units = pi * eunits
+        rev = float((exp_units * price).sum())
+        cst = float((exp_units * cost).sum())
+        self.week += 1
+        done = self.week not in self.weeks_available(self.store)
+        info = dict(n_trips=len(trips), units=float(exp_units.sum()),
+                    lines=float(pi.sum()), revenue=rev, cost=cst)
+        return self._obs(), rev - cst, done, info
+
     # ---- internals ---------------------------------------------------------------
     def _broadcast(self, action, ix):
         a = torch.as_tensor(action, dtype=torch.float64)

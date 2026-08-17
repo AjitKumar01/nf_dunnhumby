@@ -240,6 +240,24 @@ class RaggedIndex:
         self.flat_slot = self.row_trip * self.Cpad + self.row_pos
 
 
+def gh_grid(d, q):
+    """Dense probabilists' Gauss-Hermite grid, q^d nodes, all weights POSITIVE.
+
+    Smolyak weights are signed, which is fine for an expectation but not for forming a
+    distribution to sample from.  Stage 1 of the sampler needs p(z) proportional to
+    w_p f(z_p), so it uses a dense grid instead.
+    """
+    import itertools
+    x, w = np.polynomial.hermite_e.hermegauss(q)
+    w = w / math.sqrt(2 * math.pi)
+    G = np.array(list(itertools.product(*[x] * d)), dtype=np.float64).reshape(-1, d)
+    xi = {round(float(v), 12): i for i, v in enumerate(x)}
+    W = np.ones(len(G))
+    for k in range(d):
+        W *= w[[xi[round(float(v), 12)] for v in G[:, k]]]
+    return torch.as_tensor(G), torch.as_tensor(W)
+
+
 def smolyak_grid(d, q):
     """Smolyak sparse grid for E_{z~N(0,I_d)}[g(z)], by the combination technique:
 
@@ -470,6 +488,7 @@ class RaggedModel(torch.nn.Module):
         self.rho_c = torch.nn.Parameter(torch.zeros(C))
         self.rho_0_free = torch.nn.Parameter(torch.zeros(nmax))
         self.quad = None        # (nodes, weights) -> deterministic log Z
+        self.quad_z = None      # dense GH grid -> deterministic z sampling
         # --- conditioning blocks (Eq. 7) -------------------------------------------------
         # softplus(-2.8) = 0.060, so gamma.beta starts at about 8 * 0.060^2 = 0.029 --
         # the same magnitude the unconstrained product had at initialisation
@@ -579,7 +598,28 @@ class RaggedModel(torch.nn.Module):
 
     def b_flat(self, ix):
         """b at every assortment slot, [T] -- the normaliser's view."""
+        if getattr(self, "_b_override", None) is not None:
+            return self._b_override
         return self.b_at(ix.item, ix.item_trip, self.ctx)
+
+    def pi_quad(self, ix):
+        """pi_j = P(j in S), MARGINAL over z, by autograd through the quadrature.
+
+        Corollary 2 gives pi_j = d log(Z-1) / d b_j.  pi_exact evaluates it at the MODE,
+        which is a different quantity: measured, E[n | z = zhat] was 2.8 against a marginal
+        17.7, and lambda_max -- built on it -- was wrong by that factor for the whole
+        project.  With log Z deterministic the marginal is just a backward pass, and
+        sum_j pi_j = E[n] holds by construction rather than by hope.
+        """
+        b0 = self.b_flat(ix).detach().requires_grad_(True)
+        self._b_override = b0
+        try:
+            with torch.enable_grad():
+                lz = self._log_Z_quad(ix, True, False, False, False)
+            pi = torch.autograd.grad(lz.sum(), b0)[0].detach()
+        finally:
+            self._b_override = None
+        return pi
 
     def _log_Z_quad(self, ix, drop_empty, return_ess, return_size, return_mode):
         """log Z by DETERMINISTIC Smolyak quadrature -- no proposal, no draws, no bias.
@@ -958,13 +998,27 @@ class RaggedModel(torch.nn.Module):
             with torch.enable_grad():
                 lf = log_f_ragged(self, zz, ix, True).sum()
             z = torch.autograd.grad(lf, zz)[0]
-        noise = torch.randn(B, n_draws, self.Kz, dtype=z.dtype, generator=generator)
-        zs = z.detach() + noise
-        log_q = -0.5 * (noise ** 2).sum(-1) - 0.5 * self.Kz * L2P
-        lw = (-0.5 * self.Kz * L2P - 0.5 * (zs ** 2).sum(-1)
-              + log_f_ragged(self, zs, ix, True)) - log_q            # [B, D]
-        pick = torch.multinomial(torch.softmax(lw, dim=1), 1, generator=generator)
-        zsel = zs.gather(1, pick.unsqueeze(-1).expand(-1, -1, self.Kz))[:, 0]  # [B, Kz]
+        if getattr(self, "quad_z", None) is not None:
+            # Stage 1 on a DETERMINISTIC grid.  Sampling-importance-resampling around the
+            # mode is the only inexact step in Corollary 3, and it is unreliable here:
+            # measured, the sampled E[n] drifts 0.33x -> 1.29x of the model's own E[n] as
+            # n_draws goes 8 -> 1024, so a rollout's basket sizes depended on a tuning knob.
+            # With Kz small the posterior over z can be formed exactly on a dense
+            # Gauss-Hermite grid (positive weights, unlike Smolyak) and sampled from
+            # directly: p(z_p) proportional to w_p f(z_p).
+            gz, gw = self.quad_z
+            zs = gz.to(z.dtype).unsqueeze(0).expand(B, gz.shape[0], self.Kz)
+            lw = log_f_ragged(self, zs, ix, True) + gw.to(z.dtype).log().unsqueeze(0)
+            pick = torch.multinomial(torch.softmax(lw, dim=1), 1, generator=generator)
+            zsel = zs.gather(1, pick.unsqueeze(-1).expand(-1, -1, self.Kz))[:, 0]
+        else:
+            noise = torch.randn(B, n_draws, self.Kz, dtype=z.dtype, generator=generator)
+            zs = z.detach() + noise
+            log_q = -0.5 * (noise ** 2).sum(-1) - 0.5 * self.Kz * L2P
+            lw = (-0.5 * self.Kz * L2P - 0.5 * (zs ** 2).sum(-1)
+                  + log_f_ragged(self, zs, ix, True)) - log_q        # [B, D]
+            pick = torch.multinomial(torch.softmax(lw, dim=1), 1, generator=generator)
+            zsel = zs.gather(1, pick.unsqueeze(-1).expand(-1, -1, self.Kz))[:, 0]
 
         # Stage 2 takes the size law from log_f_ragged, not from a second construction.
         #
