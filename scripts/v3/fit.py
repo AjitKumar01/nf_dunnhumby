@@ -314,6 +314,13 @@ def main(a):
         f"training ({(~kt).mean():.2%}) and {int((~kv).sum()):,} of {len(va):,} "
         f"validation ({(~kv).mean():.2%}) trips that lie outside it")
     tr, va = tr[kt], va[kv]
+    # Validation must be a fixed RANDOM sample, not a prefix.  va[:128] happens to contain
+    # no pathological trip -- its worst model E[n] is 16.5, where a random sample reaches
+    # 117 -- so the between-trip term of Var(n) read 5.9 instead of 88.3 and the logged
+    # Var(n) came out 59.7 against a true 117-185.  Every eval below indexes va, so
+    # permuting it once here makes the slice representative without changing any call site.
+    # Third time today a statistic has hidden behind a slice that excludes its own tail.
+    va = va[np.random.default_rng(12345).permutation(len(va))]
     log(f"{len(tr):,} training trips, {len(va):,} validation")
     # Record the configuration.  Recovering whether run9 used cosine decay meant grepping a
     # session transcript for the launch command, because neither the log nor the checkpoint
@@ -422,7 +429,20 @@ def main(a):
     if resume_blob is not None:
         opt.load_state_dict(resume_blob["opt"])
         if sched is not None and resume_blob.get("sched") is not None:
-            sched.load_state_dict(resume_blob["sched"])
+            if a.fresh_sched:
+                # A finished cosine run resumes at its FLOOR (2% of lr), so continuing it
+                # trains at 2% rate and "converges" trivially.  opt.load_state_dict above
+                # also restores param_groups['lr'], so the schedule must be reset AND the
+                # rate put back, or the fresh schedule anneals from the floor to the floor.
+                for _g in opt.param_groups:
+                    _g["lr"] = a.lr
+                    _g["initial_lr"] = a.lr
+                sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    opt, T_max=a.iters, eta_min=a.lr * a.lr_floor)
+                log(f"  --fresh-sched: lr reset to {a.lr:g}, cosine restarted over "
+                    f"{a.iters} iterations; optimiser moments and RNG still carried")
+            else:
+                sched.load_state_dict(resume_blob["sched"])
         rng.bit_generator.state = resume_blob["rng_np"]
         gen.set_state(resume_blob["rng_torch"])
         it0 = int(resume_blob["iter"])
@@ -1200,6 +1220,7 @@ def main(a):
             # NARROW when it is in fact too WIDE -- and every "too narrow" reading this
             # session, including project_var's target of emp_var, inherited that inversion.
             ho_e = float(ev_e.mean())
+            ho_e_med = float(ev_e.median())
             ho_v = float(ev_v.mean() + ev_e.var())
             ho_v_within = float(ev_v.mean())        # kept, so the split stays visible
             ho_e_spread = float(ev_e.var())
@@ -1218,7 +1239,7 @@ def main(a):
                 f"(max {float(m.phi.norm(dim=1).max()):.2f} "
                 f"zero {float((m.phi.norm(dim=1) < 1e-8).double().mean()):.0%} "
                 f"erank {float((lambda sv: (sv**2).sum()**2/(sv**4).sum())(torch.linalg.svdvals(m.phi.detach()))):.0f})  "
-                f"lam_max {lam_max:.3f}  E[n] {ho_e:.1f}/{vobs.mean():.1f} "
+                f"lam_max {lam_max:.3f}  E[n] {ho_e:.1f}(med {ho_e_med:.1f})/{vobs.mean():.1f} "
                 f"[{ho_e8:.1f}@8x] var {ho_v:.0f}/{vobs.var():.0f} "
                 f"(w{ho_v_within:.0f}+s{ho_e_spread:.0f})  "
                 f"MRR {rec_mrr:.4f}(med {rec_med:.0f})  "
@@ -1390,6 +1411,7 @@ if __name__ == "__main__":
     p.add_argument("--probe", type=int, default=25)
     p.add_argument("--probe-only", action="store_true")
     p.add_argument("--resume", default="")
+    p.add_argument("--fresh-sched", type=int, default=0)
     p.add_argument("--init-rho0", type=int, default=1)
     p.add_argument("--cosine", type=int, default=1)
     p.add_argument("--lr-floor", type=float, default=0.02)

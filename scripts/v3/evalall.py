@@ -44,7 +44,7 @@ import torch
 from data import build
 from features import Features
 from fit import Batcher, evaluate
-from ragged import RaggedModel
+from ragged import RaggedModel, smolyak_grid
 
 SPLITS = {"train": 0, "valid": 1, "test": 2}
 
@@ -127,7 +127,12 @@ def main(a):
     J, N, C, S = (int(D[k]) for k in ("n_item", "n_user", "n_cat", "n_store"))
     F = Features(J, S, 712)
     Bt = Batcher(D, F, a.nmax)
-    m = RaggedModel(J=J, N=N, C=C, K=32, Kz=12, nmax=a.nmax, R=a.R, S=S, Kp=8)
+    m = RaggedModel(J=J, N=N, C=C, K=32, Kz=a.Kz, nmax=a.nmax, R=a.R, S=S, Kp=8)
+    # Deterministic normaliser when the checkpoint is low-rank enough for a grid.
+    # Importance sampling is wrong by 8-36 nats here (verified against exact
+    # enumeration), so scoring a Kz<=4 checkpoint with it would repeat the error.
+    if a.quad_q > 0:
+        m.quad = smolyak_grid(a.Kz, a.quad_q)
     ptr = D["line_ptr"]
 
     picks = {s: sample_split(D, s, a.n_trips, a.nmax, a.R) for s in a.splits.split(",")}
@@ -188,4 +193,6 @@ if __name__ == "__main__":
     p.add_argument("--chunk", type=int, default=24)
     p.add_argument("--nmax", type=int, default=120)
     p.add_argument("--R", type=int, default=23)
+    p.add_argument("--Kz", type=int, default=32)
+    p.add_argument("--quad-q", type=int, default=0)
     main(p.parse_args())
