@@ -28,7 +28,7 @@ from torch.nn.functional import softplus
 
 from data import build
 from features import Features
-from ragged import RaggedIndex, RaggedModel
+from ragged import RaggedIndex, RaggedModel, smolyak_grid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "out")
@@ -149,6 +149,61 @@ def check_goals(vals):
         v = vals.get(name)
         out.append(f"{name}={'PASS' if v else 'FAIL' if v is not None else '--'}")
     return "  ".join(out)
+
+
+def rec_eval(m, B, trips, seed=0, chunk=24):
+    """Complete-the-basket MRR and median rank, at every checkpoint.
+
+    This is the task metric, and it costs almost nothing: ranking candidates needs NO
+    normaliser, because log Z is identical for every candidate and cancels.  One b_flat pass
+    plus one matrix-vector product per trip -- no sampling, unlike every other number here.
+
+    It earns its place because nothing else in the log can see a ranking failure.  Measured on
+    run68, the model scored MRR 0.0036 against a popularity baseline's 0.0467 -- WORSE than
+    ranking by raw frequency -- while every pre-declared goal, the normaliser check and the
+    distributional KL all looked unremarkable.  They score the joint distribution or its
+    moments; none of them scores the ordering.
+
+    The holdout is drawn with a fixed seed so the same items are hidden at every checkpoint
+    and the series is comparable across a run.
+    """
+    rng = np.random.default_rng(seed)
+    # save and restore the model's batch context: this runs INSIDE the checkpoint block,
+    # before the normaliser check, and leaving m.ctx pointing at the recommendation batch
+    # makes the next b_flat mismatch its index (127,999 slots against 128,546).
+    _sh, _sc = m.house, m.ctx
+    ranks = []
+    for k in range(0, len(trips), chunk):
+        ix, ctx, lctx, hh, LI, LT, LC, LU = B.make(trips[k:k + chunk])
+        m.house, m.ctx = hh, ctx
+        with torch.no_grad():
+            bf = m.b_flat(ix)
+        for b in range(ix.B):
+            sel = ix.item_trip == b
+            items, bv = ix.item[sel], bf[sel]
+            basket = LI[LT == b]
+            if len(basket) < 2:
+                continue
+            hid = int(basket[rng.integers(len(basket))])
+            rest = torch.as_tensor([int(x) for x in basket if int(x) != hid],
+                                   dtype=torch.long)
+            if len(rest) == 0:
+                continue
+            pos = (items == hid).nonzero().flatten()
+            if len(pos) == 0:
+                continue
+            with torch.no_grad():
+                sc = bv + m.phi[items] @ m.phi[rest].sum(0)
+            inb = torch.zeros(len(items), dtype=torch.bool)
+            inb[torch.isin(items, rest)] = True
+            sc = sc.clone()
+            sc[inb] = -float("inf")
+            ranks.append(int((sc > sc[int(pos[0])]).sum()) + 1)
+    m.house, m.ctx = _sh, _sc
+    if not ranks:
+        return float("nan"), float("nan")
+    r = np.asarray(ranks, dtype=float)
+    return float((1.0 / r).mean()), float(np.median(r))
 
 
 def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes,
@@ -287,6 +342,20 @@ def main(a):
         _co[torch.as_tensor(D["line_item"], dtype=torch.long)] = \
             torch.as_tensor(D["line_cat"], dtype=torch.long)
         m.cat_of.copy_(_co)
+    if a.quad_q > 0:
+        # DETERMINISTIC log Z.  f(z) was always exact (the ESP recursion is a closed
+        # form); only the outer E_z was sampled, and importance sampling cannot do
+        # that integral -- verified against exact enumeration, 4096 draws are wrong
+        # by 8-36 nats.  A Smolyak grid does it to 0.0009 nats at Kz=2, q=6.
+        m.quad = smolyak_grid(a.Kz, a.quad_q)
+        log(f"  deterministic log Z: Smolyak Kz={a.Kz} q={a.quad_q}, "
+            f"{len(m.quad[0])} nodes (replaces {a.draws} sampled draws); "
+            f"proposal/ESS/lz-strikes machinery is now inert")
+    if a.no_rec:
+        with torch.no_grad():
+            m.psi.zero_()
+        m.psi.requires_grad_(False)
+        log("  --no-rec: psi zeroed and frozen (recency removed from b)")
 
     if a.init_rho0:
         # Initialise the size potential at the empirical basket-size law.
@@ -377,6 +446,7 @@ def main(a):
     e_ema = v_ema = None
     n_bang = 0
     best_vb, best_it = -1e18, -1
+    best_mrr, best_mrr_it = -1e18, -1
     if resume_blob is not None and resume_blob.get("best_vb") is not None:
         best_vb, best_it = float(resume_blob["best_vb"]), int(resume_blob["best_it"])
         log(f"  best-so-far carried over: set/basket {best_vb:.4f} at iteration {best_it}")
@@ -388,7 +458,36 @@ def main(a):
     # already happened: E[n] read 13.5 at 16 draws against 32.2 at 128.
     lam_seen = float("inf")
     obs_mean = float(np.mean(D["trip_nlines"][tr]))
-    m.project(a.phi_max)
+    # Degree-aware cap: phi_max_j = phi_max * min(sqrt(deg_j), phi_deg_cap).
+    #
+    # A uniform cap is wrong for a STAR, and real co-purchase is a star: the 200 most
+    # co-purchased pairs span 108 products with one appearing in 100 of them.  A hub must be
+    # LONG, not aligned -- the clique a star induces has magnitude c^2/||h||^2, which vanishes
+    # as the hub grows.  s24's unconstrained fit chose ||phi_hub|| = 3.774 against 0.896 for
+    # its partners (4.2x at degree 8; sqrt(8) = 2.83, so sqrt(deg) is conservative).  Under
+    # the uniform 0.96 the fitted phi'phi is 0.83 on degree-1 pairs -- 90% of its ceiling --
+    # but 0.093 on the 152 hub pairs, which is the whole of the 0.092 co-occurrence ratio.
+    #
+    # Measured on run66 by rescaling the fitted directions, target phi'phi 0.920, and against
+    # the lam_max 1.185 that broke run58:
+    #     uniform 0.96        phi'phi 0.164  lift 1.18  lam_max 0.726
+    #     sqrt(deg) cap 1.5   phi'phi 0.369  lift 1.45  lam_max 1.207   <- the WORST setting
+    #     sqrt(deg) cap 2.5   phi'phi 0.994  lift 2.70  lam_max 0.451
+    # lam_max is NON-monotone: a timid cap lengthens hubs enough to raise the coupling but not
+    # enough to push pi off the pi(1-pi) maximum at 1/2.  Half-measures are the dangerous
+    # setting, which is why the ceiling is 2.5 rather than something cautious.
+    phi_cap = a.phi_max
+    if a.phi_deg:
+        _dg = np.load(a.phi_deg)
+        if _dg.shape[0] != m.phi.shape[0]:
+            raise SystemExit(f"degree file covers {_dg.shape[0]} products, model has "
+                             f"{m.phi.shape[0]}")
+        _sc = np.minimum(np.sqrt(_dg), a.phi_deg_cap)
+        phi_cap = (a.phi_max * torch.as_tensor(_sc, dtype=m.phi.dtype)).unsqueeze(1)
+        log(f"degree-aware phi cap: {float(phi_cap.min()):.2f}..{float(phi_cap.max()):.2f}, "
+            f"{int((_sc > 1.0).sum())} products above the base, "
+            f"{int((_sc >= a.phi_deg_cap).sum())} at the ceiling")
+    m.project(phi_cap)
     lz_strikes = int(resume_blob['lz_strikes']) if resume_blob else 0
     phi_mask = None
     if a.phi_mask:
@@ -474,6 +573,14 @@ def main(a):
                                  antithetic=a.antithetic > 0,
                            units=lq if a.units else None)
         loss = -ll.mean()
+        # Keep the unmasked data term so the ESS gate can swap it out WITHOUT discarding the
+        # penalties added below.  The gate used to rebuild loss from scratch as
+        # -ll[keep].mean(), which silently dropped every one of them: --pool-ctx,
+        # --pool-beta, --elast-w and --pool-prod never reached backward().  run75 came out
+        # BIT-IDENTICAL to run74 in every logged column, which is how this surfaced.  Only
+        # size_kl survived, because the gate re-added it by hand; it is added once here and
+        # must NOT be re-added there.
+        _data_term = loss
         # Size-law calibration penalty.
         #
         # The measured failure is a chain with one root: the fitted size law puts too much
@@ -510,6 +617,49 @@ def main(a):
             e_tr = (pn * nax).sum(1)
             v_tr = (pn * nax ** 2).sum(1) - e_tr ** 2
             ce = ce + a.var_w * (torch.log1p(v_tr.mean()) - math.log1p(emp_var)) ** 2
+            # PER-TRIP size calibration.  Everything above matches an AVERAGE -- the
+            # cross-entropy and the reverse KL both act on pbar = pn.mean(0) -- and the
+            # failure is not in the average.  Measured on run80 at iter 1200, 480 validation
+            # trips: the 117 trips whose normaliser gap exceeds 1 nat have model E[n] 36.4
+            # against 14.6 for the other 363, a 2.49x separation, while every other per-trip
+            # quantity is flat (logsumexp b 1.01x, assortment 1.01x, categories 1.04x, and
+            # phi mass identical to three decimals -- the interaction plays no part).  So a
+            # minority of trips with runaway E[n] destroys the estimator, and the batch mean
+            # cannot see them: it is the fifth time in this file a mean has stood in for a
+            # tail.  e_tr is the per-trip E[n], already computed on the line above and until
+            # now used only through v_tr.mean().
+            if a.en_w > 0:
+                _obs = torch.zeros_like(e_tr).index_add_(
+                    0, lt, torch.ones(lt.shape[0], dtype=e_tr.dtype))
+                ce = ce + a.en_w * ((e_tr - _obs) ** 2).mean()
+            # REVERSE KL, because the cross-entropy above is structurally blind to the
+            # failure it was written to prevent.
+            #
+            # -sum_n emp(n) log p(n) weights every size by its EMPIRICAL frequency, so it
+            # punishes the model for MISSING data mass and never for inventing mass where
+            # the data has none.  Measured on run68 (train, 240 trips), the whole E[n]
+            # miscalibration is one fat tail that cross-entropy cannot see:
+            #
+            #     n        model P   emp P   model n*P   emp n*P    excess
+            #     1-20      0.7624  0.9000       5.399     5.136    +0.263
+            #     21-50     0.0935  0.0917       2.510     2.754    -0.244
+            #     51-120    0.0442  0.0083       5.194     0.525    +4.669   <- 99.6% of it
+            #
+            # That bucket carries 0.83% of the empirical mass, hence 0.83% of the CE weight,
+            # while contributing 40% of model E[n].  So E[n] ran 1.56x in-sample on the best
+            # checkpoint in the project and no amount of tuning size_kl could touch it --
+            # the penalty has no gradient there to tune.  It also feeds the aborts: the tail
+            # inflates Z, but log Z is estimated from 16 draws and biased DOWNWARD worst
+            # exactly where the tail is heavy, so the tail grows nearly free, Var(n) rises,
+            # ESS collapses, and the normaliser check fires.
+            #
+            # KL(model || emp) = sum_n p(n) log(p(n)/emp(n)) is mode-SEEKING: its gradient
+            # is log(p/emp) + 1, which is large precisely where the model has mass the data
+            # does not.  emp is smoothed because it is exactly zero at some sizes.
+            if a.rkl_w > 0:
+                _ep = emp_pn[: pbar.shape[0]] + a.rkl_eps
+                _ep = _ep / _ep.sum()
+                ce = ce + a.rkl_w * (pbar * (pbar.log() - _ep.log())).sum()
             loss = loss + a.size_kl * ce
         # Match the aggregate price elasticity the DATA shows.
         #
@@ -525,14 +675,18 @@ def main(a):
         # Proposition 1 makes the quantity available in closed form: for a uniform shift,
         # dE[n]/d log p = -(gamma.beta) Var(n), so the elasticity is that over E[n].  Both
         # moments come from pn, which the normaliser already returns.
-        elast = None
+        # MEASURE always, PENALISE only when asked.  Both used to sit behind elast_w > 0, so
+        # --elast-w 0 logged 'elast +nan' and blinded one of the three things this model
+        # exists to do.  The quantity is closed form from pn, which the normaliser already
+        # returned -- a few tensor ops, no extra pass -- and when elast_w is 0 it never
+        # enters loss, so gradients are bit-identical either way.
+        gb = (softplus(m.gamma[hh][ix.item_trip])
+              * softplus(m.beta[ix.item])).sum(-1).mean()
+        nax = torch.arange(1, pn.shape[1] + 1, dtype=pn.dtype)
+        e_b = (pn * nax).sum(1)
+        v_b = (pn * nax ** 2).sum(1) - e_b ** 2
+        elast = -(gb * v_b.mean() / e_b.mean().clamp_min(1e-6))
         if a.elast_w > 0:
-            gb = (softplus(m.gamma[hh][ix.item_trip])
-                  * softplus(m.beta[ix.item])).sum(-1).mean()
-            nax = torch.arange(1, pn.shape[1] + 1, dtype=pn.dtype)
-            e_b = (pn * nax).sum(1)
-            v_b = (pn * nax ** 2).sum(1) - e_b ** 2
-            elast = -(gb * v_b.mean() / e_b.mean().clamp_min(1e-6))
             loss = loss + a.elast_w * (elast - a.elast_target) ** 2
         # PARTIAL POOLING on the per-product price coefficient.
         #
@@ -551,6 +705,56 @@ def main(a):
         if a.pool_beta > 0:
             _g = softplus(m.beta)
             loss = loss + a.pool_beta * ((_g - _g.mean(0, keepdim=True)) ** 2).mean()
+        # PARTIAL POOLING on the contextual item embeddings, for the same reason.
+        #
+        # In the arena, where season/store/recency effects are REAL and learnable, these terms
+        # HELP: MRR 0.4940 -> 0.5003, 98.9% of the achievable ceiling, and train likelihood
+        # -5.99 -> -5.82.  So they are not intrinsically harmful.  The real-data failure is
+        # identification: mu is 5455xR here against 16x3 in the arena -- about a thousand
+        # times more contextual parameters for six times the data -- so the residuals fit
+        # noise, which costs 34x in ranking MRR while the likelihood barely notices.
+        #
+        # Toward the MEAN, not toward zero: the mean carries basket size (centring mu
+        # collapsed E[n] to 1.00) and only the dispersion across products is noise.  This is
+        # the same treatment that took beta's price MAE from 0.141 to 0.099 for 0.003 nats.
+        if a.pool_ctx > 0:
+            for _p in (m.mu, m.zeta, m.psi):
+                loss = loss + a.pool_ctx * ((_p - _p.mean(0, keepdim=True)) ** 2).mean()
+        # RIDGE ON THE PRODUCT, not on the factors.  This is the degree fix.
+        #
+        # A squared penalty on each factor of a bilinear term becomes a NUCLEAR-norm penalty
+        # on their product, which is degree 1, while lam pays a ridge, degree 2.  Verified
+        # numerically by minimising over the free scale with no algebra assumed: bilinear
+        # cost/||v|| is flat for ||v|| in 50..400 while lam cost/||v||^2 is flat at 5e-6.
+        # The coefficient depends on which penalties are actually live: 2.204e-4 (crossover
+        # ||v|| = 44) if pool_ctx is active, 7.28e-5 = wd*sqrt(W) (crossover ||v|| = 14.6)
+        # with weight decay alone, which is the regime that really ran, since the ESS gate
+        # discarded pool_ctx.  Measured intercept is ||c|| = 244, far above either.  So the
+        # bilinear
+        # route is structurally cheaper and wins every time, which is why raising pool_ctx
+        # never worked -- it moves the coefficient, not the exponent, and the optimiser
+        # evades it anyway by shrinking mu and growing delta.
+        #
+        # Gauge-fixing delta killed only the CONSTANT channel mu'delta_bar.  Ranking happens
+        # WITHIN a trip, where the week is fixed, so mu_j'delta_w is still a per-product
+        # offset that acts exactly like an intercept even when it averages to zero over
+        # weeks -- and it still had the cheap linear route.  run74: season 0.042 -> 1.407
+        # while MRR fell 0.0780 -> 0.0270.
+        #
+        # ||P Q'||_F^2 = tr((P'P)(Q'Q)) -- a K x K trace, so the J x W (or J x N) offset
+        # matrix is never formed.  Divided by its entry count this is a ridge of strength
+        # pool_prod per realised offset entry; pool_prod = (wd/2)*J*W = 1.45 makes it exactly
+        # the ridge lam already pays.  Per unit of PER-PRODUCT offset that is W times dearer
+        # than lam, which is correct: an effect that varies by week spends 53 numbers to say
+        # what lam says with one, and should need correspondingly more evidence.
+        #
+        # All THREE bilinear pairs, not just the seasonal one.  Penalising mu.delta alone
+        # would leave theta.alpha as an untaxed escape route and the mass would simply move
+        # there -- the same way it moved out of the constant channel once that was closed.
+        if a.pool_prod > 0:
+            for _P, _Q in ((m.mu, m.delta_c()), (m.zeta, m.xi_c()), (m.alpha, m.theta_c())):
+                loss = loss + a.pool_prod * torch.trace(
+                    (_P.T @ _P) @ (_Q.T @ _Q)) / (_P.shape[0] * _Q.shape[0])
         # ESS GATE.  log Z is estimated by importance sampling; where the sampler has
         # collapsed the estimate is unreliable and biased DOWNWARD, which the objective
         # rewards (section 17).  The diverged run had ESS 0.016 on exactly the trips whose
@@ -596,13 +800,83 @@ def main(a):
             n_skip += 1
             opt.zero_grad()
         else:
-            loss = -ll[keep].mean()
-            if ce is not None:
-                loss = loss + a.size_kl * ce
+            # Swap in the ESS-masked data term; every penalty above is preserved.
+            loss = loss - _data_term + (-ll[keep].mean())
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(m.parameters(), a.clip)
             opt.step()
+            # --- rho_0: fix the gauge, then floor the curvature ------------------------
+            #
+            # Adding Delta to every b_j multiplies each n-subset by e^{n Delta}, which is
+            # IDENTICAL to rho_0(n) -> rho_0(n) - n Delta.  So rho_0's linear component and
+            # lam's mean are one flat direction, and rho_0 duly collapsed onto it: measured
+            # first differences run 7.59 -> 4.22 on run80 and 23.73 -> 22.44 on run68, i.e.
+            # very nearly a straight line.  Centring lam and passing the level to rho_0 is
+            # the exact reparameterisation (b unchanged) that pins it.
+            if a.lam_centre:
+                with torch.no_grad():
+                    _mu = m.lam.mean().clone()
+                    m.lam.sub_(_mu)
+                    _n = torch.arange(1, m.rho_0_free.shape[0] + 1,
+                                      dtype=m.rho_0_free.dtype, device=m.rho_0_free.device)
+                    m.rho_0_free.sub_(_mu * _n)
+            # A straight rho_0 has NO curvature, and curvature is the only thing bounding
+            # basket size: Var(n|trip) ~ 1/rho_0''.  Measured curvature was NEGATIVE across
+            # the whole range where baskets live (n=1..40; median -0.034 on run80, -0.014 on
+            # run68), turning positive only past n=50 where there is no data.  The term whose
+            # job is to confine size was providing anti-confinement.
+            #
+            # That is what makes the model unstable, via Proposition 1: dE[n]/dDelta =
+            # Var(n).  b is only 0.185 higher on held-out trips, but Var(n) ~ 86 amplifies
+            # that into +15.95 items (predicted 15.97, observed 15.95 -- exact), so held-out
+            # E[n] hits 18.6 against 7.4 observed and the normaliser becomes unestimable.
+            # Flooring rho_0'' >= c makes Var <= 1/c a guarantee: c = 0.09 caps the
+            # amplifier at 11, so the model's own generalisation error can move E[n] by at
+            # most ~2 items.
+            # Keep phi inside the region where log Z is computable at all.
+            #
+            # c = max_u sum_j max(phi_j'u, 0) sets where the latent target keeps its mass
+            # (||z|| ~ c) and hence log Z ~ c^2/2.  The proposal is a mode-centred Gaussian
+            # with sd capped at 4.47 and the prior's typical radius is sqrt(Kz) = 5.66, so
+            # at the measured c = 74 (run84) the sampler was drawing at radius ~5 while the
+            # mass sat beyond 100.  log Z was really ~2.7e3, not the ~10.7 reported.
+            # This supersedes --lam-project (lambda_max was computed from pi at the MODE,
+            # where E[n|zhat] = 2.8 against a marginal 17.7, so it never bound) and
+            # --gap-project (phi is uncorrelated with the gap: +0.009, identical phi mass in
+            # blown-up and healthy trips).
+            if a.c_max != 0:
+                _cm = a.c_max if a.c_max > 0 else math.sqrt(m.Kz)
+                _c = m.phi_radius()
+                if _c > _cm:
+                    with torch.no_grad():
+                        m.phi.mul_(_cm / _c)
+            # Hold lam's spread below the measured cliff.
+            #
+            # lam sd has risen monotonically in EVERY run regardless of configuration
+            # (0.183->0.612 run74, 0.092->0.491 run81, 0.111->0.590 run83), and the
+            # normaliser gap is flat until lam sd ~0.6 and then explodes: measured on a
+            # trained checkpoint, scaling lam's spread gave gap 0.006 at sd 0.43, 0.022 at
+            # 0.64, 0.673 at 0.86 and 67.1 at 1.29.  run83 crossed sd 0.590 and the gap
+            # jumped +0.818 -> +2.373 in one eval, which is why every run dies near
+            # iteration 1400-1600.  The incentive is in the likelihood itself -- importance
+            # sampling always UNDERSTATES log Z (Jensen), ll = E - log Z, and the
+            # understatement grows with the spread of the energies -- so no penalty on the
+            # size law or the contextual terms can reach it.  A projection can.
+            # MRR peaked at 0.0872 with lam sd 0.380, so 0.45 sits above the useful range
+            # and below the cliff.  Applied AFTER the centring so the mean stays at zero.
+            if a.lam_sd_max > 0:
+                with torch.no_grad():
+                    _sd = m.lam.std()
+                    if float(_sd) > a.lam_sd_max:
+                        m.lam.mul_(a.lam_sd_max / _sd.clamp_min(1e-12))
+            if a.rho0_curv > 0:
+                with torch.no_grad():
+                    _r = m.rho_0()
+                    _d1 = _r[1:] - _r[:-1]
+                    _d2 = (_d1[1:] - _d1[:-1]).clamp_min(a.rho0_curv)
+                    _d1 = torch.cat([_d1[:1], _d1[:1] + torch.cumsum(_d2, 0)])
+                    m.rho_0_free.copy_(torch.cumsum(_d1, 0))
             # Cap lambda_max, not ||phi||.
             #
             # Proposition 3 needs lambda_max(Lambda) < 1 for the mode to be unique and for
@@ -666,7 +940,7 @@ def main(a):
                 w_new[seen] /= cntj[seen]
                 prev = getattr(m, "_pi_w", None)
                 m._pi_w = w_new if prev is None else torch.where(seen, 0.5 * prev + 0.5 * w_new, prev)
-            cap = a.phi_max
+            cap = phi_cap
             # With pi weights the bound is lambda_max itself, so the budget IS the target.
             # The budget caps the TRACE sum_j pi_j(1-pi_j)||phi_j||^2, but lambda_max is
             # about trace / effective rank.  Capping the trace at lam_target assumes erank=1
@@ -739,6 +1013,19 @@ def main(a):
             # per-product constant that lambda_j already spans; the store term is then
             # redundant rather than merely damped.  That is a real loss of capacity and the
             # reason this is a tunable projection rather than a deletion.
+            # NOTE: a hard projection of the contextual residuals to their mean (--ctx-shrink 0)
+            # was tried and is CATASTROPHIC.  It improves complete-the-basket MRR 12x
+            # (0.0036 -> 0.0442) but puts every product in every basket: E[n] 120.0 against an
+            # observed 7.2, held-out set/basket -315.7 at shrink 0 and -121.8 at 0.5.  Those
+            # residuals are load-bearing -- they SUPPRESS most of the catalogue -- and ranking
+            # is blind to the level of b, so the ranking metric could not see the damage.
+            # The pooling penalty below is the non-destructive form: shrink the dispersion,
+            # keep the level.  --ctx-shrink is retained only to reproduce that finding.
+            if a.ctx_shrink < 1.0:
+                with torch.no_grad():
+                    for _p in (m.mu, m.zeta, m.psi):
+                        _mu = _p.mean(0, keepdim=True).clone()
+                        _p.mul_(a.ctx_shrink).add_((1.0 - a.ctx_shrink) * _mu)
             if a.xi_shrink > 0:
                 with torch.no_grad():
                     # take the mean BEFORE mutating: mul_(1-alpha) at alpha=1 zeroes xi, and
@@ -918,6 +1205,8 @@ def main(a):
             ho_e_spread = float(ev_e.var())
             vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 2, gen, use_units=a.units)
             m.house, m.ctx = hh, ctx
+            rec_mrr, rec_med = rec_eval(m, B, va[:a.n_rec]) if a.n_rec > 0 \
+                else (float('nan'), float('nan'))
             ep = it * a.batch / max(len(tr), 1)
             cum_it = cum_base + (it - it0) + a.cum_offset
             cum_ep = cum_it * a.batch / max(len(tr), 1)
@@ -932,6 +1221,19 @@ def main(a):
                 f"lam_max {lam_max:.3f}  E[n] {ho_e:.1f}/{vobs.mean():.1f} "
                 f"[{ho_e8:.1f}@8x] var {ho_v:.0f}/{vobs.var():.0f} "
                 f"(w{ho_v_within:.0f}+s{ho_e_spread:.0f})  "
+                f"MRR {rec_mrr:.4f}(med {rec_med:.0f})  "
+                # lam is the per-product intercept and the parameter ranking depends on.
+                # pi_exact used to shadow it into self.__dict__ as a detached tensor, so it
+                # took exactly one Adam step (|lam| <= lr) and froze, runs 29-71.  Logged so
+                # a dead intercept can never again be invisible for forty runs.
+                # lam is the per-product intercept and the parameter ranking depends on.
+                # 'season' is the spread of the CENTRED seasonal term across products and
+                # weeks -- what mu'delta legitimately contributes once it can no longer hold
+                # a per-product constant.  'db' is the constant channel itself: gauge-fixed
+                # to zero by delta_c(), logged as a guard that it stays there.
+                f"lam sd {float(m.lam.std()):.3f}"
+                f"(season {float((m.mu @ m.delta_c().T).std()):.3f} "
+                f"db {float((m.mu * m.delta_c().mean(0)).sum(-1).std()):.1e})  "
                 f"elast {np.mean(el_hist[-a.eval_every:]) if el_hist else float('nan'):+.3f}"
                 f"/{a.elast_target:+.3f}  "
                 f"skip {n_skip}  drop {n_drop}  redo {n_redo}  bang {n_bang}  "
@@ -959,6 +1261,34 @@ def main(a):
                 gap = float((lz_hi - lz_lo).mean())
             log(f"  normaliser check: log Z at {_nd} draws vs {_nd*16} "
                 f"differs by {gap:+.3f} nats")
+            # GAP-BASED phi control, replacing the lam_max projection.
+            #
+            # lam_max is not a safety measure in the regime where safety matters -- it is
+            # NON-MONOTONE in phi and FALLS as the estimator deteriorates.  Measured on
+            # run68 by scaling phi, with the gap that actually decides soundness:
+            #     scale 0.70  lam_max 0.663  gap -0.007   ok
+            #     scale 1.00  lam_max 1.004  gap  0.147   ok
+            #     scale 1.30  lam_max 0.913  gap  0.578   ok
+            #     scale 1.60  lam_max 0.596  gap  3.564   BROKEN
+            # The model is sound at lam_max 1.004 and broken at 0.596.  The cause is the
+            # pi(1-pi) weighting inside Lambda: as phi grows, inclusion probabilities
+            # saturate, pi(1-pi) -> 0, and lam_max collapses even as the integral gets
+            # harder.  So --lam-target has been regulating the wrong quantity all along.
+            #
+            # The gap is the honest diagnostic -- it is what the abort has always used, and
+            # what has caught every real failure.  Control phi with it directly.
+            #
+            # gap rises roughly exponentially in the phi scale: log gap went -1.92 -> -0.55
+            # -> 1.27 over scale 1.0 -> 1.3 -> 1.6, a slope of about 5.3 per unit scale.  So
+            # the correction to bring gap to target is Delta_scale = log(target/gap)/5.3,
+            # clamped, which is gentle because the response is steep.
+            if a.gap_project > 0 and gap > a.gap_project:
+                _f = math.exp(math.log(a.gap_project / max(gap, 1e-9)) / 5.3)
+                _f = min(max(_f, 0.85), 1.0)
+                with torch.no_grad():
+                    m.phi.mul_(_f)
+                log(f"  gap {gap:+.3f} > {a.gap_project}: phi scaled by {_f:.3f} "
+                    f"(lam_max reads {lam_max:.3f}, which is NOT the binding quantity)")
             # sampler-vs-analytic consistency: same distribution, two routes.
             samp_n = float("nan")
             try:
@@ -1013,6 +1343,22 @@ def main(a):
                           cum_iter=cum_it)
                 json.dump(dict(iter=it, set_per_basket=vb, epoch=ep),
                           open(os.path.join(OUT, f"v3_{a.label}_best.json"), "w"), indent=2)
+            # Also keep the best-RANKING checkpoint.  Held-out likelihood and held-out MRR
+            # move in OPPOSITE directions here: run86 (exact normaliser) peaked at MRR
+            # 0.0676 by iteration 600 and fell to 0.0615 by 1000 while set/basket improved
+            # -44.65 -> -43.59; run84 did the same under a biased one, so it is a property
+            # of the objective, not of the estimator.  Ranking is scale-free -- log Z
+            # cancels within a trip -- so MRR measures relative b while the likelihood
+            # measures absolute b plus the normaliser, and the fit trades the first for the
+            # second.  Selecting on likelihood alone therefore ships a model well past its
+            # ranking peak, which is the wrong choice for recommendation and coupons.
+            if rec_mrr > best_mrr:
+                best_mrr, best_mrr_it = rec_mrr, it
+                save_ckpt(os.path.join(OUT, f"v3_{a.label}_bestmrr.pt"), m, opt, sched,
+                          it, rng, gen, best_vb, best_it, lz_strikes, cum_iter=cum_it)
+                json.dump(dict(iter=it, mrr=rec_mrr, set_per_basket=vb, epoch=ep),
+                          open(os.path.join(OUT, f"v3_{a.label}_bestmrr.json"), "w"),
+                          indent=2)
     vb, vl, vu, vt = evaluate(m, B, va[:a.n_val], a.draws * 4, gen, use_units=a.units)
     log(f"final  set/basket {vb:.4f}  set/line {vl:.4f}  units/basket {vu:.4f}  total/basket {vt:.4f}")
     save_ckpt(os.path.join(OUT, f"v3_{a.label}.pt"), m, opt, sched, a.iters,
@@ -1052,6 +1398,29 @@ if __name__ == "__main__":
     p.add_argument("--phi-max", type=float, default=1.20)   # 0.25 collapses ESS   # 0.35 measures lambda_max 0.67
     p.add_argument("--size-kl", type=float, default=1.0)
     p.add_argument("--var-w", type=float, default=0.0)
+    # Reverse KL on the size law: mode-seeking, so it removes model mass where the data
+    # has none.  The forward cross-entropy (--size-kl) cannot see that failure at all.
+    p.add_argument("--rkl-w", type=float, default=0.0)
+    # Per-trip E[n] calibration.  The size-law penalties above all act on the batch
+    # MEAN; the trips that break the normaliser are a minority with runaway per-trip E[n].
+    p.add_argument("--en-w", type=float, default=0.0)
+    # rho_0 curvature floor: Var(n|trip) ~ 1/rho_0'', and Var is the amplifier in
+    # Proposition 1 (dE[n]/dDelta = Var(n)).  c=0.09 caps Var at ~11.
+    p.add_argument("--rho0-curv", type=float, default=0.0)
+    # Recency is built from purchase history, so on a TEMPORAL split (train weeks 1-82,
+    # valid 83-90, test 91-102) its distribution drifts: the "never bought before"
+    # indicator falls 74.7% -> 51.5%, and log1p(since)/log(100) leaves the training support
+    # (max 1.000 -> 1.399).  Measured, that moves mean b by +0.337 -- 104% of the whole
+    # held-out shift -- which Proposition 1 turns into 0.337*Var(n) ~ 22 extra items.
+    p.add_argument("--no-rec", type=int, default=0)
+    p.add_argument("--lam-sd-max", type=float, default=0.0)
+    # c <= sqrt(Kz) keeps the latent mass inside the prior's typical set, where the
+    # mode-centred proposal can actually reach it.  -1 means auto = sqrt(Kz).
+    p.add_argument("--c-max", type=float, default=0.0)
+    # Smolyak level for the deterministic normaliser.  0 = keep importance sampling.
+    p.add_argument("--quad-q", type=int, default=0)
+    p.add_argument("--lam-centre", type=int, default=0)
+    p.add_argument("--rkl-eps", type=float, default=1e-4)
     p.add_argument("--var-target", type=float, default=-1.0)
     p.add_argument("--var-damp", type=float, default=0.15)
     p.add_argument("--proj-ema", type=int, default=1)
@@ -1059,6 +1428,14 @@ if __name__ == "__main__":
     p.add_argument("--cum-offset", type=int, default=0)
     p.add_argument("--xi-shrink", type=float, default=0.0)
     p.add_argument("--pool-beta", type=float, default=0.0)
+    p.add_argument("--phi-deg", default="")
+    p.add_argument("--phi-deg-cap", type=float, default=2.5)
+    p.add_argument("--gap-project", type=float, default=0.0)
+    p.add_argument("--ctx-shrink", type=float, default=1.0)
+    p.add_argument("--pool-ctx", type=float, default=0.0)
+    # (wd/2)*J*W = 5e-6*5455*53 = 1.45: the same ridge lam pays, per offset entry.
+    p.add_argument("--pool-prod", type=float, default=0.0)
+    p.add_argument("--n-rec", type=int, default=192)
     p.add_argument("--elast-w", type=float, default=20.0)
     p.add_argument("--elast-target", type=float, default=-0.121)
     p.add_argument("--phi-init", type=float, default=0.03)

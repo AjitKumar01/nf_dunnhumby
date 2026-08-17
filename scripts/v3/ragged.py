@@ -34,6 +34,7 @@ log-sum-exp over n.  A per-row scale would not survive the convolution across ca
 """
 import math
 
+import numpy as np
 import torch
 from torch.nn.functional import softplus
 
@@ -239,6 +240,158 @@ class RaggedIndex:
         self.flat_slot = self.row_trip * self.Cpad + self.row_pos
 
 
+def smolyak_grid(d, q):
+    """Smolyak sparse grid for E_{z~N(0,I_d)}[g(z)], by the combination technique:
+
+        A(q,d) = sum_{q-d+1 <= |i| <= q} (-1)^{q-|i|} C(d-1, q-|i|) (U^{i_1} x ... x U^{i_d})
+
+    with U^i the probabilists' Gauss-Hermite rule at level i (2i-1 nodes).  Verified against
+    exact enumeration at ||phi_j|| = 0.96 (phi'phi = 0.92, a grocery complement lift of 2.5):
+
+        Kz=2, q=6:   17 nodes, error -0.005 nats     Kz=4, q=7:  201 nodes, +0.021
+        Kz=3, q=7:  105 nodes, error +0.009 nats     Monte Carlo, 4096 draws: 8-36 nats
+
+    Weights are SIGNED; the caller must sum in linear space, not by logsumexp.
+    """
+    import itertools
+    from math import comb
+
+    def _rule(level):
+        x, w = np.polynomial.hermite_e.hermegauss(2 * level - 1)
+        return x, w / math.sqrt(2 * math.pi)
+
+    def _comps(total, k):
+        if k == 1:
+            yield (total,)
+            return
+        for first in range(1, total - k + 2):
+            for rest in _comps(total - first, k - 1):
+                yield (first,) + rest
+
+    acc = {}
+    for total in range(max(d, q - d + 1), q + 1):
+        c = (-1) ** (q - total) * comb(d - 1, q - total)
+        if c == 0:
+            continue
+        for idx in _comps(total, d):
+            gs = [_rule(k) for k in idx]
+            for combo in itertools.product(*[range(len(g[0])) for g in gs]):
+                node = tuple(round(float(gs[k][0][combo[k]]), 12) for k in range(d))
+                wt = c * float(np.prod([gs[k][1][combo[k]] for k in range(d)]))
+                acc[node] = acc.get(node, 0.0) + wt
+    nodes = np.array(list(acc.keys()), dtype=np.float64).reshape(-1, d)
+    wts = np.array(list(acc.values()), dtype=np.float64)
+    keep = np.abs(wts) > 1e-14
+    return (torch.as_tensor(nodes[keep], dtype=torch.float64),
+            torch.as_tensor(wts[keep], dtype=torch.float64))
+
+
+def sparse_prepare(model, ix):
+    """Everything in log f that does not depend on z.
+
+    Only phi-carrying products depend on z: for phi_j = 0 the weight is exp(b_j) whatever
+    z is.  With a mask of ~20 products out of 5,455 that is 99.6% of the elementary
+    symmetric polynomial work, currently recomputed once per quadrature node.  The scale is
+    taken z-INDEPENDENTLY (seg_max over bt alone) so the inactive ESP can be built once;
+    that is exact -- shifting the scale is compensated by the n*M term in lg -- and safe
+    numerically because |phi_j'z| <= ||phi_j|| * 3.75 on the Smolyak grid.
+    """
+    phi_i = model.phi[ix.item]
+    bt = model.b_flat(ix) - 0.5 * (phi_i ** 2).sum(-1)                 # [T]
+    act = phi_i.norm(dim=-1) > 1e-12                                   # [T]
+    M0 = seg_max(bt.unsqueeze(0), ix.item_trip, ix.B)                  # [1, B]
+    sh = M0[0].index_select(0, ix.item_trip)                           # [T]
+    w0 = torch.where(act, torch.zeros_like(bt), torch.exp(bt - sh))
+    e0 = esp_bucketed(w0.unsqueeze(0), ix.row_of, ix.n_rows, model.R,
+                      ix.row_size, ix.item_pos)                        # [1, n_rows, R+1]
+    ai = torch.nonzero(act, as_tuple=True)[0]                          # active slots
+    arow = ix.row_of[ai]
+    urow, inv = torch.unique(arow, return_inverse=True)                # rows touched
+    # position of each active slot within its row's active list
+    ordv = torch.argsort(inv * (len(ai) + 1) + torch.arange(len(ai), device=ai.device))
+    inv_s = inv[ordv]
+    pos = torch.zeros(len(ai), dtype=torch.long, device=ai.device)
+    if len(ai) > 0:
+        start = torch.zeros(len(urow), dtype=torch.long, device=ai.device)
+        cnt = torch.bincount(inv_s, minlength=len(urow))
+        start[1:] = torch.cumsum(cnt, 0)[:-1]
+        pos[ordv] = torch.arange(len(ai), device=ai.device) - start[inv_s]
+    kmax = int(pos.max().item()) + 1 if len(ai) > 0 else 0
+    # The category convolution is 77% of log f (profiled: poly_tree 1.714s of 2.230s), and
+    # a category containing no phi product has a z-INDEPENDENT polynomial.  So split
+    #     A(z) = A_const  *  A_active(z)
+    # and build A_const once over the ~250 inactive categories, leaving the per-node tree
+    # to run over the handful that phi actually touches.
+    r_ = torch.arange(model.R + 1, dtype=e0.dtype, device=e0.device)
+    a_ = torch.exp(-model.rho_c[ix.row_cat].unsqueeze(-1) * r_ * (r_ - 1) / 2.0)
+    G0 = a_.unsqueeze(0) * e0                                          # [1, n_rows, R+1]
+    aflat = ix.flat_slot[urow] if len(ai) > 0 else ix.flat_slot[:0]
+    Gc = torch.zeros(1, ix.B * ix.Cpad, model.R + 1, dtype=e0.dtype, device=e0.device)
+    Gc[:, :, 0] = 1.0
+    Gc = Gc.index_copy(1, ix.flat_slot, G0)
+    if len(aflat) > 0:                       # active categories -> identity in the const half
+        Gc[:, aflat, :] = 0.0
+        Gc[:, aflat, 0] = 1.0
+    A_const = poly_tree(Gc.view(1, ix.B, ix.Cpad, model.R + 1), model.nmax)   # [1,B,nmax+1]
+    ab = (aflat // ix.Cpad) if len(aflat) > 0 else aflat
+    if len(aflat) > 0:
+        o = torch.argsort(ab * (len(ab) + 1) + torch.arange(len(ab), device=ab.device))
+        ab_s = ab[o]
+        cnt = torch.bincount(ab_s, minlength=ix.B)
+        st = torch.zeros(ix.B, dtype=torch.long, device=ab.device)
+        st[1:] = torch.cumsum(cnt, 0)[:-1]
+        acol = torch.zeros(len(ab), dtype=torch.long, device=ab.device)
+        acol[o] = torch.arange(len(ab), device=ab.device) - st[ab_s]
+        cpad_a = int(cnt.max().item())
+    else:
+        acol, cpad_a = ab, 0
+    return dict(bt=bt, M0=M0, sh=sh, e0=e0, ai=ai, urow=urow, inv=inv, pos=pos,
+                kmax=kmax, a_row=a_, A_const=A_const, ab=ab, acol=acol, cpad_a=cpad_a)
+
+
+def log_f_sparse(model, z, ix, C, drop_empty=False, return_terms=False):
+    """log f(z) using the z-independent cache from sparse_prepare.  Same value as
+    log_f_ragged, with the ESP over non-phi products lifted out of the node loop."""
+    D = z.shape[1]
+    R, dt, dev = model.R, C["e0"].dtype, C["e0"].device
+    E = C["e0"].expand(D, -1, -1)
+    ai, urow, inv, pos, kmax = C["ai"], C["urow"], C["inv"], C["pos"], C["kmax"]
+    if len(ai) > 0:
+        phi_a = model.phi[ix.item[ai]]                                  # [Ta, Kz]
+        proj = (z[ix.item_trip[ai]] * phi_a.unsqueeze(1)).sum(-1)       # [Ta, D]
+        wa = torch.exp(C["bt"][ai].unsqueeze(1) - C["sh"][ai].unsqueeze(1) + proj)
+        W = torch.zeros(D, len(urow), kmax, dtype=dt, device=dev)
+        W[:, inv, pos] = wa.transpose(0, 1)
+        Ea = torch.zeros(D, len(urow), R + 1, dtype=dt, device=dev)
+        Ea[..., 0] = 1.0
+        for k in range(kmax):                                           # ESP over actives
+            Ea = Ea + W[:, :, k].unsqueeze(-1) * torch.nn.functional.pad(
+                Ea[..., :-1], (1, 0))
+        # combined row polynomial = (inactive ESP) * (active ESP), truncated at R
+        base = C["e0"][0, urow]                                         # [n_arow, R+1]
+        conv = torch.zeros(D, len(urow), R + 1, dtype=dt, device=dev)
+        for r in range(R + 1):
+            conv[..., r:] = conv[..., r:] + base[:, r].unsqueeze(0).unsqueeze(-1) *                 Ea[..., : R + 1 - r]
+        E = E.clone()
+        E[:, urow] = conv
+    if C["cpad_a"] == 0:
+        A = C["A_const"].expand(D, -1, -1)
+    else:
+        Ga = C["a_row"][C["urow"]].unsqueeze(0) * conv          # [D, n_arow, R+1]
+        Gz = torch.zeros(D, ix.B, C["cpad_a"], R + 1, dtype=dt, device=dev)
+        Gz[:, :, :, 0] = 1.0
+        Gz[:, C["ab"], C["acol"]] = Ga
+        A = poly_mul_trunc(poly_tree(Gz, model.nmax), C["A_const"], model.nmax)
+    n = torch.arange(A.shape[-1], dtype=dt, device=dev)
+    lg = (torch.log(A.clamp_min(1e-300)) - model.rho_0()[: A.shape[-1]]
+          + n * C["M0"].unsqueeze(-1))
+    if drop_empty:
+        lg = lg[..., 1:]
+    if return_terms:
+        return lg
+    return torch.logsumexp(lg, dim=-1).transpose(0, 1)
+
+
 def log_f_ragged(model, z, ix, drop_empty=False, return_terms=False,
                  return_parts=False):
     """log f(z) for a batch.  z [B, D, Kz] -> [B, D].
@@ -316,6 +469,7 @@ class RaggedModel(torch.nn.Module):
         self.phi = torch.nn.Parameter(torch.randn(J, Kz, generator=g) * phi_init)
         self.rho_c = torch.nn.Parameter(torch.zeros(C))
         self.rho_0_free = torch.nn.Parameter(torch.zeros(nmax))
+        self.quad = None        # (nodes, weights) -> deterministic log Z
         # --- conditioning blocks (Eq. 7) -------------------------------------------------
         # softplus(-2.8) = 0.060, so gamma.beta starts at about 8 * 0.060^2 = 0.029 --
         # the same magnitude the unconstrained product had at initialisation
@@ -359,7 +513,7 @@ class RaggedModel(torch.nn.Module):
         value except through here.
         """
         hh = self.house[trip]
-        b = self.lam[it] + (self.theta[hh] * self.alpha[it]).sum(-1)
+        b = self.lam[it] + (self.theta_c()[hh] * self.alpha[it]).sum(-1)
         if c is None:
             return b
         # Price sensitivity is held non-negative.
@@ -373,15 +527,108 @@ class RaggedModel(torch.nn.Module):
         # elementwise, so the derivative is <= 0 by construction rather than by hope.
         b = b - (softplus(self.gamma[hh]) * softplus(self.beta[it])).sum(-1) * c["dlp"]
         b = b + self.w_dsp[it] * c["disp"] + self.w_mlr[it] * c["mail"]
-        b = b + (self.mu[it] * self.delta[c["week"]]).sum(-1)
-        b = b + (self.zeta[it] * self.xi[c["store"]]).sum(-1)
+        b = b + (self.mu[it] * self.delta_c()[c["week"]]).sum(-1)
+        b = b + (self.zeta[it] * self.xi_c()[c["store"]]).sum(-1)
         if "rec" in c:
             b = b + (self.psi[it] * c["rec"]).sum(-1)
         return b
 
+    # ---- GAUGE FIXING on the three bilinear terms -------------------------------------
+    #
+    # b contains lam_j + theta_h'alpha_j + mu_j'delta_w + zeta_j'xi_s.  For any fixed a,
+    #
+    #     lam_j -> lam_j + mu_j'a ,   delta_w -> delta_w - a
+    #
+    # leaves b EXACTLY invariant, for every product and every week.  So the likelihood is
+    # flat along an 8-dimensional family and cannot decide how much per-product intercept
+    # sits in lam versus in the seasonal term.  Only the penalties decide, and they are of
+    # different degree.  Writing mu_j = (v_j/s).unit(delta_bar) to store an intercept v:
+    #
+    #     pool_ctx on mu   2.0 * ||v-vbar||^2 / (J*Kp*s^2)      falls with s
+    #     wd on delta      (wd/2) * W * s^2                     rises with s
+    #     minimised over s at 2*sqrt(AB) = 2.20e-4 * ||v-vbar|| -- LINEAR in ||v||
+    #
+    # while the same intercept in lam costs (wd/2)||v||^2 -- QUADRATIC.  Two factors of one
+    # product turn squared penalties on the factors into a nuclear-norm penalty on the
+    # product, which is degree 1.  Crossover at ||v|| = 44; the measured net intercept is
+    # ||c|| = 244, so essentially all of it belongs in the bilinear term at the optimum, and
+    # lam saturates at ||lam|| = 2.20e-4/wd = 22.0, i.e. std 0.298 REGARDLESS of ||c||.
+    # run73 measured lam std 0.173 -> 0.311 flattening, against 0.298 predicted.  That is
+    # why raising --pool-ctx never worked: it changes the coefficient, not the exponent, and
+    # the optimiser evades it outright by shrinking mu and growing delta.
+    #
+    # Centring the CONTEXT side removes the flat direction and makes lam the unique owner of
+    # the per-product constant.  It is gauge fixing, not regularisation: no signal is
+    # deleted, and expressiveness strictly INCREASES, because the constant channel was
+    # mu_j'delta_bar, confined to a <=Kp-dimensional subspace of R^J, and is now lam_j, free
+    # in all J.  Applied to a running model it would need lam += mu'delta_bar at the same
+    # instant to keep b invariant; from scratch both start at zero and no transfer is needed.
+    #
+    # theta'alpha needs this too.  It is the same shape -- a product of TWO trained tensors
+    # -- so centring only delta and xi would let the intercept migrate into taste instead of
+    # lam, and the fix would silently fail.  psi'rec does NOT need it: rec is fixed data, so
+    # psi enters linearly, is penalised quadratically, and has no escape route.
+    def theta_c(self):
+        return self.theta - self.theta.mean(0, keepdim=True)
+
+    def delta_c(self):
+        return self.delta - self.delta.mean(0, keepdim=True)
+
+    def xi_c(self):
+        return self.xi - self.xi.mean(0, keepdim=True)
+
     def b_flat(self, ix):
         """b at every assortment slot, [T] -- the normaliser's view."""
         return self.b_at(ix.item, ix.item_trip, self.ctx)
+
+    def _log_Z_quad(self, ix, drop_empty, return_ess, return_size, return_mode):
+        """log Z by DETERMINISTIC Smolyak quadrature -- no proposal, no draws, no bias.
+
+        f(z) is already exact (the ESP/poly-tree recursion is a closed form), so the only
+        approximation in the whole pipeline was the outer E_z over a Kz-dimensional
+        Gaussian.  Importance sampling cannot do that integral here: verified against exact
+        enumeration, 4096 draws are wrong by 8-36 nats, because f(z) ~ exp(c||z||) keeps its
+        mass in a shell the mode-centred proposal never reaches.  A sparse grid does it
+        deterministically -- at the strength grocery needs (phi'phi = 0.92) the error is
+        0.005 nats at Kz=2 with 17 points, fewer points than the 16 draws it replaces.
+
+        Smolyak weights are signed, so the sum is formed in linear space after factoring out
+        the row max; logsumexp cannot be used.
+        """
+        nodes, wts = self.quad                     # [P, Kz], [P]
+        B, P = ix.B, nodes.shape[0]
+        zs = nodes.to(self.lam.dtype).unsqueeze(0).expand(B, P, self.Kz)
+        w = wts.to(self.lam.dtype)
+        # Sparse path: only phi-carrying products depend on z, so the ESP over the rest
+        # and the category convolution over untouched categories are lifted out of the node
+        # loop.  Verified bit-equal to log_f_ragged (max rel 2.3e-16) and gradient-equal on
+        # masked-in phi (6.9e-14); the only difference is that phi_j = 0 products get no
+        # gradient, and fit.py re-applies the mask every step so those are discarded anyway.
+        # 83.7x at a 24-product mask, 7.0x at 400.
+        _C = sparse_prepare(self, ix)
+        if return_size:
+            lg = log_f_sparse(self, zs, ix, _C, drop_empty, return_terms=True)   # [P, B, n]
+            lf = torch.logsumexp(lg, dim=-1).transpose(0, 1)                     # [B, P]
+        else:
+            lf = log_f_sparse(self, zs, ix, _C, drop_empty)                      # [B, P]
+        M = lf.max(dim=1, keepdim=True).values
+        S = (w.unsqueeze(0) * torch.exp(lf - M)).sum(1)
+        lz = M.squeeze(1) + torch.log(S.clamp_min(1e-300))
+        out = [lz]
+        if return_ess:
+            # Deterministic: every node contributes by construction.  Reported as 1 so the
+            # ESS gate -- which exists to catch a collapsed sampler -- never fires on a rule
+            # that has no sampler to collapse.
+            out.append(torch.ones(B, dtype=lz.dtype, device=lz.device))
+        if return_size:
+            t = w.view(1, P, 1) * torch.exp(lg.permute(1, 0, 2) - M.unsqueeze(-1))
+            pn = t.sum(1)
+            pn = pn.clamp_min(0.0)
+            pn = pn / pn.sum(-1, keepdim=True).clamp_min(1e-300)
+            out.append(pn)
+        if return_mode:
+            out.append(torch.zeros(B, self.Kz, dtype=lz.dtype, device=lz.device))
+        return out[0] if len(out) == 1 else tuple(out)
 
     def log_Z(self, ix, n_draws=32, mode_steps=1, generator=None, return_ess=False,
               drop_empty=False, laplace=False, antithetic=False, return_size=False,
@@ -419,6 +666,8 @@ class RaggedModel(torch.nn.Module):
 
         Pass laplace=True to restore the curvature; if ESS ever falls, that is the switch.
         """
+        if getattr(self, "quad", None) is not None:
+            return self._log_Z_quad(ix, drop_empty, return_ess, return_size, return_mode)
         B = ix.B
         log_corr = None
         with torch.no_grad():
@@ -560,16 +809,33 @@ class RaggedModel(torch.nn.Module):
                 noise = torch.randn(B, n_draws, self.Kz, dtype=zh.dtype, device=zh.device,
                                     generator=generator)
             zs = zh + noise * sd.unsqueeze(1)
+            # The proposal density MUST match the proposal the draws came from.  These three
+            # branches used to be followed by an unconditional
+            #     log_q = -0.5*(noise**2).sum(-1) - sd.log().sum(...) - 0.5*Kz*log 2pi
+            # which overwrote every one of them, so aniso's and the mixture's densities were
+            # computed and thrown away and every draw was scored under the plain isotropic
+            # Gaussian.  Measured at 16 draws against a 512-draw reference of 10.873:
+            # mix_scales(1,3) returned 853.619 (off by 843 nats) because it DREW from the
+            # mixture and SCORED under a single Gaussian, and aniso 2 / 4 / 8 were
+            # bit-identical because only their effect on sd survived.  An if/elif/else makes
+            # the density follow the draws.
             _L2P = float(math.log(2 * math.pi))
-            if aniso > 1.0:
-                log_q = aniso_lq - sd.log().sum(-1, keepdim=True) - 0.5 * self.Kz * _L2P
+            _sdlog = sd.log().sum(-1, keepdim=True)
             if mix_scales is not None and len(mix_scales) > 1:
-                log_q = mix_lq - sd.log().sum(-1, keepdim=True) - 0.5 * self.Kz * _L2P
+                log_q = mix_lq - _sdlog - 0.5 * self.Kz * _L2P
+            elif aniso > 1.0:
+                log_q = aniso_lq - _sdlog - 0.5 * self.Kz * _L2P
+            else:
+                log_q = -0.5 * (noise ** 2).sum(-1) - _sdlog - 0.5 * self.Kz * _L2P
             if ais_steps > 0:
-                zs, log_corr = self._ais(zs, ix, drop_empty, ais_steps, ais_hmc, generator)
-            L2P = float(math.log(2 * math.pi))
-            log_q = (-0.5 * (noise ** 2).sum(-1) - sd.log().sum(-1, keepdim=True)
-                     - 0.5 * self.Kz * L2P)
+                # _ais is BROKEN by its own docstring: the weight is double counted and it
+                # diverges (log Z 20.3 -> 20.8 -> 22.3 as steps go 4 -> 8 -> 16 while ESS
+                # falls 0.584 -> 0.255).  It returned 23.968 against a true 10.873 here.
+                # Refuse rather than return a number that looks like a log Z.
+                raise ValueError(
+                    "ais_steps > 0: _ais is known-broken (double-counted weight, diverges "
+                    "with steps). It returns plausible-looking wrong values, so it is "
+                    "disabled rather than silently used. See _ais.__doc__.")
         L2P = float(math.log(2 * math.pi))
         if return_size:
             # the per-size terms are already formed inside log f; taking them here shares
@@ -1007,9 +1273,58 @@ class RaggedModel(torch.nn.Module):
                 lf = torch.logsumexp(lg[..., 1:], dim=-1).sum()
             pi = torch.autograd.grad(lf, b0)[0].clamp(0, 1).detach()
         finally:
+            # `self.lam = lam0.data` above lands in self.__dict__, because at that moment
+            # 'lam' had been popped from _parameters and .data is a plain Tensor.  Restoring
+            # _parameters is NOT enough: nn.Module.__getattr__ only runs when normal lookup
+            # FAILS, and the __dict__ entry means it never fails again.  Left behind, self.lam
+            # is a detached tensor for the rest of the process, so b_flat contributes no
+            # gradient to lam and Adam skips it -- lam froze after a single step (|lam| <= lr
+            # exactly, 1740 products at exactly 0) from run29 through run71.  Drop the shadow.
+            self.__dict__.pop('lam', None)
             self._parameters['lam'] = lam0
             self.ctx = old
         return pi
+
+    def phi_radius(self, iters=200):
+        """c = max_{||u||=1} sum_j max(phi_j'u, 0) -- the radius at which the latent
+        target keeps its mass, and the quantity that decides whether log Z is computable.
+
+        Along direction u the item weights are w_j = exp(b_j - ||phi_j||^2/2 + phi_j'z), so
+        as ||z|| -> infinity the best subset picks up every product with a positive
+        projection and
+
+            log f(z)  ~  c ||z||,      log p(z) = log f(z) - ||z||^2/2  ~  c||z|| - ||z||^2/2
+
+        which peaks at ||z|| ~ c and gives log Z ~ c^2/2.  The proposal is a Gaussian at the
+        mode with sd capped at 4.47, and the prior's typical radius is sqrt(Kz), so unless
+        c is of that order the sampler never visits the region that carries the mass.
+        Measured on this project's checkpoints: c = 74.1 (run84), 59.3 (run80), 49.4
+        (run68), 255.6 (run39) against sqrt(Kz) = 5.66 -- so log Z was really 1.2e3..3.3e4
+        while the estimator reported ~10.7, and every likelihood ever logged here was
+        computed against a normaliser that was wrong by thousands of nats.
+        c is homogeneous of degree 1 in phi, so rescaling phi by c_max/c lands exactly on
+        the constraint.  The objective is convex in u, so subgradient ascent converges.
+        """
+        with torch.no_grad():
+            nz = self.phi.norm(dim=1) > 1e-9
+            if not bool(nz.any()):
+                return 0.0
+            P = self.phi[nz]
+            u = P.sum(0)
+            if float(u.norm()) < 1e-12:
+                u = P[0].clone()
+            u = u / u.norm().clamp_min(1e-12)
+            for _ in range(iters):
+                g = (P * ((P @ u) > 0).to(P.dtype).unsqueeze(-1)).sum(0)
+                n = g.norm()
+                if float(n) < 1e-14:
+                    break
+                un = g / n
+                if float((un - u).norm()) < 1e-12:
+                    u = un
+                    break
+                u = un
+            return float((P @ u).clamp_min(0).sum())
 
     def lambda_max(self, ix):
         """Top eigenvalue of Lambda = sum_j pi_j(1-pi_j) phi_j phi_j' at the mode.

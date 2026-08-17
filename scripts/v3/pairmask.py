@@ -83,7 +83,16 @@ def main(a):
     for (x, y), c in cnt.items():
         mass[x] += c
         mass[y] += c
-    k = max(1, int(a.budget * J))
+    # An explicit product count, because the budget-as-fraction knob cannot express the
+    # scale that matters.  c = max_u sum_j max(phi_j'u,0) grows with the NUMBER of products
+    # carrying phi, and log Z ~ c^2/2 must stay near sqrt(Kz) for the normaliser to be
+    # computable at all.  Measured on run84's phi, rescaled to c = sqrt(Kz) = 5.66:
+    #     K products     8      16      32      64     128     272
+    #     phi'phi     3.474   1.844   0.678   0.213   0.063   0.018
+    # against the 0.920 that a grocery complement lift of 2.5 needs.  The crossover is
+    # around 24 products; at the 272 this file used to emit, the computable ceiling on
+    # phi'phi is 2% of what the data asks for.
+    k = int(a.k) if a.k else max(1, int(a.budget * J))
     keep = np.argsort(-mass)[:k]
     mask = np.zeros(J, bool)
     mask[keep] = True
@@ -109,7 +118,8 @@ def main(a):
     log(f"frequency rank of the mask: median {int(np.median(rank[keep]))} of {J} "
         f"(run57's norm-based mask was 2138)")
 
-    out = os.path.join(BI, f"v3_phimask_{int(round(a.budget*100)):02d}.npy")
+    out = os.path.join(BI, f"v3_phimask_k{k}.npy" if a.k
+                       else f"v3_phimask_{int(round(a.budget*100)):02d}.npy")
     np.save(out, mask)
     log(f"wrote {os.path.basename(out)}")
 
@@ -118,4 +128,5 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--budget", type=float, default=0.03)
     p.add_argument("--max-basket", type=int, default=40)
+    p.add_argument("--k", type=int, default=0, help="explicit product count; overrides --budget")
     main(p.parse_args())
