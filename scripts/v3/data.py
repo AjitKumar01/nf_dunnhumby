@@ -42,6 +42,8 @@ ROOT = os.path.join(HERE, "..", "..")
 BI = os.path.join(ROOT, "basket_input")
 CACHE = os.path.join(BI, "v3_index.npz")
 CACHE_AFF = os.path.join(BI, "v3_index_affinity.npz")
+_P = os.environ.get("V3_PARTITION", "")
+CACHE_PART = os.path.join(BI, "v3_index_" + os.path.splitext(_P)[0] + ".npz") if _P else None
 
 
 def log(m):
@@ -50,7 +52,9 @@ def log(m):
 
 def build(min_lines_per_store_cat=1, force=False):
     global CACHE
-    if os.environ.get("V3_AFFINITY", "0") == "1":
+    if CACHE_PART is not None:
+        CACHE = CACHE_PART          # a partition change rebuilds the whole ragged index
+    elif os.environ.get("V3_AFFINITY", "0") == "1":
         CACHE = CACHE_AFF
     """Assortment index plus the trip table.  Cached; pass force=True to rebuild."""
     if os.path.exists(CACHE) and not force:
@@ -68,8 +72,18 @@ def build(min_lines_per_store_cat=1, force=False):
     # route needs lambda_max ~ 9 and the normaliser collapses there, while rho_c already
     # reaches 4.48x.  So the partition is rebuilt around what shoppers buy together instead
     # of how a merchandiser filed things, letting the exact term carry the complementarity.
+    # V3_PARTITION names any parquet of (item_id, cat_id), so a partition can be swapped
+    # without a code change.  It defines the ragged row structure, so it also sets C and the
+    # cache file -- checkpoints across partitions are not comparable.
+    _part = os.environ.get("V3_PARTITION", "")
     _aff = os.path.join(BI, "items_affinity.parquet")
-    if os.environ.get("V3_AFFINITY", "0") == "1" and os.path.exists(_aff):
+    if _part and os.path.exists(os.path.join(BI, _part)):
+        it = pd.read_parquet(os.path.join(BI, _part))[["item_id", "cat_id"]]
+        C = int(it.cat_id.max()) + 1
+        _sz = it.groupby("cat_id").size()
+        log(f"category partition: {_part}, C = {C}, group size median "
+            f"{int(_sz.median())} max {int(_sz.max())}")
+    elif os.environ.get("V3_AFFINITY", "0") == "1" and os.path.exists(_aff):
         it = pd.read_parquet(_aff)[["item_id", "cat_id"]]
         C = int(it.cat_id.max()) + 1        # the partition sets C, not meta.json
         log(f"category partition: AFFINITY groups from {os.path.basename(_aff)}, C = {C}")
