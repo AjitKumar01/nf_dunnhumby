@@ -1,0 +1,338 @@
+<title>Basket Model v4 — Code Architecture</title>
+<style>
+:root{--ink:#10151c;--paper:#f7f8fa;--slate:#5b6672;--rule:#d7dde4;--card:#ffffff;
+  --accent:#0f6f7a;--ok:#1f6f43;--bad:#a3342b;--open:#8a6212;--codebg:#eef1f5;}
+@media (prefers-color-scheme:dark){:root{--ink:#e6ebf1;--paper:#0e1319;--slate:#93a0ad;
+  --rule:#26303b;--card:#141b23;--accent:#4fb3bd;--ok:#5cbe86;--bad:#e2827a;--open:#d4a63c;
+  --codebg:#182029;}}
+:root[data-theme="dark"]{--ink:#e6ebf1;--paper:#0e1319;--slate:#93a0ad;--rule:#26303b;
+  --card:#141b23;--accent:#4fb3bd;--ok:#5cbe86;--bad:#e2827a;--open:#d4a63c;--codebg:#182029;}
+:root[data-theme="light"]{--ink:#10151c;--paper:#f7f8fa;--slate:#5b6672;--rule:#d7dde4;
+  --card:#ffffff;--accent:#0f6f7a;--ok:#1f6f43;--bad:#a3342b;--open:#8a6212;--codebg:#eef1f5;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;
+  line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:80ch;margin:0 auto;padding:4rem 1.5rem 6rem}
+h1{font-size:2.1rem;line-height:1.15;letter-spacing:-.025em;font-weight:750;margin:0 0 .4rem;
+  text-wrap:balance}
+h2{font-size:1.32rem;letter-spacing:-.015em;font-weight:700;margin:3.2rem 0 .2rem;
+  padding-top:1.1rem;border-top:2px solid var(--ink);text-wrap:balance}
+h3{font-size:1.02rem;font-weight:700;margin:2rem 0 .3rem}
+h4{font-size:.9rem;font-weight:700;margin:1.5rem 0 .2rem;color:var(--slate);
+  text-transform:uppercase;letter-spacing:.07em}
+p{margin:.7rem 0}
+.lede{font-size:1.06rem;color:var(--slate);margin:.2rem 0 1.6rem;max-width:66ch}
+.meta{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;color:var(--slate);
+  letter-spacing:.04em;margin-bottom:2.4rem;padding-bottom:1.2rem;
+  border-bottom:1px solid var(--rule)}
+code{font-family:ui-monospace,Menlo,monospace;font-size:.87em;background:var(--codebg);
+  padding:.1em .35em;border-radius:3px}
+pre{font-family:ui-monospace,Menlo,monospace;font-size:.79rem;line-height:1.5;
+  background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);
+  padding:.9rem 1.1rem;overflow-x:auto;margin:1rem 0;border-radius:2px}
+pre.flow{border-left-color:var(--slate);background:var(--codebg)}
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.83rem;
+  font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto;margin:1rem 0}
+th{text-align:left;font-weight:700;font-size:.72rem;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--slate);border-bottom:2px solid var(--rule);
+  padding:.45rem .6rem .45rem 0;white-space:nowrap}
+td{padding:.42rem .6rem .42rem 0;border-bottom:1px solid var(--rule);vertical-align:top}
+td.n,th.n{text-align:right;font-family:ui-monospace,Menlo,monospace}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.66rem;
+  font-weight:700;letter-spacing:.06em;padding:.12em .5em;border-radius:2px;
+  border:1px solid currentColor;white-space:nowrap;vertical-align:.08em}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.op{color:var(--open)}
+.note{border-left:3px solid var(--open);background:var(--card);padding:.7rem 1rem;
+  margin:1.1rem 0;font-size:.92rem}
+.note strong{color:var(--open)}
+nav{font-size:.83rem;margin:0 0 2rem;padding:1rem 1.2rem;background:var(--card);
+  border:1px solid var(--rule);border-radius:2px}
+nav a{color:var(--accent);text-decoration:none;margin-right:1.1rem;display:inline-block;
+  line-height:1.9;white-space:nowrap}
+nav a:hover{text-decoration:underline}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.small{font-size:.85rem;color:var(--slate)}
+</style>
+
+<div class="wrap">
+<h1>Basket Model v4 &mdash; Code Architecture</h1>
+<p class="lede">How the code is laid out and how a number gets from the raw baskets to a
+held-out likelihood, a recommendation, or a simulated store week. Companion to the model
+specification, which covers the mathematics and the experimental record.</p>
+<div class="meta">branch version-4 &nbsp;&middot;&nbsp; scripts/v3/ &nbsp;&middot;&nbsp;
+18 modules, ~5,900 lines &nbsp;&middot;&nbsp; PyTorch, float64 throughout, CPU</div>
+
+<nav>
+<a href="#layers">1 &middot; Layers</a><a href="#data">2 &middot; Data</a>
+<a href="#kernel">3 &middot; The kernel</a><a href="#model">4 &middot; The model</a>
+<a href="#train">5 &middot; Training</a><a href="#eval">6 &middot; Evaluation</a>
+<a href="#apps">7 &middot; Applications</a><a href="#conv">8 &middot; Conventions</a>
+</nav>
+
+<h2 id="layers">1 &middot; Layers</h2>
+<p>Six layers, each depending only on those above it. There are no cycles: every module
+imports downward.</p>
+<pre class="flow">  PREPROCESSING   data.py         raw parquet -> the ragged assortment index (cached)
+                  features.py     price / promotion / recency lookups per slot
+                  pairmask.py     which products may carry phi
+                  beta_target.py  empirical per-product price response
+
+  KERNEL          ragged.py       tensor primitives: ESP, poly_tree, quadrature grids
+                                  RaggedModel: energy, log Z, pi, sampling, projections
+
+  TRAINING        fit.py          Batcher, the step, penalties, projections, goals,
+                                  checkpointing, rec_eval
+
+  EVALUATION      evalall.py      held-out likelihood, both splits, sampled not sliced
+                  distcheck.py    KL / TV / KS on the size law
+                  recommend_pi.py complete-the-basket on pi
+                  bench_same_trips.py   every model on the SAME trips
+
+  APPLICATIONS    env.py          RetailEnv: reset / step / step_expected / participation
+                  sim_full.py     complete markdown simulation over a whole split
+                  bundle.py       greedy personalised bundles
+                  wtp.py          reservation prices
+
+  BASELINES       baselines.py    Bernoulli, DPP, LinearIndex, Batches
+                  baselines2.py   NDPP, Multinomial, Shopper
+                  shopper_ladder.py   shopper fitted to convergence</pre>
+<div class="scroll"><table>
+<thead><tr><th>Module</th><th class="n">Lines</th><th>Imported by</th></tr></thead>
+<tbody>
+<tr><td><code>ragged.py</code></td><td class="n">1,657</td><td>fit, evalall, env, distcheck, bundle, recommend_pi, sim_full, wtp</td></tr>
+<tr><td><code>fit.py</code></td><td class="n">1,587</td><td>evalall, env, distcheck, bundle, recommend_pi, sim_full, wtp</td></tr>
+<tr><td><code>baselines2.py</code></td><td class="n">381</td><td>bench_same_trips, shopper_ladder</td></tr>
+<tr><td><code>baselines.py</code></td><td class="n">309</td><td>baselines2, bench_same_trips, shopper_ladder</td></tr>
+<tr><td><code>env.py</code></td><td class="n">281</td><td>sim_full <span class="small">(and any policy)</span></td></tr>
+<tr><td><code>data.py</code></td><td class="n">262</td><td>everything</td></tr>
+<tr><td><code>evalall.py</code></td><td class="n">198</td><td>bench_same_trips</td></tr>
+<tr><td><code>features.py</code></td><td class="n">151</td><td>everything that batches</td></tr>
+</tbody></table></div>
+<p class="small"><code>fit.py</code> is imported for <code>Batcher</code> and
+<code>rec_eval</code>, not to run training &mdash; every consumer builds batches the way
+training does, so a covariate can never differ between fitting and scoring.</p>
+
+<h2 id="data">2 &middot; Data</h2>
+<h4>Inputs</h4>
+<div class="scroll"><table>
+<thead><tr><th>File</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><code>baskets.parquet</code></td><td>the transaction table: trip, product, units, day, store</td></tr>
+<tr><td><code>items.parquet</code></td><td>product metadata: department, commodity, sub-commodity, brand, manufacturer</td></tr>
+<tr><td><code>items_affinity.parquet</code></td><td>the category partition in use (280 groups, rebuilt around co-purchase)</td></tr>
+<tr><td><code>log_price.npy</code>, <code>log_price_dev.npy</code></td><td>shelf price and its deviation, per product x day</td></tr>
+<tr><td><code>store_price.npz</code></td><td>price deviation per product x store x week</td></tr>
+<tr><td><code>promo.npz</code>, <code>state.npz</code></td><td>display / mailer flags; purchase-history keys for recency</td></tr>
+<tr><td><code>v3_phimask_k20.npy</code></td><td>which 20 products may carry <code>phi</code></td></tr>
+<tr><td><code>v3_beta_target.npz</code></td><td>empirical per-product price response, with reliability weights</td></tr>
+</tbody></table></div>
+
+<h4><code>data.py :: build()</code></h4>
+<p>Reads the transaction table once and emits the <strong>ragged assortment index</strong>,
+cached to <code>.npz</code>. The cache key follows the category partition, so switching
+partitions cannot silently reuse a stale index.</p>
+<pre class="flow">  baskets.parquet ---> trips (user, store, day, week, split)
+                  ---> lines (item, category, units) as a CSR-style pointer array
+                  ---> assortment: which products each store carries
+                  ---> support filter: trips with more than nmax lines, or more than R
+                       from one category, are dropped and REPORTED
+
+  V3_PARTITION=&lt;file&gt;   names any parquet of (item_id, cat_id); it defines the ragged row
+                        structure, so it also sets C and the cache filename</pre>
+<p>The temporal split is fixed: <strong>train weeks 1&ndash;82, validation 83&ndash;90, test
+91&ndash;102</strong>. Trips are stored in time order, which is why every evaluation samples
+rather than slices.</p>
+
+<h4><code>features.py :: Features</code></h4>
+<p>Covariate lookups at an arbitrary set of <code>(product, store, day, week)</code> pairs.
+<code>gather()</code> returns price deviation, display and mailer by sparse
+<code>searchsorted</code>; <code>recency()</code> returns four functions of time-since-last
+purchase for the same <code>(household, sub-commodity)</code>, found with one
+strictly-before lookup into a sorted key array.</p>
+<div class="note"><strong>Recency is switched off in the fitted model</strong>
+(<code>--no-rec 1</code>). Its distribution drifts on a temporal split, and it accounted for
+104% of the held-out shift in <code>b</code>. The code stays; the term is zeroed and frozen.</div>
+
+<h2 id="kernel">3 &middot; The kernel &mdash; <code>ragged.py</code></h2>
+<p>Everything expensive is here, and all of it is exact. Baskets have wildly different
+sizes, so nothing is padded to a common length &mdash; the "ragged" layout is the reason
+this is one file.</p>
+
+<h4><code>RaggedIndex</code></h4>
+<p>One batch, flattened. A <em>slot</em> is a (trip, product) pair the trip could have
+bought; a <em>row</em> is a (trip, category) group.</p>
+<pre class="flow">  item, item_trip, item_pos    [T]        product id, its trip, its position within its row
+  row_of, row_cat, row_trip    [n_rows]   which row a slot belongs to, and that row's identity
+  row_size, row_pos            [n_rows]   how many slots the row holds, and where it starts
+  flat_slot, slot_deg          [n_rows]   scatter target into [B, Cpad]; degree cap per slot</pre>
+
+<h4>Primitives</h4>
+<div class="scroll"><table>
+<thead><tr><th>Function</th><th>What it computes</th><th>Why it is written that way</th></tr></thead>
+<tbody>
+<tr><td><code>esp_bucketed</code></td><td>elementary symmetric polynomials <code>e_0..e_R</code> per row</td><td>the stable <code>e_r += w_i e_{r-1}</code> recursion, never Newton's identities, which cancel catastrophically at R=23. Rows are bucketed to (8, 32, 96, 256) so padding wastes ~2x rather than 25x</td></tr>
+<tr><td><code>poly_tree</code></td><td>product of category polynomials, truncated at <code>nmax</code></td><td>pairwise tree rather than a sequential fold: fewer, larger kernels</td></tr>
+<tr><td><code>seg_max</code>, <code>seg_sum</code></td><td>segment reductions over trips</td><td>one scale per (trip, draw); a per-row scale would not survive the convolution</td></tr>
+<tr><td><code>gh_grid(d,q)</code></td><td>dense Gauss&ndash;Hermite, <code>q^d</code> nodes, positive weights</td><td>sampling <code>z</code> needs a distribution, and Smolyak weights are signed</td></tr>
+<tr><td><code>smolyak_grid(d,q)</code></td><td>sparse grid by the combination technique</td><td>the deterministic normaliser; 681 nodes at <code>Kz=4, q=8</code></td></tr>
+</tbody></table></div>
+
+<h4>The forward pass</h4>
+<pre class="flow">  b_at(items, trips, ctx)          item value: lam + taste + price + promo + season + store
+    |                              price is split into a common level and an idiosyncratic
+    |                              deviation, scaled separately by price_kappa
+    v
+  log_f_ragged  /  log_f_sparse    log f(z) for a batch of z
+    |   w_j = exp(b_j - ||phi_j||^2/2 + phi_j'z)
+    |   esp_bucketed  ->  e_r per (trip, category)
+    |   a_c(r) = exp(-rho_c r(r-1)/2)             within-category term
+    |   poly_tree     ->  A_n, the basket-size generating polynomial
+    |   log f = logsumexp_n [ log A_n - rho_0(n) + n*M ]
+    v
+  _log_Z_quad                      sum over grid nodes: signed weights, so the sum is
+                                   formed in linear space after factoring out the row max
+    v
+  loglik = energy(S) - log(Z-1)    plus units_loglik if --units</pre>
+<p><code>log_f_sparse</code> is the same value as <code>log_f_ragged</code> to 2.3e-16.
+Only <code>phi</code>-carrying products depend on <code>z</code>, so the ESP over the rest
+and the convolution over untouched categories are lifted out of the node loop by
+<code>sparse_prepare</code>: <strong>83.7x</strong> at a 20-product mask.</p>
+
+<h4>Quantities the model exposes</h4>
+<div class="scroll"><table>
+<thead><tr><th>Method</th><th>Returns</th><th>Exact?</th></tr></thead>
+<tbody>
+<tr><td><code>energy</code></td><td><code>E(S)</code> for observed baskets</td><td><span class="chip ok">EXACT</span></td></tr>
+<tr><td><code>log_Z</code></td><td><code>log Z</code>; dispatches to quadrature when <code>m.quad</code> is set</td><td><span class="chip ok">~0.002 nats</span></td></tr>
+<tr><td><code>pi_quad</code></td><td><code>pi_j = d log(Z-1)/d b_j</code>, marginal over <code>z</code></td><td><span class="chip ok">EXACT</span> sums to <code>E[n]</code></td></tr>
+<tr><td><code>size_dist</code>, <code>size_moments</code></td><td><code>P(n)</code> and its moments</td><td><span class="chip ok">EXACT</span> shares the same draws</td></tr>
+<tr><td><code>sample</code></td><td>a basket per trip, by Corollary 3's three levels</td><td><span class="chip ok">EXACT</span> given <code>z</code>; <code>z</code> from <code>quad_z</code></td></tr>
+<tr><td><code>pi_exact</code></td><td><code>pi</code> at the MODE, not marginal</td><td><span class="chip bad">MISLEADING</span> <code>E[n|zhat]</code> 2.8 vs marginal 17.7</td></tr>
+<tr><td><code>lambda_max</code></td><td>top eigenvalue of <code>Lambda</code></td><td><span class="chip bad">BUILT ON pi_exact</span></td></tr>
+<tr><td><code>_ais</code></td><td>&mdash;</td><td><span class="chip bad">BROKEN</span> raises rather than returning a plausible wrong number</td></tr>
+</tbody></table></div>
+
+<h2 id="train">5 &middot; Training &mdash; <code>fit.py</code></h2>
+<h4>One step</h4>
+<pre class="flow">  Batcher.make(trips)         -> ix, ctx (per slot), lctx (per line), house, LI/LT/LC/LU
+    |                            dlp_bar (per-trip mean price) is computed ONCE from the
+    |                            assortment and carried in BOTH ctx views
+    v
+  m.loglik(...)               -> ll, ess, pn        pn is the size law, shared with the
+    |                                               penalties below at no extra cost
+    v
+  loss = -ll.mean()           _data_term is kept so the ESS gate can swap it WITHOUT
+    |                         discarding the penalties added after it
+    + size_kl  * ( cross-entropy to the empirical size law
+    |              + var_w  * (log1p Var(n) - log1p emp)^2
+    |              + en_w   * per-trip (E[n] - observed)^2
+    |              + rkl_w  * reverse KL, which sees a tail the cross-entropy cannot )
+    + elast_w  * (aggregate elasticity - target)^2      pins the LEVEL of price
+    + pool_prod* ridge on the bilinear PRODUCT, degree 2, not on its factors
+    + beta_cal_w * standardised pull on beta's cross-product PATTERN
+    v
+  backward, clip, opt.step()
+    v
+  PROJECTIONS   lam_centre    centre lam, transfer the level to rho_0 (b unchanged)
+                c_max         scale phi so max_u sum_j max(phi_j'u,0) fits the grid radius
+                lam_sd_max    cap the spread of lam
+                rho0_curv     floor rho_0'' so Var(n|trip) stays bounded
+                phi_mask      re-apply the mask
+    v
+  every --eval-every:  evaluate() on a RANDOM validation sample, rec_eval on pi,
+                       check_goals, save best-likelihood AND best-MRR checkpoints</pre>
+
+<h4>Gauge fixing, applied structurally in <code>b_at</code></h4>
+<p><code>theta</code>, <code>delta</code> and <code>xi</code> are centred inside the forward
+pass, not by a penalty. <code>lam_j + mu_j'delta_w</code> has an exact flat direction, so the
+likelihood cannot decide where the per-product intercept lives &mdash; only the penalties
+can, and they choose badly. All three must be centred: centring only the contextual terms
+lets the intercept migrate into household taste instead.</p>
+
+<h4>The seven goals</h4>
+<pre class="flow">  logZ-converged     log Z at draws vs 8x agree                (always PASS on quadrature)
+  E[n]-converged     E[n] at draws vs 8x agree
+  E[n]-calibrated    |E[n] - observed| &lt;= 25% of observed
+  var-calibrated     |Var(n) - observed| &lt;= 40% of observed
+  sampler-agrees     the generator's E[n] matches the analytic one
+  elasticity         aggregate price elasticity within tolerance of -0.121
+  data-kept          the ESS gate is not discarding trips</pre>
+<p class="small">These are tolerance bands, not a convergence criterion. A single passing
+line can drift back out; what matters is whether all seven hold across several evals.</p>
+
+<h4>Checkpoints</h4>
+<p><code>save_ckpt</code> writes <code>format=2</code>: model, optimiser, schedule, both RNG
+streams, iteration, cumulative iteration, best-so-far. Atomic via temp + <code>os.replace</code>.
+Two are kept &mdash; <code>_best.pt</code> on likelihood and <code>_bestmrr.pt</code> on
+ranking &mdash; because they do not coincide. <code>--fresh-sched</code> restarts the cosine
+over a new horizon and resets the learning rate, since a finished run resumes at its floor.</p>
+
+<h2 id="eval">6 &middot; Evaluation</h2>
+<div class="scroll"><table>
+<thead><tr><th>Script</th><th>Answers</th><th>Protocol</th></tr></thead>
+<tbody>
+<tr><td><code>evalall.py</code></td><td>held-out set likelihood, <code>E[n]</code>, population <code>Var(n)</code>, size-law KL/TV</td><td>samples uniformly across a split with a fixed seed; both splits always; every quantity computed at <code>draws</code> and <code>8x</code> so a draw-limited number cannot be quoted</td></tr>
+<tr><td><code>bench_same_trips.py</code></td><td>this model against shopper, multinomial, ndpp</td><td>imports <code>evalall.sample_split</code>, so all models see the SAME trips by construction</td></tr>
+<tr><td><code>recommend_pi.py</code></td><td>complete-the-basket MRR</td><td>ranks on <code>pi</code>, conditioned and unconditioned, against popularity and item-item co-purchase on identical holdouts</td></tr>
+<tr><td><code>distcheck.py</code></td><td>KL / TV / KS on the size law</td><td>distributional, not just moments</td></tr>
+<tr><td><code>recommend.py</code></td><td>&mdash;</td><td><span class="chip bad">SUPERSEDED</span> ranks on <code>b</code>; raises <code>SystemExit</code> rather than printing numbers that look usable</td></tr>
+</tbody></table></div>
+<div class="note"><strong>Trips are stored in time order.</strong> Any prefix is a single
+week. <code>fit.py</code> once scored <code>va[:128]</code> &mdash; week 83 alone, whose worst
+trip had model <code>E[n]</code> 16.5 against 117 in a random sample. The validation array is
+now permuted once with a fixed seed, so a prefix is a random sample and stays identical
+across runs.</div>
+
+<h2 id="apps">7 &middot; Applications</h2>
+<h4><code>env.py :: RetailEnv</code></h4>
+<pre class="flow">  STATE      (store, week, the trips that occasion, prevailing log-price deviation)
+             Trip occasions are REPLAYED from data: who shops, when and where is observed;
+             only what they buy is simulated.
+  ACTION     a log-price shift, scalar / per category / per product, added to the observed
+             deviation.  This is exactly how price enters b.
+  REWARD     gross margin, cost = (1 - margin0) x base price.  margin0 is DECLARED.
+
+  step()            generates baskets by Corollary 3      -> realised composition
+  step_expected()   E[margin] = sum_j pi_j E[units_j] (price - cost)
+                    exact, ~100x faster, no Monte Carlo noise
+  participation()   a DECLARED outside option, eta.  It cannot be estimated: three designs
+                    all came out with the WRONG SIGN, because dear stores are preferred
+                    stores.  eta = 0 reproduces pure replay.</pre>
+<p><code>sim_full.py</code> runs the whole thing over a complete split &mdash; 16,948 trips,
+109 stores, 1,941 households, all 5,455 products per assortment, units included.
+<code>bundle.py</code> builds personalised bundles greedily on <code>pi</code>, pinning each
+chosen item in by raising its <code>b</code> so the model re-solves for the rest.
+<code>wtp.py</code> finds the price at which <code>pi_j</code> halves.</p>
+
+<h2 id="conv">8 &middot; Conventions</h2>
+<div class="scroll"><table>
+<thead><tr><th>Convention</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><strong>One function per quantity.</strong> Nothing computes an item value except <code>b_at</code>.</td><td><code>b_flat</code> and <code>energy</code> once drifted apart, so <code>E(S)</code> and <code>log Z</code> scored the same product differently &mdash; free reward for the optimiser.</td></tr>
+<tr><td><strong>float64 everywhere.</strong></td><td>the ESP recursion and the poly tree run to degree 120; float32 loses the tail.</td></tr>
+<tr><td><strong>Sample, never slice.</strong></td><td>trips are in time order, so a prefix is one week.</td></tr>
+<tr><td><strong>Report the median beside the mean.</strong></td><td><code>E[n]</code> fails in a concentrated tail; the mean swings 7&ndash;32 while the median holds near 6.</td></tr>
+<tr><td><strong>A broken path raises.</strong></td><td><code>_ais</code> and <code>recommend.py</code> refuse to run rather than return plausible wrong numbers.</td></tr>
+<tr><td><strong>Assumptions are printed.</strong></td><td><code>margin0</code> and <code>eta</code> are declared in the run header, never presented as measured.</td></tr>
+<tr><td><strong>Comments carry the measurement.</strong></td><td>every non-obvious choice cites the number that forced it, so a future reader can re-derive rather than re-discover.</td></tr>
+</tbody></table></div>
+
+<h4>Running it</h4>
+<pre>cd scripts/v3
+
+python3 pairmask.py --k 20                 # which products may carry phi
+V3_AFFINITY=1 python3 beta_target.py       # empirical per-product price response
+
+V3_AFFINITY=1 python3 fit.py --label run95 --Kz 4 --quad-q 8 \
+  --phi-mask ../../basket_input/v3_phimask_k20.npy --c-max 4.3 \
+  --lam-centre 1 --no-rec 1 --pool-prod 1.45 --rkl-w 10.0 --elast-w 20.0 \
+  --beta-cal-w 0.10 --gap-project 0 --rho0-curv 0 --lam-sd-max 0.45 --iters 60000
+
+V3_AFFINITY=1 python3 evalall.py --ckpts v3_run95_best.pt --Kz 4 --quad-q 8 \
+  --n-trips 3000 --splits valid,test
+V3_AFFINITY=1 python3 bench_same_trips.py     # all models, same trips
+V3_AFFINITY=1 python3 recommend_pi.py         # complete-the-basket on pi
+V3_AFFINITY=1 python3 sim_full.py --eta 6     # markdown over a whole split</pre>
+</div>
