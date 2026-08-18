@@ -55,9 +55,10 @@ class RetailEnv:
     reward gross margin over every basket generated that week
     """
 
-    def __init__(self, model, D, F, Bt, margin0=0.30, split=1, device=None):
+    def __init__(self, model, D, F, Bt, margin0=0.30, split=1, device=None, eta=0.0):
         self.m, self.D, self.F, self.Bt = model, D, F, Bt
         self.margin0 = margin0
+        self.eta = eta      # DECLARED outside-option elasticity; 0 = replay, no competition
         self.logp = torch.from_numpy(
             np.load(os.path.join(BI, "log_price.npy")).astype(np.float64))
         self.cat_of = torch.as_tensor(D["line_cat"], dtype=torch.long)
@@ -124,6 +125,39 @@ class RetailEnv:
         info = dict(n_trips=len(trips), lines=n_lines, units=n_units,
                     revenue=rev, cost=cost)
         return self._obs(), rev - cost, done, info
+
+    def participation(self, action, eta=None):
+        """P(the trip happens at all), as a DECLARED outside option -- not an estimate.
+
+        The MDP's optimum sits at the price ceiling because trip occasions are replayed:
+        no price can cost a visit.  The missing force is competition.  It cannot be
+        estimated from this data -- three designs were tried and all came out with the
+        WRONG SIGN:
+
+            national weekly price index, household FE      +1.502   (t +12.1)
+            store x week index, household + week FE        +0.0186  (t +3.08)
+            store switching, observed outside option       +0.0161  (t +3.23)
+
+        i.e. households shop MORE where prices are higher, because dear stores are
+        preferred stores (location, assortment, service).  Price is endogenous and this
+        panel carries no instrument for it.  A fitted participation model would therefore
+        encode "raise prices to win visits", which is worse than having none.
+
+        So eta is DECLARED, in the same spirit as margin0: printed, never presented as
+        measured, and swept for sensitivity.  P(visit) = sigmoid(logit(p0) - eta * action),
+        with p0 the observed visit rate, so eta = 0 reproduces the replay environment
+        exactly and eta > 0 makes a price rise cost visits.
+
+        eta is an elasticity of visits with respect to log price: eta = 3 means a 10%
+        rise costs about 3% of trips.  Grocery store-switching studies put it in 2-6.
+        """
+        eta = self.eta if eta is None else eta
+        if eta == 0.0:
+            return 1.0
+        a = float(action if np.isscalar(action) else np.mean(action))
+        p0 = 0.574                       # observed household-week visit rate in this panel
+        lo = math.log(p0 / (1.0 - p0)) - eta * a
+        return 1.0 / (1.0 + math.exp(-lo)) / p0      # relative to the replayed baseline
 
     def step_expected(self, action):
         """Same step, but the reward is COMPUTED rather than sampled.
