@@ -1,33 +1,26 @@
-"""Complete-the-basket: hold out one item, rank the assortment, see where it lands.
+"""SUPERSEDED -- ranks on b, which is not a ranking quantity.  Use recommend_pi.py.
 
-This is the use case where our model is at its strongest and has never been measured.  Ranking
-needs NO normaliser: adding product j to a partial basket S changes the energy by
+b_j is the product's standalone item value, an INPUT.  Measured on v3_run90_best,
+corr(mean b_j, log purchases) = -0.052, i.e. b is uncorrelated with how often a product is
+actually bought.  The model's marginal pi_j = d log(Z-1)/d b_j is what happens once 5,455
+products compete for ~8 slots under the size law and the category term, and it correlates
++0.173.  On identical trips and identical held-out items:
 
-    delta(j) = b_ijt + sum_{k in S} phi_j.phi_k - rho_c * n_c(S) - [rho_0(n+1) - rho_0(n)]
+                    method      MRR valid    MRR test
+           ours: pi | rest         0.0741      0.0838
+      ours: pi UNconditioned       0.0689      0.0830
+              ours: b only         0.0279      0.0249     <- what this file computes
+         ours: b+phi+rho_c         0.0230      0.0193     <- and this
+                popularity         0.0265      0.0255
+               co-purchase         0.0493      0.0378
 
-and log Z is identical for every candidate, so it cancels in the comparison.  Exact, one pass
-over the assortment, no sampling -- unlike every likelihood number in this project.
+So this file understates the model by 3x and produced two conclusions that had to be
+withdrawn: that the model ranks below popularity, and that rho_c costs 22-35% of MRR.  Both
+were artifacts of adding phi and rho_c to b by hand -- pi already reconciles them with the
+normaliser, and adding them again double-counts.
 
-The comparison that matters is OURS WITH phi against OURS WITHOUT.  Everything else is held
-fixed, so the difference is exactly what the interaction contributes to knowing which product
-completes a basket.  If phi adds nothing here it adds nothing anywhere, whatever the
-co-occurrence metric says.
-
-    popularity     global purchase frequency; the floor
-    ours, b only   the full contextual item value, interaction ablated
-    ours, full     + sum_{k in S} phi_j.phi_k
-    ndpp           P(j | S) by the Schur complement, L_jj - L_jS L_S^-1 L_Sj -- exact and
-                   cheap, since inverting the n x n L_S costs nothing at n ~ 8
-    multinom       its fitted item weights (no interaction, so it cannot use the basket)
-
-Shopper is omitted: its conditional depends on the running mean of alpha over items ALREADY
-chosen, so a score depends on the assumed order of the partial basket, and there is no
-order-free way to ask it this question.
-
-Metrics are recall@k and MRR over held-out items, with the rank taken among the trip's own
-assortment (~5,300 products), not the full catalogue.
-
-Run:  V3_AFFINITY=1 python3 recommend.py
+Kept for the record; it raises SystemExit rather than printing numbers that look usable.
+Pass --i-know-this-is-superseded to run it anyway.
 """
 import argparse
 import os
@@ -55,6 +48,9 @@ def metrics(ranks, ks=(5, 10, 20, 50, 100)):
 
 
 def main(a):
+    if not a.i_know_this_is_superseded:
+        raise SystemExit(__doc__.strip().splitlines()[0]
+                         + "\n  use recommend_pi.py, or pass --i-know-this-is-superseded")
     torch.set_default_dtype(torch.float64)
     D = build()
     J, N, C, S = (int(D[k]) for k in ("n_item", "n_user", "n_cat", "n_store"))
@@ -218,4 +214,5 @@ if __name__ == "__main__":
     p.add_argument("--nmax", type=int, default=120)
     p.add_argument("--R", type=int, default=23)
     p.add_argument("--ctx-shrink", type=float, default=1.0)
+    p.add_argument("--i-know-this-is-superseded", action="store_true")
     main(p.parse_args())
