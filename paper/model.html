@@ -108,10 +108,16 @@ elasticity well: a uniform price shift moves <code>E[n]</code> through Propositi
 <p><strong>Complementarity is low-rank and positive semidefinite.</strong>
 <code>phi_j' phi_k</code> is a Gram matrix. It expresses products going together; it cannot
 express broad substitution, which must live in <code>rho_c</code>.</p>
+<p><strong>The quantity to rank on is <code>pi</code>, not <code>b</code>.</strong>
+<code>pi_j = P(j in S) = d log(Z-1)/d b_j</code> (Corollary 2) is the marginal inclusion
+probability: what happens after every product competes under the size law and the category
+term. It sums to <code>E[n]</code> by construction, and it is the difference between beating
+popularity by 3&times; and losing to it.</p>
 <p><strong>Ranking is normaliser-free.</strong> Comparing <code>S &cup; {j}</code> against
 <code>S &cup; {k}</code> cancels <code>Z</code> entirely, so recommendation costs one forward
-pass and no sampling. It also cancels <code>rho_0</code> and every shared item &mdash; which
-is why the model is far better at judging whole baskets than at picking the next item.</p>
+pass and no sampling. It also cancels <code>rho_0</code> and every shared item, so what
+remains is per-product discrimination &mdash; which is exactly why the scoring quantity has
+to be <code>pi</code> and not <code>b</code>.</p>
 
 <h2 id="params">2 &middot; Parameters</h2>
 <p>645,953 parameters. Every block below was inspected against data the model never sees
@@ -318,25 +324,56 @@ Equal size makes <code>rho_0</code> cancel, so the comparison is purely about wh
 <p><strong>5.1&times; chance</strong>, and zeroing <code>theta</code> collapses it to exactly
 chance &mdash; household taste is the entire signal. <span class="chip ok">WORKS</span></p>
 
-<h3>6.6 &nbsp; Recommendation</h3>
-<p>Complete-the-basket, all methods on identical trips with identical held-out items.</p>
+<h3>6.6 &nbsp; Recommendation and bundles &mdash; rank on <code>pi</code>, not <code>b</code></h3>
+<div class="note"><strong>The scoring function was wrong, and it inverted the conclusion.</strong>
+<code>b_j</code> is the product's standalone item value, an <em>input</em>. Measured on the
+reference checkpoint, <code>corr(mean b_j, log purchases) = &minus;0.052</code> &mdash;
+<code>b</code> is uncorrelated with how often a product is actually bought, and the five
+products with the highest mean <code>b</code> were bought 51&ndash;207 times against a top
+seller's ~22,000. The marginal <code>pi_j = d log(Z-1)/d b_j</code> is what happens once
+5,455 products compete for ~8 slots under the size law and the category term, and it
+correlates <code>+0.173</code>.</div>
+<p>Complete-the-basket, all methods on identical trips with identical held-out items:</p>
 <div class="scroll"><table>
-<thead><tr><th>Method</th><th class="n">MRR valid</th><th class="n">MRR test</th></tr></thead>
+<thead><tr><th>Method</th><th class="n">MRR valid</th><th class="n">MRR test</th><th class="n">R@10 valid</th></tr></thead>
 <tbody>
-<tr><td><code>b</code> only</td><td class="n">0.0504</td><td class="n">0.0459</td></tr>
-<tr><td><code>b + phi</code></td><td class="n">0.0508</td><td class="n">0.0459</td></tr>
-<tr><td>co-purchase counts</td><td class="n">0.0443</td><td class="n">0.0323</td></tr>
-<tr><td><code>b + phi + rho_c</code></td><td class="n">0.0396</td><td class="n">0.0295</td></tr>
-<tr><td>popularity</td><td class="n">0.0333</td><td class="n">0.0333</td></tr>
-<tr><td>random</td><td class="n">0.0012</td><td class="n">0.0016</td></tr>
+<tr><td><strong>ours: pi | rest of basket</strong></td><td class="n">0.0741</td><td class="n">0.0838</td><td class="n">13.6%</td></tr>
+<tr><td>ours: pi, unconditioned</td><td class="n">0.0689</td><td class="n">0.0830</td><td class="n">13.3%</td></tr>
+<tr><td>co-purchase counts</td><td class="n">0.0493</td><td class="n">0.0378</td><td class="n">8.5%</td></tr>
+<tr><td>ours: b only</td><td class="n">0.0279</td><td class="n">0.0249</td><td class="n">3.8%</td></tr>
+<tr><td>popularity</td><td class="n">0.0265</td><td class="n">0.0255</td><td class="n">5.1%</td></tr>
+<tr><td>ours: b + phi + rho_c</td><td class="n">0.0230</td><td class="n">0.0193</td><td class="n">2.8%</td></tr>
+<tr><td>random</td><td class="n">0.0015</td><td class="n">0.0011</td><td class="n">0.3%</td></tr>
 </tbody></table></div>
-<p>The item value <code>b</code> beats popularity by 51% and 38%, and beats item-item
-co-purchase on both splits. <strong><code>rho_c</code> costs 22&ndash;35%</strong>: adding
-item <code>j</code> changes the energy by <code>-rho_c * n_c</code>, and with
-<code>rho_c</code> fitted negative that boosts <em>every</em> product in a category already
-present &mdash; 518 of them on average when it fires. The right signal at the wrong
-resolution. <span class="chip op">FIX PENDING</span> repartition to sub-commodity
-(758 groups, ~43 boosted).</p>
+<p><strong>2.8&times; popularity and 1.5&times; co-purchase on validation; 3.3&times; and
+2.2&times; on test.</strong> Note that <code>b + phi + rho_c</code> scores <em>below</em>
+<code>b</code> alone: adding the interaction terms by hand double-counts what
+<code>pi</code> already reconciles with the normaliser. That artefact produced the earlier
+claim that <code>rho_c</code> costs 22&ndash;35% of ranking, which is withdrawn.</p>
+<p><strong>Conditioning on the cart adds almost nothing</strong> &mdash; 7% on validation,
+1% on test. Essentially the whole win is using <code>pi</code> at all. So what the model
+supplies is personalised <em>propensity</em>, not basket completion, which is consistent
+with <code>phi</code> reaching 4.5% of held-out items and <code>rho_c</code> saying "more
+from this category" rather than naming a partner.</p>
+<h4>Bundles</h4>
+<p>A bundle is a set, and sets are what this model scores natively. Built greedily, pinning
+each chosen item in by raising its <code>b</code> so the model re-solves for the rest:</p>
+<div class="scroll"><table>
+<thead><tr><th>Method</th><th class="n">hit rate</th><th class="n">distinct categories</th></tr></thead>
+<tbody>
+<tr><td><strong>greedy on pi</strong></td><td class="n">0.210</td><td class="n">2.01 of 5</td></tr>
+<tr><td>popularity top-5</td><td class="n">0.113</td><td class="n">1.00 of 5</td></tr>
+<tr><td>taste (theta.alpha) top-5</td><td class="n">0.065</td><td class="n">1.84 of 5</td></tr>
+<tr><td>greedy on b</td><td class="n">0.033</td><td class="n">1.05 of 5</td></tr>
+</tbody></table></div>
+<p>6.4&times; from changing the objective and 1.9&times; over popularity. On <code>b</code>
+the bundles collapsed into a single category, because <code>rho_c</code> is fitted negative
+so <code>-rho_c * n_c</code> <em>grows</em> with each item already taken from that category
+&mdash; a positive feedback loop. On <code>pi</code> the same terms are reconciled by the
+normaliser and the bundles read as real baskets:</p>
+<pre>household  25:  WHITE BREAD / FLUID MILK / FRUIT DRINKS / SINGLE CHEESE / SHREDDED CHEESE
+household 471:  DAIRY TEA / PREP SIDE DISHES / WHITE BREAD / SALAD BAR FRUIT / FLUID MILK
+household 1078: SOFT DRINKS / SOFT DRINKS / FRUIT DRINKS / DRY MEAT / CANDY BAGS</pre>
 
 <h3>6.7 &nbsp; What the embeddings learned</h3>
 <p><strong>Households (<code>theta</code>).</strong> Five k-means segments, profiled against
@@ -386,7 +423,8 @@ matched independence null, has 4&ndash;5 strongly separated modes above the nois
 <tr><td>Large <code>c</code> means a badly specified model</td><td><code>z</code> is an integration variable; large <code>c</code> only means a hard integral</td></tr>
 <tr><td>MRR and likelihood are systematically opposed</td><td>held over 3,800 iterations they rise together</td></tr>
 <tr><td><code>rho_c</code> is a substitution penalty</td><td>fitted negative in 94.6% of categories &mdash; it rewards</td></tr>
-<tr><td>The model ranks below popularity</td><td>the two numbers came from different trip sets; on identical trips it wins by 38&ndash;51%</td></tr>
+<tr><td>The model ranks below popularity</td><td>wrong twice: different trip sets, then the wrong scoring function; on pi it wins 2.8&ndash;3.3x</td></tr>
+<tr><td><code>rho_c</code> costs 22&ndash;35% of ranking MRR</td><td>an artefact of adding phi and rho_c to b by hand, which double-counts what pi reconciles</td></tr>
 </tbody></table></div>
 
 <h2 id="limits">7 &middot; Limitations</h2>
