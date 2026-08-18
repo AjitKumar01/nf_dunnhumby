@@ -487,6 +487,8 @@ class RaggedModel(torch.nn.Module):
         self.phi = torch.nn.Parameter(torch.randn(J, Kz, generator=g) * phi_init)
         self.rho_c = torch.nn.Parameter(torch.zeros(C))
         self.rho_0_free = torch.nn.Parameter(torch.zeros(nmax))
+        # softplus(0.5413) = 1.0: starts as the un-split model, so a resumed run is unchanged
+        self.price_kappa = torch.nn.Parameter(torch.tensor(0.5413))
         self.quad = None        # (nodes, weights) -> deterministic log Z
         self.quad_z = None      # dense GH grid -> deterministic z sampling
         # --- conditioning blocks (Eq. 7) -------------------------------------------------
@@ -544,7 +546,31 @@ class RaggedModel(torch.nn.Module):
         # choose markdowns cannot have the own-price effect pointing the wrong way, whatever
         # its likelihood.  Passing both factors through softplus makes gamma.beta >= 0
         # elementwise, so the derivative is <= 0 by construction rather than by hope.
-        b = b - (softplus(self.gamma[hh]) * softplus(self.beta[it])).sum(-1) * c["dlp"]
+        # PRICE, split into a common level and an idiosyncratic deviation.
+        #
+        #     dlp_j = m + e_j        m = the trip's mean over its assortment
+        #
+        # m shifts every b_j equally, so Proposition 1 applies and dE[n]/dm is amplified by
+        # Var(n) -- measured 10.5x, and CORRECT, since the data's own dispersion is 10.55.
+        # e_j shifts b_j differentially: it moves share between products and leaves the sum
+        # nearly untouched, so it is not amplified.
+        #
+        # One coefficient served both, so pinning the aggregate elasticity (-0.121) pinned
+        # the per-product response too: gamma.beta = 0.121/10.5 = 0.0115, against a data
+        # own-price response near -0.66.  The whole price effect then had to live in the
+        # units model, and a coupon could not change WHETHER a product was bought.
+        #
+        # kappa scales the idiosyncratic part alone.  The aggregate stays -(gamma.beta)*
+        # Var/E and remains pinned by --elast-w; the share response becomes
+        # -(gamma.beta)*kappa and is free.  The data supports the split: basket size against
+        # the common level gives -0.042, while share against relative price gives -0.078
+        # with t = -154.
+        _gb = (softplus(self.gamma[hh]) * softplus(self.beta[it])).sum(-1)
+        if "dlp_bar" in c:
+            _m = c["dlp_bar"][trip]
+            b = b - _gb * (_m + softplus(self.price_kappa) * (c["dlp"] - _m))
+        else:
+            b = b - _gb * c["dlp"]
         b = b + self.w_dsp[it] * c["disp"] + self.w_mlr[it] * c["mail"]
         b = b + (self.mu[it] * self.delta_c()[c["week"]]).sum(-1)
         b = b + (self.zeta[it] * self.xi_c()[c["store"]]).sum(-1)

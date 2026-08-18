@@ -75,7 +75,16 @@ class Batcher:
         # week-of-year, per the spec: (WEEK_NO - 1) mod 52.  Clamping instead, as an earlier
         # version did, collapsed 54.6% of trips onto one seasonal parameter.
         user = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
-        ctx = dict(dlp=dlp.double(), disp=disp.double(), mail=mail.double(),
+        # Per-trip mean price deviation over the ASSORTMENT.  It is the reference for
+        # splitting dlp into a common level and an idiosyncratic deviation, and it must be
+        # the same number whether b_at is called on assortment slots or on purchased lines
+        # -- so it is computed once here, from the assortment, and carried in both views.
+        _dbar = torch.zeros(ix.B, dtype=torch.float64).index_add_(
+            0, ix.item_trip, dlp.double())
+        _dcnt = torch.zeros(ix.B, dtype=torch.float64).index_add_(
+            0, ix.item_trip, torch.ones_like(dlp, dtype=torch.float64))
+        _dbar = _dbar / _dcnt.clamp_min(1.0)
+        ctx = dict(dlp_bar=_dbar, dlp=dlp.double(), disp=disp.double(), mail=mail.double(),
                    week=(wk_i - 1) % 52, store=st_i,
                    rec=self.F.recency(ix.item, user[ix.item_trip], dy_i))
         li, lt, lc, lu = [], [], [], []
@@ -90,7 +99,7 @@ class Batcher:
         # the SAME features, gathered at the purchased lines, so energy() and log_Z score
         # each product identically
         dlp_l, disp_l, mail_l = self.F.gather(LI, store[LT], day[LT], week[LT])
-        lctx = dict(dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
+        lctx = dict(dlp_bar=_dbar, dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
                     week=(week[LT] - 1) % 52, store=store[LT],
                     rec=self.F.recency(LI, user[LT], day[LT]))
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
