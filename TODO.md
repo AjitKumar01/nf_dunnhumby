@@ -33,29 +33,42 @@ and its strongest learned pair (HAMBURGER BUNS + HOT DOG BUNS, phi'phi 0.517) is
 strongest real pair in the data (lift 9.65). It is capped at roughly a third of true
 strength by the `c` budget.
 
-## 3. Per-product price response, and its coupling to Var(n)
+## 3. The per-product own-price effect is ~80x too weak
 
-`beta` has **no relationship** to empirical per-product price response (corr +0.016), and a
-20% coupon on one product moves its purchase probability by 0.8% (own elasticity -0.008).
-So coupon targeting is unsupported: the action has no effect.
+Measured, on run90_best:
 
-The cause is structural, not a missing penalty. Proposition 1 ties the two calibrations:
+    own-price   d log(purchases) / d log(price)    data -0.659    model -0.008
+    cross-price d log(B)         / d log(p_A)      data -0.057    model -0.0002
+                                                   (t = -1.4, i.e. indistinguishable from 0)
+
+So a 20% coupon on one product moves its purchase probability by 0.8%, and coupon
+targeting is unsupported: every allocation rule scores the same because the action does
+nothing.
+
+**Correction to an earlier reading.** This was recorded as "the model has no product-level
+substitution, and phi phi' is PSD so it cannot represent it, therefore an indefinite
+interaction form is needed."  That overstated the problem.  A cross-price regression over
+3,956 sibling pairs in the same sub-commodity finds **no detectable substitution in the
+data either** (cross coefficient -0.057, t = -1.4, positive in 48.6% of pairs -- a coin
+flip).  The model reproducing ~zero cross-price response is therefore FAITHFUL, not a
+defect, and no new interaction form is required for it.
+
+The real gap is single-dimensional: the own-price coefficient.  gamma.beta = 0.0154 where
+the data implies something near 1.  Proposition 1 explains why the fit chose that:
 
     aggregate elasticity = -(gamma.beta) * Var(n) / E[n]
 
-The fitted model has gamma.beta = 0.0154 and Var/E = 11.25, giving -0.174 (measured -0.117,
-data -0.121). A realistic per-product elasticity of -1 would need gamma.beta ~ 1, which at
-Var/E = 11.25 implies an aggregate of -11. **The two targets cannot both be met** while the
-price channel acts only through basket size.
+with Var/E = 11.25 the fitted 0.0154 already produces -0.174 against a -0.121 target.  A
+realistic gamma.beta ~ 1 would give an aggregate of -11.  The two calibrations are in
+direct conflict *while price acts only through basket size*.
 
-What this means: the model has no product-level substitution. A price cut on one product
-can only make baskets *bigger*, never shift share from a competitor. phi phi' is PSD so it
-cannot express substitution, and rho_c is fitted negative at every granularity.
+What would settle it: give price a share-shifting route, so a cut can move WHICH product is
+bought rather than only how many.  Then gamma.beta can be large without the aggregate
+exploding.  Until then the model supports chain-wide markdown and not targeted coupons.
 
-Open, and needed before any coupon MDP:
-  - a price-conditional test of whether share genuinely shifts between close substitutes
-    (the co-occurrence test above does NOT answer this)
-  - if it does, an indefinite interaction form, since a Gram matrix cannot represent it
+Caveat on the data figures: the regression is confounded by promotions, seasonality and
+endogenous pricing, so -0.659 is indicative rather than a clean elasticity.  The comparison
+that matters is the order of magnitude, which is two.
 
 ## 4. The pricing MDP has no interior optimum
 
