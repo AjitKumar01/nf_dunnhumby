@@ -402,6 +402,13 @@ def main(a):
     resume_blob = None
     if a.resume:
         resume_blob, _miss = load_ckpt(a.resume, m)
+        # Parameters introduced after a checkpoint was written, whose fresh initialisation
+        # reproduces the OLD model exactly, may be absent -- resuming then starts from the
+        # previous behaviour rather than a different one.  price_kappa initialises to
+        # softplus(0.5413) = 1.0, which is the un-split price term.  Anything else missing
+        # is a genuine mismatch and still fails.
+        _NEW_OK = {"price_kappa"}
+        _miss = [k for k in _miss if k not in _NEW_OK]
         if _miss:
             raise SystemExit(f"resume checkpoint is missing fitted parameters: {_miss}")
         if resume_blob is None:
@@ -436,7 +443,14 @@ def main(a):
     it0 = 0                                   # iterations already done, for a continuation
     cum_base = 0                              # ... including lineages before this one
     if resume_blob is not None:
-        opt.load_state_dict(resume_blob["opt"])
+        try:
+            opt.load_state_dict(resume_blob["opt"])
+        except ValueError:
+            # The parameter set changed since the checkpoint (see _NEW_OK above), so Adam's
+            # saved moments no longer line up.  Weights ARE restored; only the moment
+            # estimates start fresh, which costs a few hundred iterations of warm-up.
+            log("  optimiser state not restored: the parameter set changed since this "
+                "checkpoint (weights restored, Adam moments start fresh)")
         if sched is not None and resume_blob.get("sched") is not None:
             if a.fresh_sched:
                 # A finished cosine run resumes at its FLOOR (2% of lr), so continuing it
