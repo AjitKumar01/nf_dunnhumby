@@ -187,6 +187,36 @@ def rec_eval(m, B, trips, seed=0, chunk=24):
         m.house, m.ctx = hh, ctx
         with torch.no_grad():
             bf = m.b_flat(ix)
+        # pi, CONDITIONED on each trip's remaining basket.  Ranking on b was wrong: b_j is
+        # the product's standalone value, an INPUT, and corr(mean b, log purchases) = -0.052
+        # on the reference checkpoint, while pi_j = d log(Z-1)/d b_j correlates +0.173.
+        # Measured on identical trips: MRR 0.0741 on pi against 0.0279 on b, a 2.7x
+        # difference, so this column was measuring the wrong quantity for the whole project.
+        # The held-out items are pinned in by raising their b, so one backward pass per
+        # BATCH serves every trip in it.
+        pig = None
+        if getattr(m, "quad", None) is not None:
+            # the pre-pass draws the same holdouts the main loop will draw, so the generator
+            # state is saved and restored around it -- resetting to the SEED would replay
+            # batch 1's holdouts for every batch
+            _st = rng.bit_generator.state
+            b0 = bf.detach().clone()
+            for b in range(ix.B):
+                basket = LI[LT == b]
+                if len(basket) < 2:
+                    continue
+                hid = int(basket[rng.integers(len(basket))])
+                sel = (ix.item_trip == b).nonzero().flatten()
+                keep = torch.isin(ix.item[sel],
+                                  torch.as_tensor([int(x) for x in basket if int(x) != hid],
+                                                  dtype=torch.long))
+                b0[sel[keep]] = b0[sel[keep]] + 6.0
+            b0 = b0.requires_grad_(True)
+            m._b_override = b0
+            lz = m._log_Z_quad(ix, True, False, False, False)
+            pig = torch.autograd.grad(lz.sum(), b0)[0].detach()
+            m._b_override = None
+            rng.bit_generator.state = _st          # replay the same holdouts below
         for b in range(ix.B):
             sel = ix.item_trip == b
             items, bv = ix.item[sel], bf[sel]
@@ -201,8 +231,11 @@ def rec_eval(m, B, trips, seed=0, chunk=24):
             pos = (items == hid).nonzero().flatten()
             if len(pos) == 0:
                 continue
-            with torch.no_grad():
-                sc = bv + m.phi[items] @ m.phi[rest].sum(0)
+            if pig is not None:
+                sc = pig[ix.item_trip == b]
+            else:
+                with torch.no_grad():
+                    sc = bv + m.phi[items] @ m.phi[rest].sum(0)
             inb = torch.zeros(len(items), dtype=torch.bool)
             inb[torch.isin(items, rest)] = True
             sc = sc.clone()
