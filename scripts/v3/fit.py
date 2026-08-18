@@ -532,6 +532,18 @@ def main(a):
             f"{int((_sc >= a.phi_deg_cap).sum())} at the ceiling")
     m.project(phi_cap)
     lz_strikes = int(resume_blob['lz_strikes']) if resume_blob else 0
+    # empirical per-product price response, standardised once with its reliability weights
+    _bt = None
+    if a.beta_cal_w > 0 and a.beta_target and os.path.exists(a.beta_target):
+        _npz = np.load(a.beta_target)
+        _tw = torch.as_tensor(_npz["weight"], dtype=torch.float64)
+        _tt = torch.as_tensor(_npz["target"], dtype=torch.float64)
+        _sw = _tw.sum().clamp_min(1e-9)
+        _tm = (_tw * _tt).sum() / _sw
+        _ts = (((_tw * (_tt - _tm) ** 2).sum() / _sw).clamp_min(1e-12)).sqrt()
+        _bt = dict(weight=_tw, z=(_tt - _tm) / _ts)
+        log(f"  beta calibration: {int((_tw > 0).sum()):,} products with a measured price "
+            f"response, weight {a.beta_cal_w}")
     phi_mask = None
     if a.phi_mask:
         _mk = np.load(a.phi_mask)
@@ -763,6 +775,29 @@ def main(a):
         if a.pool_ctx > 0:
             for _p in (m.mu, m.zeta, m.psi):
                 loss = loss + a.pool_ctx * ((_p - _p.mean(0, keepdim=True)) ** 2).mean()
+        # CALIBRATE beta's CROSS-PRODUCT PATTERN against the measured price response.
+        #
+        # price_kappa gives the model capacity for a per-product price response, but
+        # capacity is not information: after kappa grew 1.0 -> 8.3 the correlation between
+        # softplus(beta_j) and the empirical per-product response was still ~0 (-0.019 ->
+        # -0.051), so kappa was amplifying a coefficient carrying no signal.  That lands
+        # squarely on the WITHIN-TRIP relative b that ranking reads, and MRR fell 3x
+        # (0.0267 -> 0.0084) while the likelihood improved.
+        #
+        # The pull is on STANDARDISED values, so it constrains the ordering and spread
+        # across products and leaves the LEVEL to --elast-w.  The two are then orthogonal:
+        # elast_w fixes how strongly price acts overall, this fixes which products it acts
+        # on.  Reliability weights are min(purchases, 5000); products without an estimate
+        # get zero weight.  The empirical slopes are confounded by promotions and
+        # seasonality, so this is a weak pull toward a pattern, not a fit to a truth.
+        if a.beta_cal_w > 0 and _bt is not None:
+            _bj = (softplus(m.gamma).mean(0) * softplus(m.beta)).sum(-1)      # [J]
+            _cw = _bt["weight"]
+            _cs = _cw.sum().clamp_min(1e-9)
+            _bm = (_cw * _bj).sum() / _cs
+            _bsd = (((_cw * (_bj - _bm) ** 2).sum() / _cs).clamp_min(1e-12)).sqrt()
+            _bz = (_bj - _bm) / _bsd
+            loss = loss + a.beta_cal_w * ((_cw * (_bz - _bt["z"]) ** 2).sum() / _cs)
         # RIDGE ON THE PRODUCT, not on the factors.  This is the degree fix.
         #
         # A squared penalty on each factor of a bilinear term becomes a NUCLEAR-norm penalty
@@ -1480,6 +1515,8 @@ if __name__ == "__main__":
     p.add_argument("--pool-ctx", type=float, default=0.0)
     # (wd/2)*J*W = 5e-6*5455*53 = 1.45: the same ridge lam pays, per offset entry.
     p.add_argument("--pool-prod", type=float, default=0.0)
+    p.add_argument("--beta-cal-w", type=float, default=0.0)
+    p.add_argument("--beta-target", default="../../basket_input/v3_beta_target.npz")
     p.add_argument("--n-rec", type=int, default=192)
     p.add_argument("--elast-w", type=float, default=20.0)
     p.add_argument("--elast-target", type=float, default=-0.121)
