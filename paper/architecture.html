@@ -229,6 +229,9 @@ and the convolution over untouched categories are lifted out of the node loop by
     |              + var_w  * (log1p Var(n) - log1p emp)^2
     |              + en_w   * per-trip (E[n] - observed)^2
     |              + rkl_w  * reverse KL, which sees a tail the cross-entropy cannot )
+    |              en_w   penalises PER-TRIP error, where the failure actually is:
+    |                     model E[n] has median 6.5 and max 119.5, and the worst 5% of
+    |                     trips carry 73% of it.  Aggregate penalties cannot see that.
     + elast_w  * (aggregate elasticity - target)^2      pins the LEVEL of price
     + pool_prod* ridge on the bilinear PRODUCT, degree 2, not on its factors
     + beta_cal_w * standardised pull on beta's cross-product PATTERN
@@ -325,12 +328,12 @@ chosen item in by raising its <code>b</code> so the model re-solves for the rest
 python3 pairmask.py --k 20                 # which products may carry phi
 V3_AFFINITY=1 python3 beta_target.py       # empirical per-product price response
 
-V3_AFFINITY=1 python3 fit.py --label run95 --Kz 4 --quad-q 8 \
+V3_AFFINITY=1 python3 fit.py --label run97 --Kz 4 --quad-q 8 \
   --phi-mask ../../basket_input/v3_phimask_k20.npy --c-max 4.3 \
   --lam-centre 1 --no-rec 1 --pool-prod 1.45 --rkl-w 10.0 --elast-w 20.0 \
-  --beta-cal-w 0.10 --gap-project 0 --rho0-curv 0 --lam-sd-max 0.45 --iters 60000
+  --beta-cal-w 0.10 --en-w 0.005 --lam-sd-max 0.45 --lr 0.0005 --iters 50000
 
-V3_AFFINITY=1 python3 evalall.py --ckpts v3_run95_best.pt --Kz 4 --quad-q 8 \
+V3_AFFINITY=1 python3 evalall.py --ckpts v3_run97_best.pt --Kz 4 --quad-q 8 \
   --n-trips 3000 --splits valid,test
 V3_AFFINITY=1 python3 bench_same_trips.py     # all models, same trips
 V3_AFFINITY=1 python3 recommend_pi.py         # complete-the-basket on pi
