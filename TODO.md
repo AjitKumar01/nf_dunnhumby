@@ -92,9 +92,28 @@ Most of the MDP's price response comes from the shifted-negative-binomial units 
 (-0.71 of the -0.83 total), not from the basket model. Nothing in this project's auditing
 has touched `a_q`, `gamma_q`, `beta_q`, `log_r`.
 
-## 6. E[n] and Var(n) remain uncalibrated
+## 6. E[n] is still 27% over on test; Var(n) is largely fixed
 
-Training to 2.0 epochs improved likelihood by 2.9 nats and did not move either. E[n] 8.95
-against 7.87 observed on validation, 9.88 against 8.04 on test; varpop 150 against 85. The
-failure is concentrated: median E[n] tracks well (6.6-7.1) while the mean is dragged by a
-tail of trips predicting very large baskets.
+RESOLVED for Var(n).  --en-w penalises PER-TRIP (E[n] - observed)^2, and the tail it targets
+is exactly the failure: measured on run95_best over 240 training trips, model E[n] has
+median 6.47 but max 119.5, and the worst 5% of trips carry 73% of the penalty.  Every
+earlier attempt acted on an aggregate -- the batch-mean size law, log-scaled Var(n), the
+rho_0 curvature floor -- and none could see a failure concentrated in 5% of trips.
+
+    checkpoint        ll valid    varpop/obs    E[n] valid/obs
+    run90_best         -41.412       150/85        8.95/7.87
+    run95_best         -40.935       132/85        8.90/7.87
+    run97_best         -40.424       118/85        8.69/7.87
+
+Two things mattered.  --en-w 0.005 contributes 0.8 nats against a ~43 nat loss, enough to
+pull without distorting.  And the LEARNING RATE: at 0.005 the same objective oscillated
+(var 92 -> 284 between consecutive evals); at 0.0005 it settled over 15 evals with the
+likelihood improving monotonically -43.08 -> -42.65.  A converged model needs a gentle rate.
+
+STILL OPEN: E[n] on TEST is 10.22 against 8.04 observed, 27% over, and has not moved across
+run90, run95 or run97.  Validation is 8.69 against 7.87, only 10% over.  The train/test
+asymmetry points at temporal drift over weeks 91-102 rather than a fitting problem -- the
+same direction the recency finding pointed, and the reason recency is switched off.
+
+Also note the eval-slice trap: the training log computes var on 384 trips and read 99, while
+evalall on 3,000 trips reads 118.  The goals are a small-sample signal, not a verdict.
