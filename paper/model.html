@@ -329,10 +329,19 @@ Equal size makes <code>rho_0</code> cancel, so the comparison is purely about wh
 </tbody></table></div>
 <p><strong>8.7&times; chance</strong>, and zeroing <code>theta</code> collapses it to near
 chance &mdash; household taste is the entire signal. <span class="chip ok">WORKS</span></p>
-<div class="note"><strong><code>phi</code> now HURTS this task.</strong> Ablating it raises
-top-1 from 17.3% to 20.0%. On the previous checkpoint the same ablation was 16.8% &rarr;
-18.9%, so the gap widens as <code>phi</code> grows. With 20 products and 80 effective
-numbers it is contributing noise to a task driven entirely by <code>theta</code>.</div>
+<div class="note"><strong>The <code>phi</code> ablation here is NOISE, not a finding.</strong>
+Ablating <code>phi</code> appears to raise top-1 from 17.3% to 20.0%, but that is 5 cases out
+of 185: a paired test gives 19 discordant pairs, 12 favouring the ablation, exact two-sided
+<code>p = 0.36</code>, and the paired MRR difference is 0.8 standard errors. An earlier draft
+of this document reported it as evidence that <code>phi</code> hurts, and compared it against
+the previous checkpoint's equally insignificant gap. Both are withdrawn.
+<br><br>The test that answers the question is the ablation on the PRIMARY objective, and it
+points the other way: held-out set likelihood is <code>&minus;40.3810</code> with
+<code>phi</code> against <code>&minus;40.3972</code> without on validation, and
+<code>&minus;39.9070</code> against <code>&minus;39.9176</code> on test. <strong><code>phi</code>
+is worth +0.016 and +0.011 nats</strong> &mdash; real, consistent, and very small against a
+5.1-nat lead over shopper. It reaches 20 products and 4.5% of held-out items; it is a minor
+positive contributor, not a liability.</div>
 
 <h3>6.6 &nbsp; Recommendation and bundles &mdash; rank on <code>pi</code>, not <code>b</code></h3>
 <div class="note"><strong>The scoring function was wrong, and it inverted the conclusion.</strong>
@@ -434,6 +443,7 @@ matched independence null, has 4&ndash;5 strongly separated modes above the nois
 <tr><td>MRR and likelihood are systematically opposed</td><td>held over 3,800 iterations they rise together</td></tr>
 <tr><td><code>rho_c</code> is a substitution penalty</td><td>fitted negative in 94.6% of categories &mdash; it rewards</td></tr>
 <tr><td>The model ranks below popularity</td><td>wrong twice: different trip sets, then the wrong scoring function; on pi it wins 2.8&ndash;3.3x</td></tr>
+<tr><td><code>phi</code> hurts customer affinity</td><td>5 cases in 185, paired p = 0.36; the likelihood ablation says phi is worth +0.016 nats</td></tr>
 <tr><td><code>rho_c</code> costs 22&ndash;35% of ranking MRR</td><td>an artefact of adding phi and rho_c to b by hand, which double-counts what pi reconciles</td></tr>
 </tbody></table></div>
 
