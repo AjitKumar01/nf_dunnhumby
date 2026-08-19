@@ -160,27 +160,39 @@ def main(a):
             p_obs = p_obs / p_obs.sum()
 
             row = {}
-            for tag, dr in (("lo", a.draws), ("hi", a.draws * 8)):     # guard 5
+            # Guard 5 exists because an importance-sampled log Z is biased low and the
+            # bias falls as ~1/draws, so a cheap number overstates the likelihood.  Under
+            # QUADRATURE n_draws is ignored -- _log_Z_quad uses a fixed grid -- so the hi
+            # pass recomputes the lo number exactly (verified identical to 6 decimals) and
+            # costs half of this script's runtime for nothing.  Skip it, and say so.
+            _passes = (("lo", a.draws),) if getattr(m, "quad", None) is not None \
+                else (("lo", a.draws), ("hi", a.draws * 8))
+            for tag, dr in _passes:
                 g = torch.Generator().manual_seed(0)
                 vb, vl, vu, vt = evaluate(m, Bt, trips, dr, g, use_units=True)
                 E, V, law = size_law(m, Bt, trips, dr, a.chunk)
                 row[tag] = dict(vb=vb, vu=vu, e=E.mean(), vpop=V.mean() + E.var(),
                                 cap=100 * float((E > 0.85 * a.nmax).mean()), law=law)
             kl, tv, ks = dist_stats(row["lo"]["law"], p_obs)
-            lo, hi = row["lo"], row["hi"]
-            log(f"{s:>6}{lo['vb']:10.3f}{hi['vb']:9.3f}{lo['vu']:8.3f}"
-                f"{lo['e']:8.2f}{obs.mean():7.2f}{hi['e']:8.2f}"
+            lo = row["lo"]
+            hi = row.get("hi")           # absent under quadrature: nothing to compare to
+            _hb = f"{hi['vb']:9.3f}" if hi else f"{'exact':>9}"
+            _he = f"{hi['e']:8.2f}" if hi else f"{'exact':>8}"
+            log(f"{s:>6}{lo['vb']:10.3f}{_hb}{lo['vu']:8.3f}"
+                f"{lo['e']:8.2f}{obs.mean():7.2f}{_he}"
                 f"{lo['vpop']:9.1f}{obs.var():7.1f}{kl:7.3f}{tv:6.3f}{lo['cap']:6.1f}")
             # guard 5, made explicit rather than left to the reader
-            if abs(hi["vb"] - lo["vb"]) > 0.5:
+            if hi and abs(hi["vb"] - lo["vb"]) > 0.5:
                 log(f"       ^ DRAW-LIMITED: set/bskt moves {lo['vb']:.3f} -> {hi['vb']:.3f} "
                     f"at 8x draws; do not quote it")
-            if abs(hi["e"] - lo["e"]) > 0.10 * max(lo["e"], 1e-9):
+            if hi and abs(hi["e"] - lo["e"]) > 0.10 * max(lo["e"], 1e-9):
                 log(f"       ^ DRAW-LIMITED: E[n] moves {lo['e']:.2f} -> {hi['e']:.2f} at 8x")
         log("")
 
-    log("set/bskt is held-out log P(basket set); @8x is the same at 8x the draws -- if they")
-    log("differ the estimate is not converged.  varpop = E[Var(n|trip)] + Var[E(n|trip)],")
+    log("set/bskt is held-out log P(basket set); @8x repeats it at 8x the draws and must")
+    log("agree.  Under quadrature n_draws is ignored, so it reads 'exact' and the pass is")
+    log("skipped -- it recomputed the same number and cost half this script's runtime.")
+    log("varpop = E[Var(n|trip)] + Var[E(n|trip)],")
     log("the quantity obs.var() measures.  cap% = trips whose E[n] exceeds 0.85*nmax.")
 
 

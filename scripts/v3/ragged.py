@@ -958,6 +958,18 @@ class RaggedModel(torch.nn.Module):
         differencing this function must pass z_fixed.
         """
         B, L2P = ix.B, float(math.log(2 * math.pi))
+        if getattr(self, "quad", None) is not None and z_fixed is None:
+            # EXACT size law from the same grid the normaliser uses.  This function
+            # otherwise runs the importance sampler -- three autograd mode steps through the
+            # DENSE log_f, then reweighted draws -- so E[n] and Var(n) were still estimates
+            # while the likelihood beside them was exact.  That is why they swung between
+            # consecutive evals (var 92 -> 284 at one point) with a stable likelihood.
+            # Measured: 1208 ms per batch of 24 against 128 ms for loglik.
+            with torch.enable_grad() if grad else torch.no_grad():
+                out = self._log_Z_quad(ix, drop_empty, False, True, False)
+            p = out[1]
+            return (p, torch.zeros(B, 1, self.Kz, dtype=p.dtype, device=p.device)) \
+                if return_mode else p
         with torch.no_grad():
             if z_fixed is not None:
                 zh = z_fixed

@@ -45,7 +45,7 @@ def main(a):
     tr=np.flatnonzero(D["trip_split"]==0); keep=np.zeros(len(li),bool)
     for t in tr: keep[int(lp[t]):int(lp[t+1])]=True
     pop=np.bincount(li[keep],minlength=J).astype(float); pop/=pop.sum()
-    va=np.flatnonzero(D["trip_split"]==1)
+    va=np.flatnonzero(D["trip_split"]==(1 if a.split=="valid" else 2))
     va=np.array([t for t in va if a.k<=int(lp[t+1])-int(lp[t])<=a.nmax])
     va=np.sort(np.random.default_rng(0).choice(va,size=min(a.n_trips,len(va)),replace=False))
     log(f"{a.ckpt} iter {blob.get('iter','?')}; bundles of {a.k} for {len(va)} held-out trips\n")
@@ -108,7 +108,8 @@ def main(a):
 if __name__=="__main__":
     p=argparse.ArgumentParser()
     p.add_argument("--ckpt",default="v3_run90_best.pt"); p.add_argument("--k",type=int,default=5)
-    p.add_argument("--n-trips",type=int,default=480); p.add_argument("--chunk",type=int,default=24)
+    p.add_argument("--n-trips",type=int,default=480)
+    p.add_argument("--split",default="valid"); p.add_argument("--chunk",type=int,default=24)
     p.add_argument("--show",type=int,default=3)
     p.add_argument("--no-rhoc",type=int,default=0)
     p.add_argument("--force",type=float,default=6.0,help="b boost that pins a chosen item in")
