@@ -283,6 +283,23 @@ ranking &mdash; because they do not coincide. <code>--fresh-sched</code> restart
 over a new horizon and resets the learning rate, since a finished run resumes at its floor.</p>
 
 <h2 id="eval">6 &middot; Evaluation</h2>
+<div class="note"><strong>Four performance defects, all the same shape.</strong> Code written
+when <code>log Z</code> was sampled, never revisited once it became exact &mdash; plus two of
+my own that repeated a mistake already solved in <code>fit.py</code>.
+<br><br>
+<code>evalall</code> ran a <code>lo</code>/<code>hi</code> pass to catch a draw-limited
+estimate; under quadrature <code>n_draws</code> is ignored, so the second pass recomputed the
+first exactly (<strong>2&times;</strong>). <code>size_dist</code> ignored the grid entirely and
+ran an importance sampler with three autograd mode steps through the DENSE kernel &mdash;
+1208 ms per batch against <code>loglik</code>'s 128 (<strong>10&times;</strong>).
+<code>recommend_pi</code> and <code>bundle</code> called <code>_log_Z_quad</code> inside their
+per-trip loops, discarding 23 of every 24 results, and <code>bundle</code> did it once per
+greedy step as well (<strong>24&times;</strong> each).
+<br><br>
+<code>_log_Z_quad</code> computes <code>pi</code> for every trip in the batch at once. Anything
+that wants per-trip <code>pi</code> must pin all trips into one <code>b_override</code> and take
+ONE backward pass &mdash; the structure <code>rec_eval</code> uses. Both rewrites reproduce
+their previous numbers exactly (bundles 0.198 / 1.75 unchanged).</div>
 <div class="scroll"><table>
 <thead><tr><th>Script</th><th>Answers</th><th>Protocol</th></tr></thead>
 <tbody>

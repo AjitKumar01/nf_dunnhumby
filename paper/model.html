@@ -112,7 +112,7 @@ express broad substitution, which must live in <code>rho_c</code>.</p>
 <code>pi_j = P(j in S) = d log(Z-1)/d b_j</code> (Corollary 2) is the marginal inclusion
 probability: what happens after every product competes under the size law and the category
 term. It sums to <code>E[n]</code> by construction, and it is the difference between beating
-popularity by 3&times; and losing to it.</p>
+popularity by 2.2&times; and losing to it.</p>
 <p><strong>Ranking is normaliser-free.</strong> Comparing <code>S &cup; {j}</code> against
 <code>S &cup; {k}</code> cancels <code>Z</code> entirely, so recommendation costs one forward
 pass and no sampling. It also cancels <code>rho_0</code> and every shared item, so what
@@ -267,19 +267,20 @@ silently corrupting results for dozens of runs.</p>
 </tbody></table></div>
 
 <h3>6.2 &nbsp; Held-out likelihood against baselines</h3>
-<p>Every model scored on the <strong>same 3,000 trips per split</strong> &mdash; evalall's
-seeded, in-support sample drawn uniformly across all weeks. The <code>@8x</code> column was
-identical, confirming the estimate is converged.</p>
+<p>This model is scored on the <strong>complete</strong> validation and test sets &mdash; all
+16,948 and 24,278 in-support trips, no sampling. The baselines are on evalall's seeded
+3,000-trip sample, so their margins are indicative rather than exact.</p>
 <div class="scroll"><table>
 <thead><tr><th>Model</th><th class="n">valid</th><th class="n">test</th><th class="n">valid/line</th><th class="n">test/line</th></tr></thead>
 <tbody>
-<tr><td><strong>this model</strong> (run97, 5.3 epochs)</td><td class="n">&minus;40.424</td><td class="n">&minus;42.140</td><td class="n">&minus;5.320</td><td class="n">&minus;5.242</td></tr>
+<tr><td><strong>this model</strong> (run97, 5.3 epochs) <span class="small">full sets</span></td><td class="n">&minus;39.912</td><td class="n">&minus;42.085</td><td class="n">&minus;5.122</td><td class="n">&minus;5.432</td></tr>
 <tr><td>shopper</td><td class="n">&minus;45.531</td><td class="n">&minus;47.228</td><td class="n">&minus;5.789</td><td class="n">&minus;5.872</td></tr>
 <tr><td>multinomial</td><td class="n">&minus;46.872</td><td class="n">&minus;48.753</td><td class="n">&minus;5.959</td><td class="n">&minus;6.062</td></tr>
 <tr><td>ndpp <span class="chip op">UNVERIFIED</span></td><td class="n">&minus;67.786</td><td class="n">&minus;69.037</td><td class="n">&minus;8.618</td><td class="n">&minus;8.584</td></tr>
 </tbody></table></div>
-<p>Ahead of shopper by 5.1 / 5.1 nats and multinomial by 6.4 / 6.6, on both splits, with the
-per-line figures agreeing so it is not a basket-size artefact.</p>
+<p>Ahead of shopper by 5.6 / 5.1 nats and multinomial by 7.0 / 6.7. The complete-set figures
+are slightly BETTER than the 3,000-trip sample (&minus;40.424 / &minus;42.140), so the sample
+was mildly pessimistic rather than flattering.</p>
 <div class="note"><strong>Re-scoring on identical trips changed the conclusion.</strong> The
 baselines had sampled their own held-out sets, so the earlier comparison was never on the
 same data. Shopper read &minus;48.310&thinsp;/&thinsp;&minus;45.757 on its own draw against
@@ -292,10 +293,13 @@ to load the checkpoint, so the scored model may not be the one that was trained.
 then oscillated in a 0.11-nat band for 1,000 iterations with no trend.</p>
 
 <h3>6.3 &nbsp; Price counterfactual</h3>
-<pre>        baseline: E[n]  8.475
-   10% price CUT: E[n]  8.561   dlogE[n]/dlogp  -0.097
-  10% price RISE: E[n]  8.398   dlogE[n]/dlogp  -0.096
-                    data:                       -0.121</pre>
+<pre>VALIDATION                              TEST
+  baseline    E[n]  8.475               baseline    E[n] 10.738
+  10% CUT     E[n]  8.561   -0.097      10% CUT     E[n] 10.850   -0.099
+  10% RISE    E[n]  8.398   -0.096      10% RISE    E[n] 10.638   -0.098
+                    data:   -0.121</pre>
+<p>Symmetric on both splits and near-identical across them &mdash; the cleanest transfer of any
+metric here.</p>
 <p class="small">Any script that perturbs prices must shift <code>dlp_bar</code> as well as
 <code>dlp</code>: <code>b_at</code> splits price into a common level and an idiosyncratic
 deviation, and leaving <code>dlp_bar</code> fixed presents a uniform change as pure
@@ -307,13 +311,14 @@ elasticity is exactly 0 (its size law is a frozen buffer); ndpp's is &minus;0.00
 <span class="chip ok">STRONGEST RESULT</span></p>
 
 <h3>6.4 &nbsp; Generation</h3>
-<pre>size law:  KS 0.051   total variation 0.108   KL(emp||model) 0.158
-   n         model   observed
- 21-40      0.0776     0.0417     1.9x too heavy
- 41-120     0.0271     0.0125     2.2x too heavy  ->  Var(n) 111 vs 70</pre>
-<p>Shape is right and the variance has come down from 186, but the SHAPE of the miss is
-unchanged: the model still puts about twice the data's mass on large baskets. Moderating
-those trips is what <code>--en-w</code> achieved; eliminating them is still open.</p>
+<pre>                  VALIDATION            TEST
+   n         model  observed     model  observed
+ 21-40      0.0776    0.0417    0.1019    0.0800
+ 41-120     0.0271    0.0125    0.0463    0.0150     3.1x too heavy on test</pre>
+<p>This is the one metric that DEGRADES from validation to test: the large-basket tail is
+2.2&times; too heavy on validation and <strong>3.1&times; on test</strong>. Moderating those trips
+is what <code>--en-w</code> achieved; eliminating them is open, and the fact that the miss
+concentrates in the later weeks points at temporal drift rather than a fitting failure.</p>
 
 <h3>6.5 &nbsp; Customer affinity</h3>
 <p>Given a household and a shopping occasion, score its real basket against 47 other
@@ -322,19 +327,21 @@ Equal size makes <code>rho_0</code> cancel, so the comparison is purely about wh
 <div class="scroll"><table>
 <thead><tr><th>Variant</th><th class="n">top-1</th><th class="n">top-5</th><th class="n">MRR</th></tr></thead>
 <tbody>
-<tr><td>full model</td><td class="n">17.3%</td><td class="n">51.9%</td><td class="n">0.3442</td></tr>
-<tr><td>taste ablated (<code>theta = 0</code>)</td><td class="n">3.8%</td><td class="n">16.2%</td><td class="n">0.1199</td></tr>
-<tr><td><code>phi</code> ablated</td><td class="n">20.0%</td><td class="n">54.6%</td><td class="n">0.3555</td></tr>
+<tr><td>full model <span class="small">test, n=766</span></td><td class="n">23.1%</td><td class="n">52.3%</td><td class="n">0.3715</td></tr>
+<tr><td>taste ablated (<code>theta = 0</code>)</td><td class="n">3.5%</td><td class="n">17.2%</td><td class="n">0.1293</td></tr>
+<tr><td><code>phi</code> ablated</td><td class="n">21.5%</td><td class="n">53.3%</td><td class="n">0.3640</td></tr>
 <tr><td><em>chance</em></td><td class="n">2.0%</td><td class="n">9.8%</td><td class="n">&mdash;</td></tr>
 </tbody></table></div>
-<p><strong>8.7&times; chance</strong>, and zeroing <code>theta</code> collapses it to near
-chance &mdash; household taste is the entire signal. <span class="chip ok">WORKS</span></p>
+<p><strong>11.6&times; chance on test</strong> (17.3% and 8.7&times; on a 185-case validation
+sample), and zeroing <code>theta</code> collapses it to near chance &mdash; household taste is
+the entire signal. <span class="chip ok">WORKS</span></p>
 <div class="note"><strong>The <code>phi</code> ablation here is NOISE, not a finding.</strong>
-Ablating <code>phi</code> appears to raise top-1 from 17.3% to 20.0%, but that is 5 cases out
-of 185: a paired test gives 19 discordant pairs, 12 favouring the ablation, exact two-sided
-<code>p = 0.36</code>, and the paired MRR difference is 0.8 standard errors. An earlier draft
-of this document reported it as evidence that <code>phi</code> hurts, and compared it against
-the previous checkpoint's equally insignificant gap. Both are withdrawn.
+On a 185-case validation sample, ablating <code>phi</code> appeared to raise top-1 from 17.3%
+to 20.0% &mdash; 5 cases, paired <code>p = 0.36</code>, 0.8 standard errors. On the 766-case
+TEST sample the sign REVERSES: ablation lowers top-1 from 23.1% to 21.5%. An earlier draft
+reported the validation gap as evidence that <code>phi</code> hurts and compared it against
+the previous checkpoint's equally insignificant gap. Both are withdrawn; the sign flip
+across samples is what noise looks like.
 <br><br>The test that answers the question is the ablation on the PRIMARY objective, and it
 points the other way: held-out set likelihood is <code>&minus;40.3810</code> with
 <code>phi</code> against <code>&minus;40.3972</code> without on validation, and
@@ -356,21 +363,24 @@ correlates <code>+0.173</code>.</div>
 <div class="scroll"><table>
 <thead><tr><th>Method</th><th class="n">MRR valid</th><th class="n">MRR test</th><th class="n">R@10 valid</th></tr></thead>
 <tbody>
-<tr><td><strong>ours: pi | rest of basket</strong></td><td class="n">0.0784</td><td class="n">0.0738</td><td class="n">16.5%</td></tr>
-<tr><td>ours: pi, unconditioned</td><td class="n">0.0728</td><td class="n">0.0713</td><td class="n">14.9%</td></tr>
-<tr><td>co-purchase counts</td><td class="n">0.0493</td><td class="n">0.0378</td><td class="n">8.5%</td></tr>
-<tr><td>ours: b only</td><td class="n">0.0103</td><td class="n">0.0133</td><td class="n">1.9%</td></tr>
-<tr><td>popularity</td><td class="n">0.0265</td><td class="n">0.0255</td><td class="n">5.1%</td></tr>
+<tr><td><strong>ours: pi | rest of basket</strong></td><td class="n">0.0823</td><td class="n">0.0739</td><td class="n">15.0%</td></tr>
+<tr><td>ours: pi, unconditioned</td><td class="n">0.0824</td><td class="n">0.0727</td><td class="n">14.7%</td></tr>
+<tr><td>co-purchase counts</td><td class="n">0.0404</td><td class="n">0.0383</td><td class="n">8.4%</td></tr>
+<tr><td>ours: b only</td><td class="n">0.0137</td><td class="n">0.0090</td><td class="n">1.9%</td></tr>
+<tr><td>popularity</td><td class="n">0.0368</td><td class="n">0.0381</td><td class="n">6.8%</td></tr>
 <tr><td>ours: b + phi + rho_c</td><td class="n">0.0230</td><td class="n">0.0193</td><td class="n">2.8%</td></tr>
 <tr><td>random</td><td class="n">0.0015</td><td class="n">0.0011</td><td class="n">0.3%</td></tr>
 </tbody></table></div>
-<p><strong>3.0&times; popularity and 1.6&times; co-purchase on validation; 2.9&times; and
-2.0&times; on test.</strong> Note that <code>b + phi + rho_c</code> scores <em>below</em>
+<p>On <strong>1,651 validation and 1,630 test cases</strong>: <strong>2.2&times; popularity and
+2.0&times; co-purchase on validation; 1.9&times; and 1.9&times; on test.</strong> An earlier
+draft reported 3.0&times; from 316 cases &mdash; the baselines themselves moved with the
+larger sample (popularity 0.0265 &rarr; 0.0368), so that multiple was small-sample inflation. Note that <code>b + phi + rho_c</code> scores <em>below</em>
 <code>b</code> alone: adding the interaction terms by hand double-counts what
 <code>pi</code> already reconciles with the normaliser. That artefact produced the earlier
 claim that <code>rho_c</code> costs 22&ndash;35% of ranking, which is withdrawn.</p>
-<p><strong>Conditioning on the cart adds almost nothing</strong> &mdash; 7% on validation,
-1% on test. Essentially the whole win is using <code>pi</code> at all. So what the model
+<p><strong>Conditioning on the cart adds nothing</strong> &mdash; 0.0823 against 0.0824
+unconditioned on validation, 0.0739 against 0.0727 on test. At 316 cases it looked like 7%;
+at five times the sample it is zero. Essentially the whole win is using <code>pi</code> at all. So what the model
 supplies is personalised <em>propensity</em>, not basket completion, which is consistent
 with <code>phi</code> reaching 4.5% of held-out items and <code>rho_c</code> saying "more
 from this category" rather than naming a partner.</p>
@@ -380,9 +390,9 @@ each chosen item in by raising its <code>b</code> so the model re-solves for the
 <div class="scroll"><table>
 <thead><tr><th>Method</th><th class="n">hit rate</th><th class="n">distinct categories</th></tr></thead>
 <tbody>
-<tr><td><strong>greedy on pi</strong></td><td class="n">0.198</td><td class="n">1.75 of 5</td></tr>
-<tr><td>popularity top-5</td><td class="n">0.113</td><td class="n">1.00 of 5</td></tr>
-<tr><td>taste (theta.alpha) top-5</td><td class="n">0.065</td><td class="n">1.84 of 5</td></tr>
+<tr><td><strong>greedy on pi</strong> <span class="small">test, 1,200 trips</span></td><td class="n">0.197</td><td class="n">1.68 of 5</td></tr>
+<tr><td>popularity top-5</td><td class="n">0.117</td><td class="n">1.00 of 5</td></tr>
+<tr><td>taste (theta.alpha) top-5</td><td class="n">0.048</td><td class="n">1.55 of 5</td></tr>
 <tr><td>greedy on b</td><td class="n">0.033</td><td class="n">1.05 of 5</td></tr>
 </tbody></table></div>
 <p>6.4&times; from changing the objective and 1.9&times; over popularity. On <code>b</code>
@@ -482,8 +492,8 @@ grows baskets 1.2%"; do not trust "discount X rather than Y".</p>
 <p><strong>Substitution has one scalar per category.</strong> <code>phi phi'</code> is PSD,
 so the negative eigenvalues of the empirical log-lift spectrum (down to &minus;57) must live
 in <code>rho_c</code> or nowhere.</p>
-<p><strong>Test degrades relative to validation.</strong> <code>E[n]</code> 10.22 against 8.04
-observed on test, versus 8.69 against 7.87 on validation &mdash; temporal drift over
+<p><strong>Test degrades relative to validation.</strong> <code>E[n]</code> 9.95 against 8.11
+observed on test, versus 8.72 against 7.82 on validation, measured on the COMPLETE sets &mdash; temporal drift over
 weeks 91&ndash;102.</p>
 
 <h2 id="repro">8 &middot; Reproducing</h2>

@@ -56,46 +56,43 @@ def main(a):
         for k0 in range(0,len(va),a.chunk):
             ix,ctx,lctx,hh,LI,LT,LC,LU=Bt.make(va[k0:k0+a.chunk]); m.house,m.ctx=hh,ctx
             with torch.no_grad(): bf=m.b_flat(ix)
+            # LOCKSTEP over trips.  _log_Z_quad computes pi for every trip in the batch
+            # at once, so running the greedy inside the per-trip loop threw away 23 of
+            # every 24 results at each of k steps -- 24*k full passes per batch instead of
+            # k.  Different trips are independent, so all of them can advance one step
+            # together: pin each trip's current selection, take ONE backward pass, and let
+            # each trip pick its own argmax from its own slots.
+            slots={b:(ix.item_trip==b).nonzero().flatten() for b in range(ix.B)}
+            truth={b:set(int(x) for x in LI[LT==b]) for b in range(ix.B)}
+            cur={b:[] for b in range(ix.B)}
+            taken={b:torch.zeros(len(slots[b]),dtype=torch.bool) for b in range(ix.B)}
+            b0=bf.detach().clone()
+            for step in range(a.k):
+                bb=b0.clone().requires_grad_(True)
+                m._b_override=bb
+                lz=m._log_Z_quad(ix,True,False,False,False)
+                pig=torch.autograd.grad(lz.sum(),bb)[0].detach()
+                m._b_override=None
+                for b in range(ix.B):
+                    sc=pig[slots[b]].clone()
+                    sc[taken[b]]=-float("inf")
+                    j=int(sc.argmax()); taken[b][j]=True
+                    cur[b].append(int(ix.item[slots[b][j]]))
+                    b0[int(slots[b][j])]=b0[int(slots[b][j])]+a.force
             for b in range(ix.B):
-                sel=(ix.item_trip==b).nonzero().flatten()
-                items=ix.item[sel]; bv=bf[sel]
-                truth=set(int(x) for x in LI[LT==b])
-                # --- model: greedy on pi, CONDITIONED on what is already in the bundle ---
-                #
-                # Ranking on b was wrong.  b_j is the product's standalone value, an INPUT;
-                # pi_j = d log(Z-1) / d b_j is what actually happens once 5,455 products
-                # compete for ~8 slots under the size law and the category term.  Measured
-                # on run90_best, corr(mean b, log purchases) = -0.052 while
-                # corr(mean pi, log purchases) = +0.173, so a greedy on b populates the
-                # bundle with products nobody buys.
-                #
-                # Conditioning: forcing the chosen items into the basket by raising their b
-                # makes the model re-solve for everything else, so the next pick is the one
-                # most likely GIVEN the bundle so far -- complements through phi, category
-                # crowding through rho_c, and the size law all act automatically.
-                cur=[]; taken=torch.zeros(len(items),dtype=torch.bool)
-                b0=bf.detach().clone()
-                for step in range(a.k):
-                    m._b_override=b0.clone().requires_grad_(True)
-                    lz=m._log_Z_quad(ix,True,False,False,False)
-                    pig=torch.autograd.grad(lz.sum(),m._b_override)[0].detach()
-                    m._b_override=None
-                    sc=pig[sel].clone(); sc[taken]=-float("inf")
-                    j=int(sc.argmax()); taken[j]=True
-                    cur.append(int(items[j]))
-                    b0[int(sel[j])]=b0[int(sel[j])]+a.force   # pin it into the basket
-                # --- baselines on the same assortment ---
+                items=ix.item[slots[b]]
+                with torch.no_grad():
+                    tv=(m.theta_c()[hh[b]]*m.alpha[items]).sum(-1)
                 bp=[int(items[i]) for i in torch.topk(torch.as_tensor(pop[items.numpy()]),a.k).indices]
-                with torch.no_grad(): tv=(m.theta_c()[hh[b]]*m.alpha[items]).sum(-1)
                 bt=[int(items[i]) for i in torch.topk(tv,a.k).indices]
-                for nm,bun in (("model",cur),("popularity",bp),("taste (theta.alpha)",bt)):
-                    hits[nm].append(len(set(bun)&truth)/a.k)
+                for nm,bun in (("model",cur[b]),("popularity",bp),("taste (theta.alpha)",bt)):
+                    hits[nm].append(len(set(bun)&truth[b])/a.k)
                     ncat[nm].append(len(set(int(m.cat_of[x]) for x in bun)))
                 if shown<a.show and b==0:
                     shown+=1
                     log(f"  household {int(hh[b])}, bundle of {a.k}:")
-                    for x in cur:
-                        mark="*" if x in truth else " "
+                    for x in cur[b]:
+                        mark="*" if x in truth[b] else " "
                         log(f"    {mark} {str(it.loc[x,'SUB_COMMODITY_DESC'])[:38]:<38} "
                             f"({str(it.loc[x,'DEPARTMENT'])[:14]})")
     log("")
