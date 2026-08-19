@@ -266,6 +266,16 @@ lets the intercept migrate into household taste instead.</p>
 line can drift back out; what matters is whether all seven hold across several evals.</p>
 
 <h4>Checkpoints</h4>
+<div class="note"><strong>Resuming a converged model: lower the rate.</strong>
+<code>--fresh-sched</code> restarts the cosine over a new horizon and resets the rate to
+<code>--lr</code>, so passing it without lowering <code>--lr</code> puts a converged model
+back at full rate. Measured on the same checkpoint with the same penalty: at 0.005
+<code>Var(n)</code> swung 92 &rarr; 284 between consecutive evals and the likelihood fell
+1.9 nats; at 0.0005 it held 91&ndash;105 across 15 evals with the likelihood improving
+monotonically. Roughly a tenth of the original rate is the working rule.
+<br><br>The swings are the model, not the estimator: the eval uses a fixed trip slice and a
+freshly seeded generator, so its size moments are a deterministic function of the
+parameters.</div>
 <p><code>save_ckpt</code> writes <code>format=2</code>: model, optimiser, schedule, both RNG
 streams, iteration, cumulative iteration, best-so-far. Atomic via temp + <code>os.replace</code>.
 Two are kept &mdash; <code>_best.pt</code> on likelihood and <code>_bestmrr.pt</code> on

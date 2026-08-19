@@ -394,7 +394,29 @@ normaliser and the bundles read as real baskets:</p>
 household 471:  DAIRY TEA / PREP SIDE DISHES / WHITE BREAD / SALAD BAR FRUIT / FLUID MILK
 household 1078: SOFT DRINKS / SOFT DRINKS / FRUIT DRINKS / DRY MEAT / CANDY BAGS</pre>
 
-<h3>6.7 &nbsp; What the embeddings learned</h3>
+<h3>6.7 &nbsp; Resuming a converged model needs a gentle learning rate</h3>
+<p>The per-trip size penalty <code>--en-w</code> was tried twice on the same checkpoint with
+the same weight. The only difference was the rate:</p>
+<pre>  lr 0.005   it 32000  var  92/89      it 32200  var 284/89   ll -44.941
+  lr 0.0005  it 32000  var  91/89      it 32200  var  98/89   ll -43.014
+             ... and 13 further evals holding var 91-105, ll improving to -42.647</pre>
+<p>At the higher rate the same objective looked like it was failing. It was not: the model
+was being thrown between states three-fold apart in variance within 200 iterations.</p>
+<div class="note"><strong>Those swings are the MODEL, not the estimator, and that is
+provable rather than inferred.</strong> The eval computes its size moments on
+<code>va[:128]</code> &mdash; a fixed slice &mdash; with
+<code>torch.Generator().manual_seed(0)</code> created fresh each time. Same trips, same
+seed, same draws, so the reported <code>Var(n)</code> is a deterministic function of the
+parameters. No randomness varies between evals, so nothing but the model can move it.
+<br><br>An earlier draft argued this from the quadrature agreeing with the sampler to three
+decimals. That argument has a hole: the agreement was measured where
+<code>Var(n|trip)</code> is 56 and well behaved, while the swings happened at 284, where
+importance sampling is at its worst. The determinism argument needs no such transfer.</div>
+<p>The practical rule: a run resumed from a converged checkpoint should use roughly a tenth
+of the original rate. <code>--fresh-sched</code> resets to <code>--lr</code>, so passing it
+without lowering <code>--lr</code> restarts a converged model at full rate.</p>
+
+<h3>6.8 &nbsp; What the embeddings learned</h3>
 <p><strong>Households (<code>theta</code>).</strong> Five k-means segments, profiled against
 behaviour the model never sees:</p>
 <div class="scroll"><table>
@@ -424,14 +446,14 @@ is the strongest real pair in the data:</p>
 <p>The mechanism works. It is confined to 0.4% of the catalogue by the <code>c</code> budget,
 and capped at roughly a third of the true strength.</p>
 
-<h3>6.8 &nbsp; Choosing <code>Kz</code></h3>
+<h3>6.9 &nbsp; Choosing <code>Kz</code></h3>
 <p>Two independent lines agree. On the s25 mission-mixture truth &mdash; outside every
 entrant's family &mdash; <code>Kz=4</code> recovers 97.9% of the achievable ceiling against
 91.9% at <code>Kz=2</code>. And the real co-purchase log-lift spectrum, tested against a
 matched independence null, has 4&ndash;5 strongly separated modes above the noise floor
 (eigenvalues 100.0, 40.5, 29.5, 28.0, then a plateau at 17&ndash;25 against a floor of 13).</p>
 
-<h3>6.9 &nbsp; Claims that did not survive</h3>
+<h3>6.10 &nbsp; Claims that did not survive</h3>
 <p>Recorded because each was stated with confidence and then refuted by measurement.</p>
 <div class="scroll"><table>
 <thead><tr><th>Claim</th><th>What actually happened</th></tr></thead>
