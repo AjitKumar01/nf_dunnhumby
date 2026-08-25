@@ -1,0 +1,53 @@
+{
+  "model": "shopper",
+  "best": {
+    "per_basket": -55.15225773931596,
+    "iteration": 1000
+  },
+  "valid": {
+    "per_basket": -55.15225773931596,
+    "se": 2.822778528470096,
+    "per_line": -6.4118882748705195,
+    "n": 384
+  },
+  "test": {
+    "per_basket": -44.450073419127335,
+    "se": 2.0964375599930003,
+    "per_line": -6.677945302404106,
+    "n": 384
+  },
+  "checkpoint": "v3_bl_verified_shopper_iter1000_best.pt",
+  "config": {
+    "model": "shopper",
+    "tag": "iter1000",
+    "iters": 1000,
+    "batch": 24,
+    "lr": 0.002,
+    "lr_floor": 0.02,
+    "lr_milestones": "20000,26000",
+    "lr_gamma": 0.5,
+    "wd": 1e-05,
+    "clip": 2.0,
+    "eval_every": 200,
+    "n_val": 384,
+    "eval_chunk": 8,
+    "eval_initial": 1,
+    "seed": 0,
+    "taste_init": 0.03,
+    "interaction_init": 0.03,
+    "init_popularity": 1,
+    "eval_seed": 20260821,
+    "manifest_seed": 12345,
+    "resume": false,
+    "nmax": 120,
+    "R": 120,
+    "K": 32,
+    "Kp": 8,
+    "rank": 16,
+    "srank": 8,
+    "interaction_rank": 16,
+    "train_orders": 4,
+    "eval_orders": 512,
+    "exact_max_n": 6
+  }
+}

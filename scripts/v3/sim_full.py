@@ -15,7 +15,7 @@ torch.set_default_dtype(torch.float64)
 from data import build
 from features import Features
 from fit import Batcher
-from ragged import RaggedModel, smolyak_grid
+from ragged import RaggedModel, set_quad
 
 def log(m): print(f"[sim] {m}", flush=True)
 
@@ -30,13 +30,16 @@ def main(a):
     co=torch.zeros(J,dtype=torch.long)
     co[torch.as_tensor(D["line_item"],dtype=torch.long)]=torch.as_tensor(D["line_cat"],dtype=torch.long)
     with torch.no_grad(): m.cat_of.copy_(co)
-    m.quad=smolyak_grid(a.Kz,a.quad_q); m.double().eval()
+    _q=blob.get("quad") or {} if isinstance(blob,dict) else {}
+    _qd=set_quad(m, _q.get("quad_q",a.quad_q), _q.get("qmc_n",0),
+                 _q.get("qmc_seed",0), Kz=a.Kz, probe=_q.get("probe", 8), steps=_q.get("steps", 4), chunk=_q.get("chunk", 0))
+    m.double().eval()
     logp=torch.as_tensor(np.load("../../basket_input/log_price.npy"))
     idx=np.flatnonzero(D["trip_split"]==(1 if a.split=="valid" else 2))
     lp=D["line_ptr"]
     idx=np.array([t for t in idx if int(lp[t+1])-int(lp[t])<=a.nmax])
     if a.n_trips: idx=np.sort(np.random.default_rng(0).choice(idx,size=min(a.n_trips,len(idx)),replace=False))
-    log(f"{a.ckpt} iter {blob.get('iter','?')}; {a.quad_q=} -> {len(m.quad[0])} nodes")
+    log(f"{a.ckpt} iter {blob.get('iter','?')}; log Z: {_qd}")
     log(f"COVERAGE  {len(idx):,} trips, {len(np.unique(D['trip_store'][idx]))} stores, "
         f"{len(np.unique(D['trip_user'][idx])):,} households, "
         f"{len(np.unique(D['trip_week'][idx]))} weeks, all {J:,} products in each assortment")

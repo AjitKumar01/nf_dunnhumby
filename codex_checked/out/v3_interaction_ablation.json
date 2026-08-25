@@ -1,0 +1,243 @@
+{
+  "checkpoint": "v3_run112_blockscaled_safe_best.pt",
+  "meta": "iter 31600, cum_iter 31600",
+  "seed": 20260821,
+  "splits": {
+    "valid": {
+      "full": {
+        "joint": {
+          "n": 512,
+          "per_basket": -48.35518944184383,
+          "se_per_basket": 2.286547046658906,
+          "per_line": -6.03408652064929
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -2.899846174792172,
+          "se_per_basket": 0.06864154766407132,
+          "per_line": -0.36186235473887207
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -45.45534326705166,
+          "se_per_basket": 2.2250298176661962,
+          "per_line": -5.67222416591042
+        }
+      },
+      "phi_zero": {
+        "joint": {
+          "n": 512,
+          "per_basket": -48.39909533258435,
+          "se_per_basket": 2.2915320809026736,
+          "per_line": -6.039565393683448,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.0439058907405271,
+            "paired_se": 0.007684149980611808
+          }
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -2.901532428995327,
+          "se_per_basket": 0.06954960895800737,
+          "per_line": -0.36207277690607054,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.0016862542031548492,
+            "paired_se": 0.0014844874164375542
+          }
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -45.49756290358903,
+          "se_per_basket": 2.228970656469117,
+          "per_line": -5.6774926167773785,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.04221963653737229,
+            "paired_se": 0.006797033802080596
+          }
+        }
+      },
+      "rho_c_zero": {
+        "joint": {
+          "n": 512,
+          "per_basket": -48.57213766891492,
+          "se_per_basket": 2.2756646965566816,
+          "per_line": -6.061158782959892,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.2169482270710894,
+            "paired_se": 0.057338007916158895
+          }
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -2.9715113800228385,
+          "se_per_basket": 0.06272877951490677,
+          "per_line": -0.37080522217199446,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.07166520523066679,
+            "paired_se": 0.01638273050854124
+          }
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -45.60062628889208,
+          "se_per_basket": 2.2247600833044223,
+          "per_line": -5.690353560787898,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.14528302184042274,
+            "paired_se": 0.056467400522079714
+          }
+        }
+      },
+      "all_interactions_zero": {
+        "joint": {
+          "n": 512,
+          "per_basket": -48.60898136554586,
+          "se_per_basket": 2.2805087586665396,
+          "per_line": -6.065756387803919,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.25379192370202786,
+            "paired_se": 0.05841630567851016
+          }
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -2.963541145098116,
+          "se_per_basket": 0.0628940832306367,
+          "per_line": -0.3698106425274763,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.06369497030594447,
+            "paired_se": 0.015500943389665968
+          }
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -45.645440220447746,
+          "se_per_basket": 2.2290960083576543,
+          "per_line": -5.695945745276443,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.1900969533960835,
+            "paired_se": 0.05860208104987605
+          }
+        }
+      }
+    },
+    "test": {
+      "full": {
+        "joint": {
+          "n": 512,
+          "per_basket": -47.75997319416514,
+          "se_per_basket": 2.0159402774512305,
+          "per_line": -6.153272842328271
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -2.946775518667798,
+          "se_per_basket": 0.05521095461764535,
+          "per_line": -0.3796550240457757
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -44.81319767549735,
+          "se_per_basket": 1.9666347771563035,
+          "per_line": -5.773617818282497
+        }
+      },
+      "phi_zero": {
+        "joint": {
+          "n": 512,
+          "per_basket": -47.796876487530135,
+          "se_per_basket": 2.019539397300215,
+          "per_line": -6.158027368297793,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.03690329336498857,
+            "paired_se": 0.005319294232766247
+          }
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -2.9419599451832443,
+          "se_per_basket": 0.05578876735554512,
+          "per_line": -0.37903459786960775,
+          "full_minus_ablation": {
+            "main_minus_baseline": -0.004815573484553862,
+            "paired_se": 0.0016904520872686223
+          }
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -44.85491654234689,
+          "se_per_basket": 1.9694289876828566,
+          "per_line": -5.778992770428186,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.04171886684954235,
+            "paired_se": 0.00490836251512244
+          }
+        }
+      },
+      "rho_c_zero": {
+        "joint": {
+          "n": 512,
+          "per_basket": -48.12357022435975,
+          "se_per_basket": 2.011929404905378,
+          "per_line": -6.200117754119828,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.3635970301946056,
+            "paired_se": 0.053444313572391065
+          }
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -3.0811513273762667,
+          "se_per_basket": 0.04838700908268315,
+          "per_line": -0.3969676596921612,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.13437580870846855,
+            "paired_se": 0.01844444264251741
+          }
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -45.04241889698348,
+          "se_per_basket": 1.9738271213173437,
+          "per_line": -5.803150094427665,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.22922122148613683,
+            "paired_se": 0.05187729344618528
+          }
+        }
+      },
+      "all_interactions_zero": {
+        "joint": {
+          "n": 512,
+          "per_basket": -48.15268829437594,
+          "se_per_basket": 2.0154763483798814,
+          "per_line": -6.203869251816931,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.3927151002107917,
+            "paired_se": 0.0541068843479702
+          }
+        },
+        "size": {
+          "n": 512,
+          "per_basket": -3.066341240631809,
+          "se_per_basket": 0.04827825846717492,
+          "per_line": -0.3950595659797399,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.11956572196401088,
+            "paired_se": 0.01739267469719058
+          }
+        },
+        "composition": {
+          "n": 512,
+          "per_basket": -45.08634705374412,
+          "se_per_basket": 1.9769639721669428,
+          "per_line": -5.808809685837189,
+          "full_minus_ablation": {
+            "main_minus_baseline": 0.27314937824678087,
+            "paired_se": 0.05368593000457123
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "created_unix": 1787286795.7937129,
+  "seed": 20260821,
+  "nmax": 120,
+  "R": 23,
+  "catalogue": 5455,
+  "partition": "",
+  "affinity": "1",
+  "manifest": {
+    "valid": {
+      "n": 8,
+      "sha256": "d3960e79e5112188e3951dbaee60c120efd8fc0e2872cf7591a9c33eee36824b",
+      "first_ids": [
+        159375,
+        162394,
+        162405,
+        164024,
+        165312,
+        167828,
+        170754,
+        173272
+      ],
+      "weeks": [
+        83,
+        90
+      ],
+      "distinct_weeks": 6
+    }
+  },
+  "checkpoints": {
+    "main": {
+      "path": "v3_run112_blockscaled_safe_best.pt",
+      "sha256": "3d7cb106f5119068b2dd4eaa9ab30af648998506e009abd0bed9af7800d09357",
+      "bytes": 15227949,
+      "mtime_ns": 1787285180313780394,
+      "format": 2,
+      "iteration": 31600,
+      "training_provenance": "embedded",
+      "meta": "iter 31600, cum_iter 31600"
+    },
+    "multinomial": {
+      "path": "v3_bl_multinom.pt",
+      "sha256": "14e583a5e31a4a142bc2fa15ba742a6d4490cdf359a4e623b5e6a18b5d3bb5b8",
+      "bytes": 3073725,
+      "mtime_ns": 1786840550738296151,
+      "format": null,
+      "iteration": null,
+      "training_provenance": "NOT EMBEDDED; strict shape/hash verification only"
+    },
+    "ndpp": {
+      "path": "v3_bl_ndpp.pt",
+      "sha256": "dcafebf80fe11a4be50eb3ff1b05513eecfdf5a44e5bfda8ee7e51f2b91d1bb2",
+      "bytes": 4469685,
+      "mtime_ns": 1786846212614267349,
+      "format": null,
+      "iteration": null,
+      "training_provenance": "NOT EMBEDDED; strict shape/hash verification only"
+    },
+    "shopper": {
+      "path": "v3_bl_shopper.pt",
+      "sha256": "1d49f20319c999aa1baf6eb14038c9c379eb4340c4c159f0fed89805992a5201",
+      "bytes": 4469745,
+      "mtime_ns": 1786843965243042707,
+      "format": null,
+      "iteration": null,
+      "training_provenance": "NOT EMBEDDED; strict shape/hash verification only"
+    }
+  },
+  "support": {
+    "main": "nonempty; n<=nmax; per-category count<=R; complete assortment",
+    "multinomial": "same as main (exact restricted ESP denominator)",
+    "ndpp": "all nonempty subsets of complete assortment (conservative broader support)",
+    "shopper": "all nonempty sequences/sets of complete assortment (conservative broader support)"
+  },
+  "splits": {
+    "valid": {
+      "main": {
+        "n": 8,
+        "per_basket": -56.23161213021724,
+        "se_per_basket": 17.209723277749937,
+        "per_line": -6.3359562963625065
+      },
+      "multinomial": {
+        "n": 8,
+        "per_basket": -54.88795221714512,
+        "se_per_basket": 17.383968792076498,
+        "per_line": -6.184557996298041,
+        "gap": {
+          "main_minus_baseline": -1.3436599130721278,
+          "paired_se": 0.8610651530317368
+        }
+      },
+      "ndpp": {
+        "n": 8,
+        "per_basket": -73.25355396233076,
+        "se_per_basket": 14.65566805680053,
+        "per_line": -8.253921573220367,
+        "gap": {
+          "main_minus_baseline": 17.021941832113512,
+          "paired_se": 3.0512642472524227
+        }
+      },
+      "shopper": {
+        "n": 8,
+        "per_basket": -53.699887512928456,
+        "se_per_basket": 16.39426329872853,
+        "per_line": -6.050691550752502,
+        "gap": {
+          "main_minus_baseline": -2.5317246172887917,
+          "paired_se": 0.978106650558321
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "multinomial": {
+    "val_per_basket": -44.558642506287036,
+    "val_per_line": -7.74932913152818,
+    "n_par": 383541
+  },
+  "ndpp": {
+    "val_per_basket": -3785.6625699401025,
+    "val_per_line": -658.3760991200178,
+    "n_par": 558109
+  },
+  "shopper": {
+    "val_per_basket": -50.42655251125657,
+    "val_per_line": -8.769835219348968,
+    "val_more_orders": -50.432247919552786,
+    "orders": 2,
+    "n_par": 558102
+  }
+}

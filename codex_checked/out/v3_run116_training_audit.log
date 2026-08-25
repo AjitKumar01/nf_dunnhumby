@@ -1,0 +1,40 @@
+[dat] loaded cache /Users/ajit/Projects/nf_dunnhumby/scripts/v3/../../basket_input/v3_index_affinity.npz
+[fea] price deviation panel (5455, 712), |mean| 0.1233
+[fea] store price deviations: 244,880 cells (0.75% of the grid)
+[fea] recency: 1,358,594 purchase events over 758 sub-commodities; median gap 35.0 days
+[fea] promotion cells: 6,519,807; display rate 0.401, mailer 0.739
+[drift] train initial
+[drift] train fitted
+[drift] train fitted_reset_lam
+[drift] train fitted_reset_size
+[drift] train fitted_reset_utility
+[drift] train fitted_reset_interaction
+[drift] train fitted_reset_units
+[drift] train initial_fitted_lam
+[drift] valid initial
+[drift] valid fitted
+[drift] valid fitted_reset_lam
+[drift] valid fitted_reset_size
+[drift] valid fitted_reset_utility
+[drift] valid fitted_reset_interaction
+[drift] valid fitted_reset_units
+[drift] valid initial_fitted_lam
+[drift] TRAIN
+[drift] initial                    joint  -53.9231  size  -3.0331  composition  -50.8900
+[drift] fitted                     joint  -53.8576  size  -3.0322  composition  -50.8254
+[drift] fitted_reset_lam           joint  -53.8576  size  -3.0322  composition  -50.8254
+[drift] fitted_reset_size          joint  -54.1369  size  -3.3128  composition  -50.8241
+[drift] fitted_reset_utility       joint  -53.9012  size  -3.0390  composition  -50.8622
+[drift] fitted_reset_interaction   joint  -53.9099  size  -3.0597  composition  -50.8501
+[drift] fitted_reset_units         joint  -53.8576  size  -3.0322  composition  -50.8254
+[drift] initial_fitted_lam         joint  -53.9231  size  -3.0331  composition  -50.8900
+[drift] VALID
+[drift] initial                    joint  -54.9592  size  -3.0119  composition  -51.9473
+[drift] fitted                     joint  -54.9158  size  -2.9960  composition  -51.9198
+[drift] fitted_reset_lam           joint  -54.9158  size  -2.9960  composition  -51.9198
+[drift] fitted_reset_size          joint  -55.2010  size  -3.2824  composition  -51.9186
+[drift] fitted_reset_utility       joint  -54.9524  size  -3.0236  composition  -51.9288
+[drift] fitted_reset_interaction   joint  -54.9520  size  -3.0167  composition  -51.9353
+[drift] fitted_reset_units         joint  -54.9158  size  -2.9960  composition  -51.9198
+[drift] initial_fitted_lam         joint  -54.9592  size  -3.0119  composition  -51.9473
+[drift] wrote /Users/ajit/Projects/nf_dunnhumby/out/v3_run116_training_audit.json

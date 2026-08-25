@@ -1,0 +1,16 @@
+[dat] loaded cache /Users/ajit/Projects/nf_dunnhumby/scripts/v3/../../basket_input/v3_index_affinity.npz
+[fea] price deviation panel (5455, 712), |mean| 0.1233
+[fea] store price deviations: 244,880 cells (0.75% of the grid)
+[fea] recency: 1,358,594 purchase events over 758 sub-commodities; median gap 35.0 days
+[fea] promotion cells: 6,519,807; display rate 0.401, mailer 0.739
+[blv] shopper: 157,464 training trips (9728da264f4f); valid 01d0500942df, test f5420c2d8101
+[blv] shopper: initialized product intercept from training incidence/exposure
+/Users/ajit/Projects/nf_dunnhumby/scripts/v3/ragged.py:335: UserWarning: index_reduce() is in beta and the API may change at any time. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/TensorAdvancedIndexing.cpp:1518.)
+  sd.index_reduce_(0, self.row_pos, self.row_size, "amax", include_self=True)
+[blv] initial it      0: valid -56.455 +/- 2.867 per-line -6.5633
+/Users/ajit/Projects/nf_dunnhumby/scripts/v3/train_baseline_verified.py:209: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
+  log(f"it {iteration:6d}/{a.iters} loss {float(loss):9.3f} "
+[blv] it    200/400 loss    54.019 valid   -56.554 +/- 2.884 lr 0.002 2.1 min ETA 0.03 h
+[blv] it    400/400 loss    37.057 valid   -56.383 +/- 2.877 lr 0.002 4.4 min ETA 0.00 h
+[blv] best iteration 400: valid -56.3826, test -45.5705

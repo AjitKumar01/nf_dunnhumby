@@ -1,0 +1,45 @@
+{
+  "model": "multinomial",
+  "best": {
+    "per_basket": -64.58730292149912,
+    "iteration": 2
+  },
+  "valid": {
+    "per_basket": -64.58730292149912,
+    "se": 19.0055920869431,
+    "per_line": -7.277442582704126,
+    "n": 8
+  },
+  "test": {
+    "per_basket": -57.93090737004347,
+    "se": 20.676024356609688,
+    "per_line": -7.356305697783298,
+    "n": 8
+  },
+  "checkpoint": "v3_bl_verified_multinomial_best.pt",
+  "config": {
+    "model": "multinomial",
+    "iters": 2,
+    "batch": 2,
+    "lr": 0.01,
+    "lr_floor": 0.02,
+    "wd": 1e-05,
+    "clip": 5.0,
+    "eval_every": 1,
+    "n_val": 8,
+    "eval_chunk": 2,
+    "seed": 0,
+    "eval_seed": 20260821,
+    "resume": false,
+    "nmax": 120,
+    "R": 23,
+    "K": 32,
+    "Kp": 8,
+    "rank": 16,
+    "srank": 8,
+    "interaction_rank": 16,
+    "train_orders": 4,
+    "eval_orders": 128,
+    "exact_max_n": 6
+  }
+}

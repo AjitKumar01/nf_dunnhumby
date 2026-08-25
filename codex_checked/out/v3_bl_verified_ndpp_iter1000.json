@@ -1,0 +1,53 @@
+{
+  "model": "ndpp",
+  "best": {
+    "per_basket": -58.579871890409514,
+    "iteration": 1000
+  },
+  "valid": {
+    "per_basket": -58.579871890409514,
+    "se": 3.1460295115578347,
+    "per_line": -6.810375660283758,
+    "n": 384
+  },
+  "test": {
+    "per_basket": -46.996496139870665,
+    "se": 2.2154754046403307,
+    "per_line": -7.060506462327988,
+    "n": 384
+  },
+  "checkpoint": "v3_bl_verified_ndpp_iter1000_best.pt",
+  "config": {
+    "model": "ndpp",
+    "tag": "iter1000",
+    "iters": 1000,
+    "batch": 24,
+    "lr": 0.002,
+    "lr_floor": 0.02,
+    "lr_milestones": "20000,26000",
+    "lr_gamma": 0.5,
+    "wd": 1e-05,
+    "clip": 2.0,
+    "eval_every": 200,
+    "n_val": 384,
+    "eval_chunk": 8,
+    "eval_initial": 1,
+    "seed": 0,
+    "taste_init": 0.03,
+    "interaction_init": 0.003,
+    "init_popularity": 1,
+    "eval_seed": 20260821,
+    "manifest_seed": 12345,
+    "resume": false,
+    "nmax": 120,
+    "R": 120,
+    "K": 32,
+    "Kp": 8,
+    "rank": 16,
+    "srank": 8,
+    "interaction_rank": 16,
+    "train_orders": 4,
+    "eval_orders": 128,
+    "exact_max_n": 6
+  }
+}

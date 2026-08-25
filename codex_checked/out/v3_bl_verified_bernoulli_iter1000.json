@@ -1,0 +1,53 @@
+{
+  "model": "bernoulli",
+  "best": {
+    "per_basket": -58.687436040445675,
+    "iteration": 1000
+  },
+  "valid": {
+    "per_basket": -58.687436040445675,
+    "se": 3.2126148190133104,
+    "per_line": -6.822880847572249,
+    "n": 384
+  },
+  "test": {
+    "per_basket": -46.91297017693719,
+    "se": 2.2502339998378975,
+    "per_line": -7.047957960854414,
+    "n": 384
+  },
+  "checkpoint": "v3_bl_verified_bernoulli_iter1000_best.pt",
+  "config": {
+    "model": "bernoulli",
+    "tag": "iter1000",
+    "iters": 1000,
+    "batch": 24,
+    "lr": 0.002,
+    "lr_floor": 0.02,
+    "lr_milestones": "20000,26000",
+    "lr_gamma": 0.5,
+    "wd": 1e-05,
+    "clip": 2.0,
+    "eval_every": 200,
+    "n_val": 384,
+    "eval_chunk": 4,
+    "eval_initial": 1,
+    "seed": 0,
+    "taste_init": 0.03,
+    "interaction_init": 0.03,
+    "init_popularity": 1,
+    "eval_seed": 20260821,
+    "manifest_seed": 12345,
+    "resume": false,
+    "nmax": 120,
+    "R": 120,
+    "K": 32,
+    "Kp": 8,
+    "rank": 16,
+    "srank": 8,
+    "interaction_rank": 16,
+    "train_orders": 4,
+    "eval_orders": 128,
+    "exact_max_n": 6
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "schema": 1,
+  "created_unix": 1787319838.4577,
+  "definition": "strict nested version-4 multinomial: identical original joint law with phi=rho_c=0, not externally factored empirical P(n)",
+  "fairness": {
+    "fresh_start": true,
+    "matched_updates": 1000,
+    "matched_config": {
+      "K": 32,
+      "Kp": 8,
+      "Kz": 32,
+      "R": 120,
+      "nmax": 120,
+      "batch": 24,
+      "lr": 0.002,
+      "wd": 1e-05,
+      "seed": 0,
+      "no_rec": 1,
+      "units": 1,
+      "init_popularity": 1,
+      "init_rho0": 1,
+      "taste_init": 0.03,
+      "lam_lr_scale": 0.05,
+      "lam_centre": 1,
+      "lam_project": 1,
+      "lam_sd_max": 0.0,
+      "pool_prod": 1.45,
+      "en_w": 0.005,
+      "rkl_w": 10.0,
+      "size_kl": 1.0,
+      "beta_cal_w": 0.1,
+      "elast_w": 20.0,
+      "elast_target": -0.121,
+      "n_val": 384
+    },
+    "same_training_split_hash": "9728da264f4fa183b35ae6db693c1a9e9f53aeb1fe4c0aa2ac67ec0578250ff4",
+    "same_ordered_validation_ids": true,
+    "complete_support": "all 5,455 products; 1<=n<=120; R=120",
+    "partition": "280 affinity rows",
+    "score_used_for_claim": "joint set log likelihood per basket",
+    "units_excluded_from_set_claim": true
+  },
+  "validation_manifest": {
+    "selection": "fit.py validation order: all in-support validation IDs, permuted by numpy default_rng(12345), then va[:n_val]",
+    "permutation_seed": 12345,
+    "n": 384,
+    "sha256": "01d0500942dfa12f1aa1a22afc7580c8e5fd17335f54f00cfacd2009a9fea963",
+    "first_ids": [
+      160818,
+      166413,
+      165178,
+      170226,
+      174010,
+      170944,
+      170993,
+      167520,
+      159916,
+      173846,
+      171192,
+      168614,
+      169228,
+      160280,
+      172662,
+      167437,
+      173603,
+      172863,
+      165948,
+      163884
+    ],
+    "line_count": 3303,
+    "min_size": 1,
+    "max_size": 103
+  },
+  "checkpoints": {
+    "full": {
+      "path": "v3_run155_v4_original_stochastic_full_at1000.pt",
+      "sha256": "6956ecd995048d8596075019bb336aff3bef58edcaadff65d0d8749de69344fd",
+      "bytes": 15230823,
+      "mtime_ns": 1787318579034393599,
+      "format": 2,
+      "iteration": 1000,
+      "training_provenance": "embedded",
+      "data": {
+        "partition": "",
+        "affinity": "1",
+        "n_cat": 280,
+        "n_item": 5455,
+        "nmax": 120,
+        "R": 120,
+        "rho_pair_cap": 120
+      }
+    },
+    "multinomial": {
+      "path": "v3_run158_v4_multinomial_fair1000.pt",
+      "sha256": "f0c8a76c6717b145bb135a8fdc881d0a1b594c0b571b6ed09d9802cf13e1e214",
+      "bytes": 12430831,
+      "mtime_ns": 1787319651680720065,
+      "format": 2,
+      "iteration": 1000,
+      "training_provenance": "embedded",
+      "data": {
+        "partition": "",
+        "affinity": "1",
+        "n_cat": 280,
+        "n_item": 5455,
+        "nmax": 120,
+        "R": 120,
+        "rho_pair_cap": 120
+      }
+    }
+  },
+  "loader_meta": {
+    "full": "iter 1000, cum_iter 1000",
+    "multinomial": "iter 1000, cum_iter 1000"
+  },
+  "scores": {
+    "joint": {
+      "full": {
+        "n": 384,
+        "per_basket": -56.001702420228774,
+        "se_per_basket": 2.863148616074286,
+        "per_line": -6.510642969835861
+      },
+      "multinomial": {
+        "n": 384,
+        "per_basket": -55.64095509142525,
+        "se_per_basket": 2.8453124584495177,
+        "per_line": -6.468703225887768
+      },
+      "paired_full_minus_multinomial": {
+        "main_minus_baseline": -0.3607473288035139,
+        "paired_se": 0.0427722106056353
+      }
+    },
+    "size": {
+      "full": {
+        "n": 384,
+        "per_basket": -3.033902233388929,
+        "se_per_basket": 0.07780962695034097,
+        "per_line": -0.35271524602523424
+      },
+      "multinomial": {
+        "n": 384,
+        "per_basket": -3.0185582836917306,
+        "se_per_basket": 0.07504267619828447,
+        "per_line": -0.3509313899296472
+      },
+      "paired_full_minus_multinomial": {
+        "main_minus_baseline": -0.015343949697197636,
+        "paired_se": 0.0074870009851117705
+      }
+    },
+    "composition": {
+      "full": {
+        "n": 384,
+        "per_basket": -52.96780018683984,
+        "se_per_basket": 2.78813991162996,
+        "per_line": -6.1579277238106265
+      },
+      "multinomial": {
+        "n": 384,
+        "per_basket": -52.622396807733516,
+        "se_per_basket": 2.7735959204481353,
+        "per_line": -6.11777183595812
+      },
+      "paired_full_minus_multinomial": {
+        "main_minus_baseline": -0.34540337910631624,
+        "paired_se": 0.04041156307229611
+      }
+    },
+    "units": {
+      "full": {
+        "n": 384,
+        "per_basket": -7.072335648323391,
+        "se_per_basket": 0.5120629562348441,
+        "per_line": -0.8222152252365068
+      },
+      "multinomial": {
+        "n": 384,
+        "per_basket": -6.920346869809187,
+        "se_per_basket": 0.5115114066210694,
+        "per_line": -0.8045453218306775
+      },
+      "paired_full_minus_multinomial": {
+        "main_minus_baseline": -0.15198877851420398,
+        "paired_se": 0.017361755912035703
+      }
+    }
+  }
+}

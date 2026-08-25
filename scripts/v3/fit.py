@@ -28,7 +28,7 @@ from torch.nn.functional import softplus
 
 from data import build
 from features import Features
-from ragged import RaggedIndex, RaggedModel, smolyak_grid
+from ragged import RaggedIndex, RaggedModel, smolyak_grid, sobol_grid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "out")
@@ -268,6 +268,20 @@ def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes,
     """
     blob = dict(
         format=2,
+        # How log Z was integrated.  Carried in the checkpoint so an eval cannot score
+        # this model with a different normaliser than the one it was trained against --
+        # recommend_pi.py hardcoded smolyak_grid(4, 8) regardless of the checkpoint.
+        # The data partition is chosen by the V3_PARTITION / V3_AFFINITY environment
+        # variables and was recorded NOWHERE, so run97 (trained under V3_AFFINITY=1,
+        # 280 categories) could not be re-evaluated at all against the default build's
+        # 188 -- it failed on a rho_c shape mismatch with no hint as to why.  Record it.
+        data=dict(partition=os.environ.get("V3_PARTITION", ""),
+                  affinity=os.environ.get("V3_AFFINITY", "0"),
+                  n_cat=int(m.rho_c.shape[0]), n_item=int(m.lam.shape[0])),
+        quad=dict(Kz=m.Kz, quad_q=getattr(m, "_quad_q", 0),
+                  qmc_n=getattr(m, "_qmc_n", 0), qmc_seed=getattr(m, "_qmc_seed", 0),
+                  probe=getattr(m, "_quad_probe", 8),
+                  steps=getattr(m, "_quad_steps", 4), chunk=getattr(m, "_quad_chunk", 0)),
         model=m.state_dict(),
         opt=opt.state_dict(),
         sched=sched.state_dict() if sched is not None else None,
@@ -391,12 +405,32 @@ def main(a):
         _co[torch.as_tensor(D["line_item"], dtype=torch.long)] = \
             torch.as_tensor(D["line_cat"], dtype=torch.long)
         m.cat_of.copy_(_co)
-    if a.quad_q > 0:
+    if a.qmc_n > 0:
+        # DETERMINISTIC log Z at ANY rank, with NO product mask.
+        #
+        # Smolyak (below) costs O(Kz^q), which is what pinned Kz at 4, and a fixed grid
+        # cannot follow the integrand's mode, which is what forced the 20-product mask.
+        # Adaptive scrambled-Sobol costs qmc_n nodes at every Kz, and _log_Z_adaptive
+        # shifts it to the mode.  A FIXED seed makes it a deterministic rule -- the same
+        # nodes every step -- so it adds no gradient variance, unlike the importance
+        # sampler it replaces.  See ragged.sobol_grid for the measurements.
+        m.quad_a = sobol_grid(a.Kz, a.qmc_n, seed=a.qmc_seed)
+        m.quad_probe, m.quad_steps, m.quad_chunk = a.quad_probe, a.quad_steps, a.quad_chunk
+        m._qmc_n, m._qmc_seed, m._quad_probe = a.qmc_n, a.qmc_seed, a.quad_probe
+        m._quad_steps, m._quad_chunk = a.quad_steps, a.quad_chunk
+        log(f"  deterministic log Z: adaptive scrambled-Sobol Kz={a.Kz}, "
+            f"{a.qmc_n} nodes, seed {a.qmc_seed} (replaces {a.draws} sampled draws); "
+            f"proposal/ESS/lz-strikes machinery is now inert")
+        log(f"  verified in this kernel vs exact enumeration over all 2^J-1 subsets, "
+            f"every product carrying phi at ||phi_j||=0.96: -0.00006 nats at Kz=128, "
+            f"+0.00035 at Kz=512")
+    elif a.quad_q > 0:
         # DETERMINISTIC log Z.  f(z) was always exact (the ESP recursion is a closed
         # form); only the outer E_z was sampled, and importance sampling cannot do
         # that integral -- verified against exact enumeration, 4096 draws are wrong
         # by 8-36 nats.  A Smolyak grid does it to 0.0009 nats at Kz=2, q=6.
         m.quad = smolyak_grid(a.Kz, a.quad_q)
+        m._quad_q = a.quad_q
         log(f"  deterministic log Z: Smolyak Kz={a.Kz} q={a.quad_q}, "
             f"{len(m.quad[0])} nodes (replaces {a.draws} sampled draws); "
             f"proposal/ESS/lz-strikes machinery is now inert")
@@ -956,12 +990,31 @@ def main(a):
             # where E[n|zhat] = 2.8 against a marginal 17.7, so it never bound) and
             # --gap-project (phi is uncorrelated with the gap: +0.009, identical phi mass in
             # blown-up and healthy trips).
+            # SUPERSEDED by --phi-norm-max.  c is a worst case over directions the mass
+            # never visits: it is a max over u of a sum over ALL products, so it grows with
+            # the catalogue (measured 233.3 at 5,455 products) even though the integrand
+            # sits at ||z*|| = 0.07.  Rescaling all of phi by c_max/c therefore crushes the
+            # complementarity to nothing for a reason that does not exist.  Kept only so
+            # old commands reproduce; --phi-norm-max is the constraint that binds.
             if a.c_max != 0:
                 _cm = a.c_max if a.c_max > 0 else math.sqrt(m.Kz)
                 _c = m.phi_radius()
                 if _c > _cm:
                     with torch.no_grad():
                         m.phi.mul_(_cm / _c)
+            # The bound that REPLACES c is --phi-max, which m.project already applies per
+            # product every step -- no new knob, and two knobs for one constraint is how
+            # this codebase has been bitten before.
+            #
+            # The mode of log f(z) - ||z||^2/2 solves the mean-field equation z* = Phi'pi(z*),
+            # so ||z*|| = ||sum_j pi_j phi_j|| <= (max_j ||phi_j||) * sum_j pi_j = phi_max E[n].
+            # sum_j pi_j = E[n] is pinned near 8 by the size law whatever the catalogue size,
+            # so this bound does NOT scale with the number of products -- and spreading the
+            # same E[n] over more products shrinks ||z*|| further (measured ||z*|| = 1.91 at
+            # J=20 down to 0.07 at all 5,455).  What breaks the integral is multimodality,
+            # driven by phi_max alone: against exact enumeration with 12 products sharing one
+            # phi direction so nothing cancels, phi_max=0.96 is exact to 0.0001 nats and 1.40
+            # to 0.0031, failing only past 2.0 (+0.064).  Grocery needs 0.96.
             # Hold lam's spread below the measured cliff.
             #
             # lam sd has risen monotonically in EVERY run regardless of configuration
@@ -1266,6 +1319,23 @@ def main(a):
             # indexes a 40-trip batch into a 32-trip household tensor.
             lam_max = m.lambda_max(ix)
             lam_seen = lam_max
+            # Log the quantity the QMC normaliser's validity actually rests on.
+            #
+            # The claim that products are free is that the mode radius ||z*|| stays small
+            # however many products carry phi, because z* = Phi'pi(z*) and sum_j pi_j = E[n]
+            # is pinned by the size law.  Measured offline that held (1.91 at J=20 down to
+            # 0.07 at all 5,455), but offline is a fixed phi -- training moves phi, so the
+            # bound is asserted every eval rather than assumed.  Accuracy against exact
+            # enumeration was 0.0001 nats at ||z*|| ~ 12 and degrades past ~18, so anything
+            # under 10 is comfortable and this exists to catch a drift toward that edge.
+            if m.quad_a is not None:
+                with torch.no_grad():
+                    _zh = m._log_Z_adaptive(ix, True, False, False, True)[-1]
+                    _zn = float(_zh.norm(dim=-1).max())
+                    _pm = float(m.phi.norm(dim=1).max())
+                log(f"  QMC envelope: max||z*|| {_zn:.2f} (accurate to ~12, fails ~18), "
+                    f"max||phi_j|| {_pm:.3f}, phi-carrying products "
+                    f"{int((m.phi.norm(dim=1) > 1e-6).sum()):,}")
             # Project on the MEASURED lambda_max, not a proxy for it.
             #
             # The pi-weighted budget averages pi(1-pi) per product across the batch, but a
@@ -1532,6 +1602,11 @@ if __name__ == "__main__":
     p.add_argument("--c-max", type=float, default=0.0)
     # Smolyak level for the deterministic normaliser.  0 = keep importance sampling.
     p.add_argument("--quad-q", type=int, default=0)
+    p.add_argument("--qmc-n", type=int, default=0)
+    p.add_argument("--qmc-seed", type=int, default=0)
+    p.add_argument("--quad-probe", type=int, default=8)
+    p.add_argument("--quad-steps", type=int, default=4)
+    p.add_argument("--quad-chunk", type=int, default=0)
     p.add_argument("--lam-centre", type=int, default=0)
     p.add_argument("--rkl-eps", type=float, default=1e-4)
     p.add_argument("--var-target", type=float, default=-1.0)

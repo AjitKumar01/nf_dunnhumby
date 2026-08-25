@@ -1,0 +1,219 @@
+[dat] loaded cache /Users/ajit/Projects/nf_dunnhumby/scripts/v3/../../basket_input/v3_index_affinity.npz
+[fea] price deviation panel (5455, 712), |mean| 0.1233
+[fea] store price deviations: 244,880 cells (0.75% of the grid)
+[fea] recency: 1,358,594 purchase events over 758 sub-commodities; median gap 35.0 days
+[fea] promotion cells: 6,519,807; display rate 0.401, mailer 0.739
+[fit] support (n_max=120, R=23): dropping 3 of 157,464 training (0.00%) and 0 of 16,948 validation (0.00%) trips that lie outside it
+[fit] 157,461 training trips, 16,948 validation
+[fit] config: K=32  Kp=8  Kz=32  R=23  adapt_draws=1  aniso=2.0  antithetic=0  batch=24  beta_cal_w=0.1  beta_target=../../basket_input/v3_beta_target.npz  budget_f=1.0  c_max=0.0  cd=0  cd_draws=0  clip=2.0  cosine=0  ctx_shrink=1.0  cum_offset=0  draws=16  elast_target=-0.121  elast_w=20.0  en_w=0.005  ess_floor=0.3  ess_floor_min=0.15  eval_every=200  freeze_rho0=0  freeze_rho_c=0  fresh_sched=1  gap_project=0.0  init_rho0=1  iters=50000  label=run108_lr2_to20k  lam_centre=1  lam_project=1  lam_q=0.9  lam_sd_max=0.45  lam_target=0.85  lr=0.002  lr_floor=0.02  lr_gamma=0.5  lr_milestones=8800,12800  lz_gap=0.05  lz_strikes=2  min_keep=0.5  mix_lam=1.0  mix_scales_hi=2.0  mix_scales_lo=1.0  mode_steps=1  n_rec=192  n_val=384  neg_per_trip=64  nmax=120  no_rec=1  phi_centre=1  phi_deg=  phi_deg_cap=2.5  phi_init=0.03  phi_l1=0.0  phi_mask=  phi_max=0.96  phi_op_max=2.0  phi_topk=0.0  phi_whiten=0.5  pool_beta=0.0  pool_ctx=0.0  pool_prod=1.45  probe=25  probe_only=False  proj_ema=1  pseudo=0  qmc_en_max=2.5  qmc_n=32  qmc_reps=4  qmc_seed=0  qmc_step_se=0.01  quad_chunk=32  quad_probe=-1  quad_q=0  quad_steps=2  resume=../../out/v3_run107_accel_at11200_best.pt  rho0_curv=0.0  rho_c_floor=-0.92  rkl_eps=0.0001  rkl_w=10.0  seed=0  size_kl=1.0  units=1  var_damp=0.15  var_project=0  var_target=-1.0  var_w=0.0  wd=1e-05  xi_shrink=0.0
+[fit] parameters: 645,954  (K=32, Kz=32, Kp=8, nmax=120, R=23)
+[fit] empirical size law: mean 7.80  var 82.7
+[fit]   log Z: adaptive scrambled-Sobol, Kz=32, 32 nodes in 4 scrambles, seed 0, identity frame (no curvature probes), 2 mode steps, node chunk 32 (replaces 16 sampled draws)
+[fit]   verified in this kernel vs exact enumeration over all 2^J-1 subsets, every product carrying phi at ||phi_j||=0.96: -0.00006 nats at Kz=128, +0.00035 at Kz=512
+[fit]   --no-rec: psi zeroed and frozen (recency removed from b)
+/Users/ajit/Projects/nf_dunnhumby/scripts/v3/ragged.py:326: UserWarning: index_reduce() is in beta and the API may change at any time. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/TensorAdvancedIndexing.cpp:1518.)
+  sd.index_reduce_(0, self.row_pos, self.row_size, "amax", include_self=True)
+[fit] rho_0 initialised at the empirical size law (mean 7.82 lines)
+[fit] resumed from v3_run107_accel_at11200_best.pt at iteration 11200 -- optimiser, schedule and RNG restored
+[fit]   --fresh-sched: lr reset to 0.002, MultiStep milestones [8800, 12800], gamma 0.5; optimiser moments and RNG still carried
+[fit]   continuing from iteration 11200: lr 0.002000 (a fresh schedule would start at 0.002000), Adam state for 19 tensors
+[fit] 
+[fit] timing probe: 25 iterations at batch 24, 16 draws
+[fit]   best-so-far carried over: set/basket -53.5764 at iteration 11200
+[fit]   beta calibration: 1,068 products with a measured price response, weight 0.1
+[fit]   25 iterations in 54.1s = 2.166s/iteration
+[fit]   slots per batch 127,664, rows 5,419, Cpad 259
+[fit]   implied wall clock: 30.08 h for 50,000 iterations
+[fit]   loss 58.101   ESS 0.997   |phi| 0.100   skipped 0   ESS min 0.749   RQMC logZ SE 0.0024
+[fit]   QMC envelope: max||z*|| 0.14 (accurate to ~12, fails ~18), max||phi_j|| 0.337, phi-carrying products 5,455
+/Users/ajit/Projects/nf_dunnhumby/scripts/v3/fit.py:1460: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:837.)
+  f"(max {float(m.phi.norm(dim=1).max()):.2f} "
+[fit]   it 11400 ep 1.738 cum 1.738  train   58.509  set/bskt  -53.539  units/bskt  -6.357  total  -59.896  ESS 0.998 (min 0.090)  RQMCse 0.0020  |phi| 0.098 (max 0.34 zero 0% erank 32)  lam_max 0.017  E[n] 7.5(med 6.4)/8.6 [7.5@8x] var 79/89 (w67+s12)  MRR 0.0483(med 595)  lam sd 0.426(season 0.162 db 6.3e-18)  elast -0.107/-0.121  skip 2  qbad 2  drop 1  redo 0  bang 0  7.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0036 nats; independent N-vs-2N |gap| 0.0021; guard 0.0036 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.7 vs analytic 7.4 (tol 3.4)
+[fit]   QMC envelope: max||z*|| 0.10 (accurate to ~12, fails ~18), max||phi_j|| 0.364, phi-carrying products 5,455
+[fit]   it 11600 ep 1.768 cum 1.768  train   57.406  set/bskt  -53.427  units/bskt  -6.335  total  -59.762  ESS 0.998 (min 0.194)  RQMCse 0.0016  |phi| 0.099 (max 0.36 zero 0% erank 32)  lam_max 0.012  E[n] 7.1(med 6.0)/8.6 [7.1@8x] var 105/89 (w69+s37)  MRR 0.0465(med 592)  lam sd 0.432(season 0.164 db 2.1e-18)  elast -0.105/-0.121  skip 3  qbad 3  drop 1  redo 0  bang 0  16.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0033 nats; independent N-vs-2N |gap| 0.0008; guard 0.0033 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.5 vs analytic 6.5 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.15 (accurate to ~12, fails ~18), max||phi_j|| 0.378, phi-carrying products 5,455
+[fit]   it 11800 ep 1.799 cum 1.799  train   57.470  set/bskt  -53.322  units/bskt  -6.309  total  -59.631  ESS 0.998 (min 0.626)  RQMCse 0.0017  |phi| 0.099 (max 0.38 zero 0% erank 32)  lam_max 0.046  E[n] 6.5(med 5.6)/8.6 [6.5@8x] var 59/89 (w51+s7)  MRR 0.0534(med 577)  lam sd 0.438(season 0.165 db 9.8e-18)  elast -0.105/-0.121  skip 3  qbad 3  drop 1  redo 0  bang 0  23.5 min
+[fit]   normaliser check: RQMC 2*SE 0.0040 nats; independent N-vs-2N |gap| 0.0035; guard 0.0040 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.3 vs analytic 6.4 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.15 (accurate to ~12, fails ~18), max||phi_j|| 0.280, phi-carrying products 5,455
+[fit]   it 12000 ep 1.829 cum 1.829  train   56.816  set/bskt  -53.177  units/bskt  -6.285  total  -59.461  ESS 0.999 (min 0.812)  RQMCse 0.0015  |phi| 0.100 (max 0.28 zero 0% erank 32)  lam_max 0.019  E[n] 7.5(med 6.6)/8.6 [7.5@8x] var 79/89 (w66+s12)  MRR 0.0522(med 587)  lam sd 0.442(season 0.164 db 6.3e-18)  elast -0.102/-0.121  skip 3  qbad 3  drop 1  redo 0  bang 0  30.6 min
+[fit]   normaliser check: RQMC 2*SE 0.0029 nats; independent N-vs-2N |gap| 0.0027; guard 0.0029 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.3 vs analytic 7.9 (tol 3.6)
+[fit]   QMC envelope: max||z*|| 0.19 (accurate to ~12, fails ~18), max||phi_j|| 0.335, phi-carrying products 5,455
+[fit]   it 12200 ep 1.860 cum 1.860  train   60.307  set/bskt  -53.139  units/bskt  -6.265  total  -59.404  ESS 0.998 (min 0.188)  RQMCse 0.0016  |phi| 0.100 (max 0.33 zero 0% erank 32)  lam_max 0.022  E[n] 6.4(med 5.5)/8.6 [6.4@8x] var 61/89 (w51+s10)  MRR 0.0472(med 614)  lam sd 0.446(season 0.166 db 1.2e-17)  elast -0.103/-0.121  skip 4  qbad 4  drop 1  redo 0  bang 0  38.2 min
+[fit]   normaliser check: RQMC 2*SE 0.0060 nats; independent N-vs-2N |gap| 0.0016; guard 0.0060 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=FAIL  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.7 vs analytic 7.3 (tol 3.5)
+[fit]   QMC envelope: max||z*|| 0.17 (accurate to ~12, fails ~18), max||phi_j|| 0.286, phi-carrying products 5,455
+[fit]   it 12400 ep 1.890 cum 1.890  train   56.673  set/bskt  -53.000  units/bskt  -6.248  total  -59.248  ESS 0.998 (min 0.320)  RQMCse 0.0017  |phi| 0.100 (max 0.29 zero 0% erank 32)  lam_max 0.046  E[n] 7.0(med 5.9)/8.6 [7.0@8x] var 68/89 (w57+s12)  MRR 0.0539(med 570)  lam sd 0.450(season 0.170 db 4.7e-18)  elast -0.103/-0.121  skip 5  qbad 5  drop 1  redo 0  bang 0  46.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0029 nats; independent N-vs-2N |gap| 0.0020; guard 0.0029 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.2 vs analytic 7.7 (tol 3.4)
+[fit]   QMC envelope: max||z*|| 0.19 (accurate to ~12, fails ~18), max||phi_j|| 0.315, phi-carrying products 5,455
+[fit]   it 12600 ep 1.920 cum 1.920  train   56.805  set/bskt  -52.948  units/bskt  -6.230  total  -59.178  ESS 0.998 (min 0.391)  RQMCse 0.0016  |phi| 0.100 (max 0.32 zero 0% erank 32)  lam_max 0.027  E[n] 7.3(med 6.4)/8.6 [7.3@8x] var 78/89 (w62+s16)  MRR 0.0617(med 588)  lam sd 0.450(season 0.170 db 5.2e-18)  elast -0.102/-0.121  skip 6  qbad 6  drop 1  redo 0  bang 0  53.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0050 nats; independent N-vs-2N |gap| 0.0019; guard 0.0050 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 4.7 vs analytic 6.8 (tol 3.1)
+[fit]   QMC envelope: max||z*|| 0.14 (accurate to ~12, fails ~18), max||phi_j|| 0.317, phi-carrying products 5,455
+[fit]   it 12800 ep 1.951 cum 1.951  train   55.906  set/bskt  -52.825  units/bskt  -6.209  total  -59.034  ESS 0.997 (min 0.220)  RQMCse 0.0019  |phi| 0.100 (max 0.32 zero 0% erank 32)  lam_max 0.018  E[n] 7.8(med 6.7)/8.6 [7.8@8x] var 92/89 (w73+s20)  MRR 0.0589(med 611)  lam sd 0.450(season 0.172 db 1.3e-17)  elast -0.104/-0.121  skip 10  qbad 10  drop 1  redo 0  bang 0  60.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0037 nats; independent N-vs-2N |gap| 0.0013; guard 0.0037 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.8 vs analytic 6.8 (tol 3.1)
+[fit]   QMC envelope: max||z*|| 0.15 (accurate to ~12, fails ~18), max||phi_j|| 0.366, phi-carrying products 5,455
+[fit]   it 13000 ep 1.981 cum 1.981  train   55.449  set/bskt  -52.832  units/bskt  -6.190  total  -59.022  ESS 0.998 (min 0.450)  RQMCse 0.0016  |phi| 0.099 (max 0.37 zero 0% erank 32)  lam_max 0.017  E[n] 7.2(med 6.4)/8.6 [7.2@8x] var 70/89 (w59+s11)  MRR 0.0581(med 570)  lam sd 0.450(season 0.172 db 1.2e-17)  elast -0.103/-0.121  skip 10  qbad 10  drop 1  redo 0  bang 0  67.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0036 nats; independent N-vs-2N |gap| 0.0008; guard 0.0036 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.0 vs analytic 6.8 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.21 (accurate to ~12, fails ~18), max||phi_j|| 0.325, phi-carrying products 5,455
+[fit]   it 13200 ep 2.012 cum 2.012  train   56.416  set/bskt  -52.735  units/bskt  -6.172  total  -58.907  ESS 0.998 (min 0.443)  RQMCse 0.0018  |phi| 0.100 (max 0.33 zero 0% erank 32)  lam_max 0.050  E[n] 7.7(med 7.2)/8.6 [7.7@8x] var 80/89 (w66+s15)  MRR 0.0560(med 535)  lam sd 0.450(season 0.174 db 1.1e-17)  elast -0.100/-0.121  skip 10  qbad 10  drop 1  redo 0  bang 0  75.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0038 nats; independent N-vs-2N |gap| 0.0045; guard 0.0045 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.5 vs analytic 6.9 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.316, phi-carrying products 5,455
+[fit]   it 13400 ep 2.042 cum 2.042  train   57.612  set/bskt  -52.700  units/bskt  -6.154  total  -58.854  ESS 0.998 (min 0.541)  RQMCse 0.0016  |phi| 0.100 (max 0.32 zero 0% erank 32)  lam_max 0.029  E[n] 7.7(med 7.1)/8.6 [7.7@8x] var 82/89 (w66+s16)  MRR 0.0548(med 534)  lam sd 0.450(season 0.173 db 7.1e-18)  elast -0.101/-0.121  skip 10  qbad 10  drop 1  redo 0  bang 0  82.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0027 nats; independent N-vs-2N |gap| 0.0012; guard 0.0027 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.7 vs analytic 7.3 (tol 3.2)
+[fit]   QMC envelope: max||z*|| 0.11 (accurate to ~12, fails ~18), max||phi_j|| 0.330, phi-carrying products 5,455
+[fit]   it 13600 ep 2.073 cum 2.073  train   57.689  set/bskt  -52.652  units/bskt  -6.139  total  -58.792  ESS 0.997 (min 0.251)  RQMCse 0.0020  |phi| 0.100 (max 0.33 zero 0% erank 32)  lam_max 0.015  E[n] 8.1(med 6.7)/8.6 [8.1@8x] var 108/89 (w76+s32)  MRR 0.0592(med 666)  lam sd 0.450(season 0.178 db 7.5e-18)  elast -0.101/-0.121  skip 12  qbad 12  drop 1  redo 0  bang 0  89.2 min
+[fit]   normaliser check: RQMC 2*SE 0.0017 nats; independent N-vs-2N |gap| 0.0005; guard 0.0017 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 10.7 vs analytic 8.9 (tol 4.1)
+[fit]   QMC envelope: max||z*|| 0.15 (accurate to ~12, fails ~18), max||phi_j|| 0.348, phi-carrying products 5,455
+[fit]   it 13800 ep 2.103 cum 2.103  train   56.744  set/bskt  -52.585  units/bskt  -6.122  total  -58.707  ESS 0.998 (min 0.565)  RQMCse 0.0015  |phi| 0.100 (max 0.35 zero 0% erank 32)  lam_max 0.019  E[n] 7.7(med 6.8)/8.6 [7.7@8x] var 80/89 (w64+s16)  MRR 0.0575(med 593)  lam sd 0.450(season 0.178 db 6.5e-18)  elast -0.101/-0.121  skip 12  qbad 12  drop 1  redo 0  bang 0  96.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0019 nats; independent N-vs-2N |gap| 0.0006; guard 0.0019 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.1 vs analytic 7.2 (tol 3.1)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.360, phi-carrying products 5,455
+[fit]   it 14000 ep 2.134 cum 2.134  train   55.882  set/bskt  -52.553  units/bskt  -6.108  total  -58.660  ESS 0.998 (min 0.179)  RQMCse 0.0017  |phi| 0.100 (max 0.36 zero 0% erank 32)  lam_max 0.017  E[n] 7.7(med 6.4)/8.6 [7.7@8x] var 85/89 (w67+s17)  MRR 0.0560(med 565)  lam sd 0.450(season 0.178 db 2.2e-17)  elast -0.101/-0.121  skip 13  qbad 13  drop 1  redo 0  bang 0  103.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0029 nats; independent N-vs-2N |gap| 0.0024; guard 0.0029 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.2 vs analytic 7.0 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.363, phi-carrying products 5,455
+[fit]   it 14200 ep 2.164 cum 2.164  train   57.249  set/bskt  -52.511  units/bskt  -6.097  total  -58.608  ESS 0.998 (min 0.405)  RQMCse 0.0016  |phi| 0.100 (max 0.36 zero 0% erank 32)  lam_max 0.020  E[n] 7.2(med 6.5)/8.6 [7.2@8x] var 68/89 (w57+s11)  MRR 0.0605(med 512)  lam sd 0.450(season 0.178 db 8.6e-18)  elast -0.100/-0.121  skip 13  qbad 13  drop 1  redo 0  bang 0  110.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0030 nats; independent N-vs-2N |gap| 0.0009; guard 0.0030 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 4.5 vs analytic 6.4 (tol 2.7)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.351, phi-carrying products 5,455
+[fit]   it 14400 ep 2.195 cum 2.195  train   56.963  set/bskt  -52.423  units/bskt  -6.083  total  -58.507  ESS 0.997 (min 0.194)  RQMCse 0.0020  |phi| 0.101 (max 0.35 zero 0% erank 32)  lam_max 0.013  E[n] 7.5(med 6.2)/8.6 [7.5@8x] var 80/89 (w61+s19)  MRR 0.0558(med 595)  lam sd 0.450(season 0.181 db 5.4e-18)  elast -0.100/-0.121  skip 16  qbad 16  drop 1  redo 0  bang 0  116.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0040 nats; independent N-vs-2N |gap| 0.0017; guard 0.0040 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.4 vs analytic 7.1 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.07 (accurate to ~12, fails ~18), max||phi_j|| 0.297, phi-carrying products 5,455
+[fit]   it 14600 ep 2.225 cum 2.225  train   57.178  set/bskt  -52.395  units/bskt  -6.073  total  -58.467  ESS 0.998 (min 0.210)  RQMCse 0.0019  |phi| 0.100 (max 0.30 zero 0% erank 32)  lam_max 0.010  E[n] 8.0(med 6.4)/8.6 [8.0@8x] var 98/89 (w69+s29)  MRR 0.0568(med 540)  lam sd 0.450(season 0.181 db 8.1e-18)  elast -0.100/-0.121  skip 17  qbad 17  drop 1  redo 0  bang 0  124.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0023 nats; independent N-vs-2N |gap| 0.0009; guard 0.0023 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.6 vs analytic 8.0 (tol 3.3)
+[fit]   QMC envelope: max||z*|| 0.12 (accurate to ~12, fails ~18), max||phi_j|| 0.295, phi-carrying products 5,455
+[fit]   it 14800 ep 2.256 cum 2.256  train   55.746  set/bskt  -52.370  units/bskt  -6.060  total  -58.430  ESS 0.999 (min 0.618)  RQMCse 0.0015  |phi| 0.100 (max 0.29 zero 0% erank 32)  lam_max 0.014  E[n] 7.2(med 6.0)/8.6 [7.2@8x] var 73/89 (w58+s15)  MRR 0.0638(med 618)  lam sd 0.450(season 0.182 db 4.8e-18)  elast -0.099/-0.121  skip 17  qbad 17  drop 1  redo 0  bang 0  130.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0022 nats; independent N-vs-2N |gap| 0.0012; guard 0.0022 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 4.6 vs analytic 5.9 (tol 2.6)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.327, phi-carrying products 5,455
+[fit]   it 15000 ep 2.286 cum 2.286  train   56.855  set/bskt  -52.326  units/bskt  -6.049  total  -58.375  ESS 0.998 (min 0.164)  RQMCse 0.0018  |phi| 0.101 (max 0.33 zero 0% erank 32)  lam_max 0.028  E[n] 7.2(med 6.1)/8.6 [7.2@8x] var 72/89 (w58+s14)  MRR 0.0689(med 668)  lam sd 0.450(season 0.182 db 1.3e-17)  elast -0.100/-0.121  skip 20  qbad 20  drop 1  redo 0  bang 0  138.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0022 nats; independent N-vs-2N |gap| 0.0009; guard 0.0022 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.0 vs analytic 6.1 (tol 2.7)
+[fit]   QMC envelope: max||z*|| 0.16 (accurate to ~12, fails ~18), max||phi_j|| 0.287, phi-carrying products 5,455
+[fit]   it 15200 ep 2.317 cum 2.317  train   54.809  set/bskt  -52.244  units/bskt  -6.037  total  -58.281  ESS 0.998 (min 0.238)  RQMCse 0.0017  |phi| 0.101 (max 0.29 zero 0% erank 32)  lam_max 0.046  E[n] 7.2(med 6.1)/8.6 [7.2@8x] var 73/89 (w59+s14)  MRR 0.0681(med 551)  lam sd 0.450(season 0.182 db 1.0e-17)  elast -0.099/-0.121  skip 21  qbad 21  drop 1  redo 0  bang 0  145.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0020 nats; independent N-vs-2N |gap| 0.0014; guard 0.0020 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.5 vs analytic 6.5 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.14 (accurate to ~12, fails ~18), max||phi_j|| 0.310, phi-carrying products 5,455
+[fit]   it 15400 ep 2.347 cum 2.347  train   56.058  set/bskt  -52.199  units/bskt  -6.027  total  -58.226  ESS 0.996 (min 0.054)  RQMCse 0.0023  |phi| 0.101 (max 0.31 zero 0% erank 32)  lam_max 0.039  E[n] 8.0(med 6.2)/8.6 [8.0@8x] var 150/89 (w69+s81)  MRR 0.0666(med 583)  lam sd 0.450(season 0.184 db 2.6e-17)  elast -0.099/-0.121  skip 25  qbad 25  drop 4  redo 0  bang 0  152.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0022 nats; independent N-vs-2N |gap| 0.0006; guard 0.0022 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.6 vs analytic 6.0 (tol 2.6)
+[fit]   QMC envelope: max||z*|| 0.09 (accurate to ~12, fails ~18), max||phi_j|| 0.294, phi-carrying products 5,455
+[fit]   it 15600 ep 2.378 cum 2.378  train   54.953  set/bskt  -52.103  units/bskt  -6.019  total  -58.122  ESS 0.998 (min 0.469)  RQMCse 0.0017  |phi| 0.100 (max 0.29 zero 0% erank 32)  lam_max 0.101  E[n] 7.2(med 6.3)/8.6 [7.2@8x] var 75/89 (w60+s15)  MRR 0.0640(med 578)  lam sd 0.450(season 0.182 db 1.1e-17)  elast -0.099/-0.121  skip 25  qbad 25  drop 4  redo 0  bang 0  166.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0021 nats; independent N-vs-2N |gap| 0.0010; guard 0.0021 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.2 vs analytic 6.3 (tol 2.8)
+[fit]   QMC envelope: max||z*|| 0.21 (accurate to ~12, fails ~18), max||phi_j|| 0.318, phi-carrying products 5,455
+[fit]   it 15800 ep 2.408 cum 2.408  train   55.941  set/bskt  -52.097  units/bskt  -6.013  total  -58.110  ESS 0.998 (min 0.611)  RQMCse 0.0016  |phi| 0.100 (max 0.32 zero 0% erank 32)  lam_max 0.028  E[n] 6.9(med 6.1)/8.6 [6.9@8x] var 63/89 (w54+s9)  MRR 0.0635(med 598)  lam sd 0.450(season 0.184 db 1.2e-17)  elast -0.099/-0.121  skip 25  qbad 25  drop 4  redo 0  bang 0  189.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0051 nats; independent N-vs-2N |gap| 0.0028; guard 0.0051 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=FAIL  elasticity=PASS  data-kept=PASS   sampled 3.3 vs analytic 6.6 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.19 (accurate to ~12, fails ~18), max||phi_j|| 0.311, phi-carrying products 5,455
+[fit]   it 16000 ep 2.439 cum 2.439  train   56.619  set/bskt  -52.006  units/bskt  -6.001  total  -58.007  ESS 0.998 (min 0.302)  RQMCse 0.0018  |phi| 0.100 (max 0.31 zero 0% erank 32)  lam_max 0.038  E[n] 7.1(med 6.5)/8.6 [7.1@8x] var 69/89 (w57+s12)  MRR 0.0633(med 578)  lam sd 0.450(season 0.187 db 7.5e-18)  elast -0.098/-0.121  skip 25  qbad 25  drop 4  redo 0  bang 0  197.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0027 nats; independent N-vs-2N |gap| 0.0017; guard 0.0027 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.3 vs analytic 6.5 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.12 (accurate to ~12, fails ~18), max||phi_j|| 0.372, phi-carrying products 5,455
+[fit]   it 16200 ep 2.469 cum 2.469  train   55.900  set/bskt  -51.976  units/bskt  -5.995  total  -57.972  ESS 0.997 (min 0.137)  RQMCse 0.0021  |phi| 0.100 (max 0.37 zero 0% erank 32)  lam_max 0.077  E[n] 7.9(med 6.2)/8.6 [7.9@8x] var 158/89 (w56+s102)  MRR 0.0682(med 558)  lam sd 0.450(season 0.185 db 1.4e-17)  elast -0.099/-0.121  skip 28  qbad 28  drop 5  redo 0  bang 0  204.2 min
+[fit]   normaliser check: RQMC 2*SE 0.0020 nats; independent N-vs-2N |gap| 0.0014; guard 0.0020 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.1 vs analytic 6.6 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.12 (accurate to ~12, fails ~18), max||phi_j|| 0.350, phi-carrying products 5,455
+[fit]   it 16400 ep 2.500 cum 2.500  train   55.116  set/bskt  -51.896  units/bskt  -5.987  total  -57.883  ESS 0.997 (min 0.130)  RQMCse 0.0023  |phi| 0.100 (max 0.35 zero 0% erank 32)  lam_max 0.021  E[n] 7.8(med 6.4)/8.6 [7.8@8x] var 93/89 (w69+s24)  MRR 0.0639(med 512)  lam sd 0.450(season 0.183 db 1.2e-17)  elast -0.099/-0.121  skip 35  qbad 35  drop 6  redo 0  bang 0  211.3 min
+[fit]   normaliser check: RQMC 2*SE 0.0060 nats; independent N-vs-2N |gap| 0.0028; guard 0.0060 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.4 vs analytic 7.5 (tol 3.2)
+[fit]   QMC envelope: max||z*|| 0.17 (accurate to ~12, fails ~18), max||phi_j|| 0.336, phi-carrying products 5,455
+[fit]   it 16600 ep 2.530 cum 2.530  train   55.235  set/bskt  -51.881  units/bskt  -5.977  total  -57.858  ESS 0.998 (min 0.237)  RQMCse 0.0018  |phi| 0.100 (max 0.34 zero 0% erank 32)  lam_max 0.021  E[n] 8.5(med 6.8)/8.6 [8.5@8x] var 126/89 (w77+s49)  MRR 0.0653(med 535)  lam sd 0.450(season 0.181 db 7.3e-18)  elast -0.099/-0.121  skip 38  qbad 38  drop 6  redo 0  bang 0  218.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0051 nats; independent N-vs-2N |gap| 0.0015; guard 0.0051 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.5 vs analytic 10.4 (tol 4.3)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.331, phi-carrying products 5,455
+[fit]   it 16800 ep 2.561 cum 2.561  train   55.303  set/bskt  -51.897  units/bskt  -5.968  total  -57.865  ESS 0.997 (min 0.280)  RQMCse 0.0019  |phi| 0.101 (max 0.33 zero 0% erank 32)  lam_max 0.036  E[n] 7.0(med 6.3)/8.6 [7.0@8x] var 63/89 (w53+s9)  MRR 0.0696(med 504)  lam sd 0.450(season 0.181 db 1.0e-17)  elast -0.097/-0.121  skip 41  qbad 41  drop 6  redo 0  bang 0  226.3 min
+[fit]   normaliser check: RQMC 2*SE 0.0016 nats; independent N-vs-2N |gap| 0.0011; guard 0.0016 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.1 vs analytic 7.5 (tol 3.2)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.331, phi-carrying products 5,455
+[fit]   it 17000 ep 2.591 cum 2.591  train   55.982  set/bskt  -51.910  units/bskt  -5.957  total  -57.867  ESS 0.997 (min 0.358)  RQMCse 0.0019  |phi| 0.101 (max 0.33 zero 0% erank 32)  lam_max 0.017  E[n] 7.2(med 6.6)/8.6 [7.2@8x] var 68/89 (w59+s9)  MRR 0.0693(med 590)  lam sd 0.450(season 0.182 db 1.3e-17)  elast -0.098/-0.121  skip 43  qbad 43  drop 6  redo 0  bang 0  233.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0025 nats; independent N-vs-2N |gap| 0.0014; guard 0.0025 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.9 vs analytic 6.9 (tol 3.1)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.329, phi-carrying products 5,455
+[fit]   it 17200 ep 2.622 cum 2.622  train   55.424  set/bskt  -51.859  units/bskt  -5.954  total  -57.813  ESS 0.996 (min 0.056)  RQMCse 0.0024  |phi| 0.101 (max 0.33 zero 0% erank 32)  lam_max 0.014  E[n] 6.9(med 6.4)/8.6 [6.9@8x] var 62/89 (w54+s9)  MRR 0.0642(med 541)  lam sd 0.450(season 0.183 db 3.5e-18)  elast -0.100/-0.121  skip 48  qbad 48  drop 8  redo 0  bang 0  240.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0028 nats; independent N-vs-2N |gap| 0.0014; guard 0.0028 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.0 vs analytic 6.9 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.20 (accurate to ~12, fails ~18), max||phi_j|| 0.306, phi-carrying products 5,455
+[fit]   it 17400 ep 2.652 cum 2.652  train   55.699  set/bskt  -51.725  units/bskt  -5.948  total  -57.673  ESS 0.997 (min 0.065)  RQMCse 0.0022  |phi| 0.100 (max 0.31 zero 0% erank 32)  lam_max 0.026  E[n] 7.3(med 6.3)/8.6 [7.3@8x] var 78/89 (w59+s19)  MRR 0.0662(med 532)  lam sd 0.450(season 0.183 db 1.7e-17)  elast -0.098/-0.121  skip 52  qbad 52  drop 10  redo 0  bang 0  247.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0033 nats; independent N-vs-2N |gap| 0.0020; guard 0.0033 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 4.8 vs analytic 7.6 (tol 3.3)
+[fit]   QMC envelope: max||z*|| 0.14 (accurate to ~12, fails ~18), max||phi_j|| 0.296, phi-carrying products 5,455
+[fit]   it 17600 ep 2.683 cum 2.683  train   55.803  set/bskt  -51.714  units/bskt  -5.940  total  -57.654  ESS 0.998 (min 0.601)  RQMCse 0.0018  |phi| 0.101 (max 0.30 zero 0% erank 32)  lam_max 0.013  E[n] 6.8(med 5.9)/8.6 [6.8@8x] var 65/89 (w54+s11)  MRR 0.0713(med 600)  lam sd 0.450(season 0.184 db 8.1e-18)  elast -0.098/-0.121  skip 52  qbad 52  drop 10  redo 0  bang 0  255.0 min
+[fit]   normaliser check: RQMC 2*SE 0.0029 nats; independent N-vs-2N |gap| 0.0009; guard 0.0029 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.0 vs analytic 6.1 (tol 2.7)
+[fit]   QMC envelope: max||z*|| 0.17 (accurate to ~12, fails ~18), max||phi_j|| 0.305, phi-carrying products 5,455
+[fit]   it 17800 ep 2.713 cum 2.713  train   56.082  set/bskt  -51.660  units/bskt  -5.933  total  -57.593  ESS 0.998 (min 0.359)  RQMCse 0.0020  |phi| 0.101 (max 0.30 zero 0% erank 32)  lam_max 0.034  E[n] 7.5(med 6.5)/8.6 [7.5@8x] var 79/89 (w65+s14)  MRR 0.0737(med 555)  lam sd 0.450(season 0.187 db 3.7e-18)  elast -0.097/-0.121  skip 54  qbad 54  drop 10  redo 0  bang 0  262.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0043 nats; independent N-vs-2N |gap| 0.0028; guard 0.0043 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.2 vs analytic 6.5 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.81 (accurate to ~12, fails ~18), max||phi_j|| 0.412, phi-carrying products 5,455
+[fit]   it 18000 ep 2.744 cum 2.744  train   56.264  set/bskt  -51.628  units/bskt  -5.924  total  -57.552  ESS 0.998 (min 0.540)  RQMCse 0.0019  |phi| 0.101 (max 0.41 zero 0% erank 32)  lam_max 0.100  E[n] 7.5(med 6.6)/8.6 [7.5@8x] var 83/89 (w66+s17)  MRR 0.0711(med 555)  lam sd 0.450(season 0.189 db 1.1e-17)  elast -0.097/-0.121  skip 54  qbad 54  drop 10  redo 0  bang 0  269.6 min
+[fit]   normaliser check: RQMC 2*SE 0.0067 nats; independent N-vs-2N |gap| 0.0030; guard 0.0067 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.2 vs analytic 6.4 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.20 (accurate to ~12, fails ~18), max||phi_j|| 0.350, phi-carrying products 5,455
+[fit]   it 18200 ep 2.774 cum 2.774  train   55.553  set/bskt  -51.620  units/bskt  -5.925  total  -57.545  ESS 0.998 (min 0.457)  RQMCse 0.0018  |phi| 0.100 (max 0.35 zero 0% erank 32)  lam_max 0.045  E[n] 8.0(med 7.0)/8.6 [8.0@8x] var 93/89 (w71+s22)  MRR 0.0843(med 505)  lam sd 0.450(season 0.189 db 1.5e-17)  elast -0.097/-0.121  skip 54  qbad 54  drop 10  redo 0  bang 0  277.6 min
+[fit]   normaliser check: RQMC 2*SE 0.0063 nats; independent N-vs-2N |gap| 0.0045; guard 0.0063 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 9.0 vs analytic 7.2 (tol 3.1)
+[fit]   QMC envelope: max||z*|| 0.23 (accurate to ~12, fails ~18), max||phi_j|| 0.302, phi-carrying products 5,455
+[fit]   it 18400 ep 2.805 cum 2.805  train   54.952  set/bskt  -51.595  units/bskt  -5.923  total  -57.518  ESS 0.997 (min 0.224)  RQMCse 0.0021  |phi| 0.101 (max 0.30 zero 0% erank 32)  lam_max 0.042  E[n] 7.7(med 6.4)/8.6 [7.7@8x] var 86/89 (w64+s22)  MRR 0.0802(med 475)  lam sd 0.450(season 0.190 db 1.2e-17)  elast -0.098/-0.121  skip 56  qbad 56  drop 10  redo 0  bang 0  285.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0043 nats; independent N-vs-2N |gap| 0.0020; guard 0.0043 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.7 vs analytic 7.6 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.11 (accurate to ~12, fails ~18), max||phi_j|| 0.279, phi-carrying products 5,455
+[fit]   it 18600 ep 2.835 cum 2.835  train   54.356  set/bskt  -51.594  units/bskt  -5.914  total  -57.508  ESS 0.997 (min 0.189)  RQMCse 0.0022  |phi| 0.101 (max 0.28 zero 0% erank 32)  lam_max 0.036  E[n] 6.8(med 5.8)/8.6 [6.8@8x] var 65/89 (w52+s14)  MRR 0.0770(med 535)  lam sd 0.450(season 0.186 db 6.8e-18)  elast -0.098/-0.121  skip 59  qbad 59  drop 10  redo 0  bang 0  292.6 min
+[fit]   normaliser check: RQMC 2*SE 0.0027 nats; independent N-vs-2N |gap| 0.0029; guard 0.0029 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.3 vs analytic 6.1 (tol 2.7)
+[fit]   QMC envelope: max||z*|| 0.16 (accurate to ~12, fails ~18), max||phi_j|| 0.303, phi-carrying products 5,455
+[fit]   it 18800 ep 2.865 cum 2.865  train   55.206  set/bskt  -51.560  units/bskt  -5.908  total  -57.468  ESS 0.998 (min 0.262)  RQMCse 0.0018  |phi| 0.101 (max 0.30 zero 0% erank 32)  lam_max 0.023  E[n] 7.0(med 6.0)/8.6 [7.0@8x] var 69/89 (w55+s14)  MRR 0.0755(med 456)  lam sd 0.450(season 0.184 db 1.3e-17)  elast -0.096/-0.121  skip 61  qbad 61  drop 10  redo 0  bang 0  299.7 min
+[fit]   normaliser check: RQMC 2*SE 0.0040 nats; independent N-vs-2N |gap| 0.0025; guard 0.0040 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.2 vs analytic 7.3 (tol 3.2)
+[fit]   QMC envelope: max||z*|| 0.09 (accurate to ~12, fails ~18), max||phi_j|| 0.277, phi-carrying products 5,455
+[fit]   it 19000 ep 2.896 cum 2.896  train   55.296  set/bskt  -51.482  units/bskt  -5.904  total  -57.386  ESS 0.998 (min 0.609)  RQMCse 0.0017  |phi| 0.101 (max 0.28 zero 0% erank 32)  lam_max 0.011  E[n] 8.0(med 6.3)/8.6 [8.0@8x] var 119/89 (w85+s34)  MRR 0.0754(med 512)  lam sd 0.450(season 0.186 db 1.7e-17)  elast -0.097/-0.121  skip 61  qbad 61  drop 10  redo 0  bang 0  307.7 min
+[fit]   normaliser check: RQMC 2*SE 0.0024 nats; independent N-vs-2N |gap| 0.0011; guard 0.0024 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.2 vs analytic 7.7 (tol 3.3)
+[fit]   QMC envelope: max||z*|| 0.17 (accurate to ~12, fails ~18), max||phi_j|| 0.315, phi-carrying products 5,455
+[fit]   it 19200 ep 2.926 cum 2.926  train   55.796  set/bskt  -51.469  units/bskt  -5.898  total  -57.367  ESS 0.998 (min 0.468)  RQMCse 0.0019  |phi| 0.101 (max 0.31 zero 0% erank 32)  lam_max 0.037  E[n] 8.5(med 6.6)/8.6 [8.5@8x] var 185/89 (w109+s76)  MRR 0.0810(med 509)  lam sd 0.450(season 0.187 db 9.8e-18)  elast -0.098/-0.121  skip 62  qbad 62  drop 10  redo 0  bang 0  314.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0034 nats; independent N-vs-2N |gap| 0.0012; guard 0.0034 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.7 vs analytic 8.0 (tol 3.5)
+[fit]   QMC envelope: max||z*|| 0.27 (accurate to ~12, fails ~18), max||phi_j|| 0.329, phi-carrying products 5,455
+[fit]   it 19400 ep 2.957 cum 2.957  train   54.449  set/bskt  -51.506  units/bskt  -5.893  total  -57.399  ESS 0.997 (min 0.072)  RQMCse 0.0021  |phi| 0.101 (max 0.33 zero 0% erank 32)  lam_max 0.042  E[n] 8.0(med 6.5)/8.6 [8.0@8x] var 113/89 (w89+s24)  MRR 0.0775(med 473)  lam sd 0.450(season 0.190 db 6.8e-18)  elast -0.097/-0.121  skip 64  qbad 64  drop 11  redo 0  bang 0  322.3 min
+[fit]   normaliser check: RQMC 2*SE 0.0031 nats; independent N-vs-2N |gap| 0.0044; guard 0.0044 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.5 vs analytic 7.2 (tol 3.2)
+[fit]   QMC envelope: max||z*|| 0.13 (accurate to ~12, fails ~18), max||phi_j|| 0.339, phi-carrying products 5,455
+[fit]   it 19600 ep 2.987 cum 2.987  train   54.721  set/bskt  -51.413  units/bskt  -5.888  total  -57.300  ESS 0.998 (min 0.385)  RQMCse 0.0018  |phi| 0.101 (max 0.34 zero 0% erank 32)  lam_max 0.051  E[n] 7.0(med 6.0)/8.6 [7.0@8x] var 70/89 (w53+s17)  MRR 0.0739(med 424)  lam sd 0.450(season 0.189 db 8.9e-18)  elast -0.096/-0.121  skip 65  qbad 65  drop 11  redo 0  bang 0  329.8 min
+[fit]   normaliser check: RQMC 2*SE 0.0018 nats; independent N-vs-2N |gap| 0.0006; guard 0.0018 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 6.2 vs analytic 7.2 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.10 (accurate to ~12, fails ~18), max||phi_j|| 0.274, phi-carrying products 5,455
+[fit]   it 19800 ep 3.018 cum 3.018  train   54.493  set/bskt  -51.442  units/bskt  -5.886  total  -57.329  ESS 0.998 (min 0.399)  RQMCse 0.0019  |phi| 0.101 (max 0.27 zero 0% erank 32)  lam_max 0.020  E[n] 7.7(med 6.0)/8.6 [7.7@8x] var 153/89 (w53+s100)  MRR 0.0733(med 479)  lam sd 0.450(season 0.187 db 6.2e-18)  elast -0.097/-0.121  skip 66  qbad 66  drop 11  redo 0  bang 0  336.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0019 nats; independent N-vs-2N |gap| 0.0009; guard 0.0019 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 7.8 vs analytic 6.6 (tol 2.9)
+[fit]   QMC envelope: max||z*|| 0.10 (accurate to ~12, fails ~18), max||phi_j|| 0.311, phi-carrying products 5,455
+[fit]   it 20000 ep 3.048 cum 3.048  train   54.358  set/bskt  -51.384  units/bskt  -5.882  total  -57.267  ESS 0.998 (min 0.454)  RQMCse 0.0017  |phi| 0.101 (max 0.31 zero 0% erank 32)  lam_max 0.024  E[n] 7.3(med 6.1)/8.6 [7.3@8x] var 75/89 (w57+s17)  MRR 0.0775(med 451)  lam sd 0.450(season 0.190 db 1.5e-17)  elast -0.097/-0.121  skip 66  qbad 66  drop 11  redo 0  bang 0  344.1 min
+[fit]   normaliser check: RQMC 2*SE 0.0023 nats; independent N-vs-2N |gap| 0.0011; guard 0.0023 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=PASS  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.3 vs analytic 7.5 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.09 (accurate to ~12, fails ~18), max||phi_j|| 0.281, phi-carrying products 5,455
+[fit]   it 20200 ep 3.079 cum 3.079  train   55.950  set/bskt  -51.399  units/bskt  -5.882  total  -57.281  ESS 0.986 (min 0.033)  RQMCse 0.0099  |phi| 0.102 (max 0.28 zero 0% erank 32)  lam_max 0.016  E[n] 8.2(med 5.8)/8.6 [8.2@8x] var 194/89 (w113+s81)  MRR 0.0655(med 506)  lam sd 0.450(season 0.190 db 1.9e-17)  elast -0.103/-0.121  skip 101  qbad 101  drop 50  redo 0  bang 0  350.9 min
+[fit]   normaliser check: RQMC 2*SE 0.0037 nats; independent N-vs-2N |gap| 0.0008; guard 0.0037 (4 scrambles)
+[fit]   GOALS  logZ-converged=PASS  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.7 vs analytic 6.8 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.16 (accurate to ~12, fails ~18), max||phi_j|| 0.301, phi-carrying products 5,455
+[fit]   it 20400 ep 3.109 cum 3.109  train   57.057  set/bskt  -51.367  units/bskt  -5.881  total  -57.249  ESS 0.937 (min 0.032)  RQMCse 0.0402  |phi| 0.102 (max 0.30 zero 0% erank 32)  lam_max 0.018  E[n] 8.0(med 5.9)/8.6 [8.0@8x] var 187/89 (w90+s97)  MRR 0.0665(med 504)  lam sd 0.450(season 0.189 db 6.6e-18)  elast -0.120/-0.121  skip 252  qbad 252  drop 241  redo 0  bang 0  354.6 min
+[fit]   normaliser check: RQMC 2*SE 0.1169 nats; independent N-vs-2N |gap| 0.0252; guard 0.1169 (4 scrambles)
+[fit]   GOALS  logZ-converged=FAIL  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 5.9 vs analytic 6.8 (tol 3.0)
+[fit]   QMC envelope: max||z*|| 0.20 (accurate to ~12, fails ~18), max||phi_j|| 0.306, phi-carrying products 5,455
+[fit]   it 20600 ep 3.140 cum 3.140  train   56.980  set/bskt  -51.503  units/bskt  -5.881  total  -57.383  ESS 0.920 (min 0.031)  RQMCse 0.0593  |phi| 0.102 (max 0.31 zero 0% erank 32)  lam_max 0.294  E[n] 9.8(med 6.0)/8.6 [9.8@8x] var 333/89 (w143+s190)  MRR 0.0662(med 488)  lam sd 0.450(season 0.189 db 1.2e-17)  elast -0.124/-0.121  skip 409  qbad 409  drop 504  redo 0  bang 0  358.4 min
+[fit]   normaliser check: RQMC 2*SE 0.1985 nats; independent N-vs-2N |gap| 0.2196; guard 0.2196 (4 scrambles)
+[fit]   GOALS  logZ-converged=FAIL  E[n]-converged=PASS  E[n]-calibrated=PASS  var-calibrated=FAIL  sampler-agrees=PASS  elasticity=PASS  data-kept=PASS   sampled 8.4 vs analytic 8.0 (tol 4.7)
+[fit]   ABORT: the normaliser is not converged at the training draw count (+0.220 > 0.05). Any likelihood gain from here is the estimate collapsing, not the model improving.

@@ -1,0 +1,147 @@
+{
+  "seed": 20260821,
+  "n_trips": 256,
+  "popularity_lam_sd": 0.7117928285814742,
+  "variants": {
+    "current_random": {
+      "joint": {
+        "n": 256,
+        "per_basket": -56.230256663281295,
+        "se_per_basket": 3.4344829745827585,
+        "per_line": -7.3481090892292045
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -3.0692532496050466,
+        "se_per_basket": 0.07881569537345164,
+        "per_line": -0.40108669315920975
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -53.16100341367624,
+        "se_per_basket": 3.3655168668252857,
+        "per_line": -6.947022396069993
+      }
+    },
+    "low_taste_noise": {
+      "joint": {
+        "n": 256,
+        "per_basket": -55.14309394593738,
+        "se_per_basket": 3.3682816036350283,
+        "per_line": -7.206039841837657
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -2.9494989268289666,
+        "se_per_basket": 0.0695725558129059,
+        "per_line": -0.38543732785513807
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -52.193595019108415,
+        "se_per_basket": 3.3004011539153444,
+        "per_line": -6.820602513982519
+      }
+    },
+    "popularity_low_noise": {
+      "joint": {
+        "n": 256,
+        "per_basket": -51.32687583919212,
+        "se_per_basket": 3.120396093847816,
+        "per_line": -6.70734058950137
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -2.9454693167604944,
+        "se_per_basket": 0.06956157865295207,
+        "per_line": -0.3849107427721728
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -48.38140652243163,
+        "se_per_basket": 3.0525637115083644,
+        "per_line": -6.3224298467291975
+      }
+    },
+    "popularity_additive": {
+      "joint": {
+        "n": 256,
+        "per_basket": -51.31465933793498,
+        "se_per_basket": 3.127877860645237,
+        "per_line": -6.705744150337598
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -2.932054050791577,
+        "se_per_basket": 0.07709811893062635,
+        "per_line": -0.38315765033315147
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -48.3826052871434,
+        "se_per_basket": 3.0522677339313353,
+        "per_line": -6.322586500004446
+      }
+    },
+    "popularity_only": {
+      "joint": {
+        "n": 256,
+        "per_basket": -51.30954342810898,
+        "se_per_basket": 3.127908649428213,
+        "per_line": -6.705075608777896
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -2.931887204162685,
+        "se_per_basket": 0.07712391155068943,
+        "per_line": -0.38313584699624675
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -48.37765622394629,
+        "se_per_basket": 3.052285322619793,
+        "per_line": -6.321939761781649
+      }
+    },
+    "multinomial_random": {
+      "joint": {
+        "n": 256,
+        "per_basket": -56.09337472526466,
+        "se_per_basket": 3.4412727862550714,
+        "per_line": -7.330221505700742
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -2.9314436164976447,
+        "se_per_basket": 0.07691374902715267,
+        "per_line": -0.3830778794402231
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -53.16193110876702,
+        "se_per_basket": 3.365446537851885,
+        "per_line": -6.9471436262605195
+      }
+    },
+    "multinomial_trained_legacy": {
+      "joint": {
+        "n": 256,
+        "per_basket": -45.732870925182766,
+        "se_per_basket": 2.7867512540218806,
+        "per_line": -5.97632208108565
+      },
+      "size": {
+        "n": 256,
+        "per_basket": -2.9314436164976447,
+        "se_per_basket": 0.07691374902715267,
+        "per_line": -0.3830778794402231
+      },
+      "composition": {
+        "n": 256,
+        "per_basket": -42.80142730868512,
+        "se_per_basket": 2.712481968982705,
+        "per_line": -5.593244201645427
+      }
+    }
+  }
+}

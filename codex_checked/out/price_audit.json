@@ -1,0 +1,121 @@
+{
+  "sign_convention": {
+    "RETAIL_DISC": {
+      "min": -180.0,
+      "max": 3.99,
+      "share_negative": 0.5019878785637346,
+      "share_positive": 1.386892021210202e-05,
+      "share_zero": 0.4979982525160533
+    },
+    "COUPON_DISC": {
+      "min": -55.93,
+      "max": 0.0,
+      "share_negative": 0.014031494776810548,
+      "share_positive": 0.0,
+      "share_zero": 0.9859685052231895
+    },
+    "COUPON_MATCH_DISC": {
+      "min": -7.7,
+      "max": 0.0,
+      "share_negative": 0.006722188577249115,
+      "share_positive": 0.0,
+      "share_zero": 0.9932778114227508
+    }
+  },
+  "guide_examples": {
+    "guide_line2": {
+      "found": 121,
+      "SALES_VALUE": 2.0,
+      "QUANTITY": 2,
+      "RETAIL_DISC": -1.34,
+      "COUPON_DISC": 0.0,
+      "COUPON_MATCH_DISC": 0.0,
+      "regular_shelf_computed": 1.67,
+      "loyalty_shelf_computed": 1.0,
+      "customer_paid_total_computed": 2.0,
+      "guide_says": {
+        "regular_shelf": 1.67,
+        "loyalty_shelf": 1.0
+      }
+    },
+    "guide_line3": {
+      "found": 0
+    }
+  },
+  "guide_formula_labels_consistent_with_examples": false,
+  "posted_price_single_valued_within_store_week": {
+    "cells": 18017,
+    "lines": 39943,
+    "restricted_to_retained_catalogue": true,
+    "A_sales_value": 0.9255702947216518,
+    "B_loyalty_shelf": 0.9287894766054282,
+    "C_regular_shelf": 0.9909529888438697,
+    "D_customer_paid": 0.9239607037797636
+  },
+  "loyalty_discount_uniformity": {
+    "cells_all_discounted": 0.3600630899031119,
+    "cells_none_discounted": 0.5963247627869714,
+    "cells_mixed": 0.04361214730991663
+  },
+  "modal_share_by_definition": {
+    "A_sales_value": 0.674167443443155,
+    "B_loyalty_shelf": 0.6744102590905703,
+    "C_regular_shelf": 0.6645320963698692,
+    "D_customer_paid": 0.6732263425592145
+  },
+  "n_product_days": 10172,
+  "discount_activity": {
+    "retail_disc_active_share": 0.49971941407863846,
+    "coupon_match_active_share": 0.006828047627159464,
+    "coupon_disc_active_share": 0.012304270271011147,
+    "mean_retail_disc_pct_of_regular": 0.267850744880051,
+    "mean_coupon_match_pct_of_loyalty": 0.17792728628548737,
+    "mean_coupon_disc_pct_of_paid": 0.37466432824555157
+  },
+  "coupon_match_test": {
+    "product_day_lines": 264,
+    "lines_with_discount": 26,
+    "A_sales_value": {
+      "mean_gap_to_modal_price_when_discount_active": -0.3576923076923076,
+      "mean_gap_when_not_active": -0.0007983193277310922,
+      "differential": -0.3568939883645765
+    },
+    "B_loyalty_shelf": {
+      "mean_gap_to_modal_price_when_discount_active": 1.708035422500241e-17,
+      "mean_gap_when_not_active": -0.0007983193277310922,
+      "differential": 0.0007983193277311093
+    }
+  },
+  "coupon_disc_test": {
+    "product_day_lines": 1133,
+    "lines_with_discount": 135,
+    "B_loyalty_shelf": {
+      "mean_gap_to_modal_price_when_discount_active": -0.011185185185185176,
+      "mean_gap_when_not_active": -0.006853707414829666,
+      "differential": -0.0043314777703555105
+    },
+    "D_customer_paid": {
+      "mean_gap_to_modal_price_when_discount_active": -1.738888888888889,
+      "mean_gap_when_not_active": -0.006853707414829666,
+      "differential": -1.7320351814740593
+    }
+  },
+  "retail_disc_uniform_within_product_day": {
+    "mean_modal_share": 0.8183146849304486,
+    "share_of_product_days_fully_uniform": 0.499705072748722
+  },
+  "within_store_uniformity": {
+    "product_weeks": 24,
+    "lines": 293,
+    "mean_stores_per_cell": 2.25,
+    "modal_share_within_store": 0.9419795221843004,
+    "modal_share_pooled_across_stores": 0.9419795221843004
+  },
+  "positive_discount_lines": 6,
+  "mean_abs_dev_from_daily_median": {
+    "A_sales_value": 0.18971942295328292,
+    "B_loyalty_shelf": 0.18965224049873944,
+    "C_regular_shelf": 0.2294360285778269,
+    "D_customer_paid": 0.19164387519956078
+  }
+}

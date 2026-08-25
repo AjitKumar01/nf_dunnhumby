@@ -1,0 +1,8 @@
+[dat] loaded cache /Users/ajit/Projects/nf_dunnhumby/scripts/v3/../../basket_input/v3_index_affinity.npz
+[fea] price deviation panel (5455, 712), |mean| 0.1233
+[fea] store price deviations: 244,880 cells (0.75% of the grid)
+[fea] recency: 1,358,594 purchase events over 758 sub-commodities; median gap 35.0 days
+[fea] promotion cells: 6,519,807; display rate 0.401, mailer 0.739
+[rec] log Z: adaptive scrambled-Sobol, Kz=32, 32 nodes in 4 scrambles, seed 0, identity frame (no curvature probes), 2 mode steps, node chunk 32
+/Users/ajit/Projects/nf_dunnhumby/scripts/v3/ragged.py:326: UserWarning: index_reduce() is in beta and the API may change at any time. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/TensorAdvancedIndexing.cpp:1518.)
+  sd.index_reduce_(0, self.row_pos, self.row_size, "amax", include_self=True)

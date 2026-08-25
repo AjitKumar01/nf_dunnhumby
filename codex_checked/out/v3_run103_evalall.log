@@ -1,0 +1,21 @@
+[dat] loaded cache /Users/ajit/Projects/nf_dunnhumby/scripts/v3/../../basket_input/v3_index_affinity.npz
+[fea] price deviation panel (5455, 712), |mean| 0.1233
+[fea] store price deviations: 244,880 cells (0.75% of the grid)
+[fea] recency: 1,358,594 purchase events over 758 sub-commodities; median gap 35.0 days
+[fea] promotion cells: 6,519,807; display rate 0.401, mailer 0.739
+[ev] valid: 3000 trips sampled across weeks 83-90 (8 distinct weeks)
+[ev]  test: 3000 trips sampled across weeks 91-102 (12 distinct weeks)
+[ev] 
+[ev] log Z: adaptive scrambled-Sobol, Kz=32, 32 nodes in 4 scrambles, seed 0, identity frame (no curvature probes), 2 mode steps, node chunk 32
+[ev] === v3_run103_best.pt  iter 7400, cum_iter 7400
+[ev]  split  set/bskt      @8x   units    E[n]    obs     @8x   varpop    obs     KL    TV  cap%
+/Users/ajit/Projects/nf_dunnhumby/scripts/v3/ragged.py:326: UserWarning: index_reduce() is in beta and the API may change at any time. (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/TensorAdvancedIndexing.cpp:1518.)
+  sd.index_reduce_(0, self.row_pos, self.row_size, "amax", include_self=True)
+[ev]  valid   -52.607    exact  -6.214    8.76   7.87   exact    218.1   84.8  0.031 0.062   0.9
+[ev]   test   -53.803    exact  -6.175   10.52   8.04   exact    341.4   83.6  0.035 0.049   1.3
+[ev] 
+[ev] set/bskt is held-out log P(basket set); @8x repeats it at 8x the draws and must
+[ev] agree.  Under quadrature n_draws is ignored, so it reads 'exact' and the pass is
+[ev] skipped -- it recomputed the same number and cost half this script's runtime.
+[ev] varpop = E[Var(n|trip)] + Var[E(n|trip)],
+[ev] the quantity obs.var() measures.  cap% = trips whose E[n] exceeds 0.85*nmax.

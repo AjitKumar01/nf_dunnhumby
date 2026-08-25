@@ -22,16 +22,23 @@ torch.set_default_dtype(torch.float64)
 from data import build
 from features import Features
 from fit import Batcher
-from ragged import RaggedModel, smolyak_grid
+from ragged import RaggedModel, set_quad
 D=build(); J,N,C,S=(int(D[k]) for k in ("n_item","n_user","n_cat","n_store"))
 F=Features(J,S,712); B=Batcher(D,F,120)
-m=RaggedModel(J=J,N=N,C=C,K=32,Kz=4,nmax=120,R=23,S=S,Kp=8)
 bl=torch.load("../../out/v3_run97_best.pt",map_location="cpu",weights_only=False)
+_Kz=int((bl.get("quad") or {}).get("Kz", 4))
+m=RaggedModel(J=J,N=N,C=C,K=32,Kz=_Kz,nmax=120,R=23,S=S,Kp=8)
 m.load_state_dict(bl["model"],strict=False)
 co_=torch.zeros(J,dtype=torch.long)
 co_[torch.as_tensor(D["line_item"],dtype=torch.long)]=torch.as_tensor(D["line_cat"],dtype=torch.long)
 with torch.no_grad(): m.cat_of.copy_(co_)
-m.quad=smolyak_grid(4,8); m.double().eval()
+# The integrator comes from the CHECKPOINT, not from this file.  It used to read
+# smolyak_grid(4, 8) unconditionally, which against a Kz=128 checkpoint is not
+# just inaccurate -- the nodes are the wrong shape.
+_q=bl.get("quad") or {}
+print("[rec] log Z: "+set_quad(m, _q.get("quad_q",8), _q.get("qmc_n",0),
+                               _q.get("qmc_seed",0), probe=_q.get("probe", 8), steps=_q.get("steps", 4), chunk=_q.get("chunk", 0)), flush=True)
+m.double().eval()
 lp=D["line_ptr"]; li=D["line_item"]
 tr=np.flatnonzero(D["trip_split"]==0); keep=np.zeros(len(li),bool)
 for t in tr: keep[int(lp[t]):int(lp[t+1])]=True

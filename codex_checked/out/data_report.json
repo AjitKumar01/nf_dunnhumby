@@ -1,0 +1,48 @@
+{
+  "raw": {
+    "lines": 2553406,
+    "households": 2500,
+    "products": 91856,
+    "stores": 561,
+    "days": 711,
+    "weeks": 102,
+    "trips": 213961
+  },
+  "price_change_hazard": {
+    "within_week": 0.26326044598397924,
+    "within_week_n": 18476,
+    "week_boundary": 0.5189156985403635,
+    "week_boundary_n": 3357
+  },
+  "cross_store_price_cv_median": 0.010920349456774059,
+  "cross_store_cells": 31281,
+  "sample": {
+    "households": 2084,
+    "items": 560,
+    "categories": 56,
+    "sessions": 172,
+    "pair_weeks": 86,
+    "trips": 49729,
+    "category_purchases": 66637,
+    "purchase_rate_per_category_trip": 0.02392862170104825,
+    "split": {
+      "train": 46432,
+      "test": 13736,
+      "validation": 6469
+    }
+  },
+  "filters": {
+    "fewer than 5 items or <200 category-trips": 137,
+    "unit demand violated (>15% multi-item or >10% multi-top-item trips)": 79,
+    "KEPT": 56,
+    "top 15% most seasonal (Herfindahl of daily demand)": 10,
+    "insufficient price variation (<2 items changing, or no item with >=10% of pair-weeks moving >=$0.10)": 3
+  },
+  "events": {
+    "item_pairweeks": 48160,
+    "own_price_change": 7954,
+    "cross_price_change": 32382,
+    "mean_abs_dp_when_changed": 0.7175936635655016
+  },
+  "demographics_coverage": 0.3694817658349328
+}

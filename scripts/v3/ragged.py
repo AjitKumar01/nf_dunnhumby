@@ -258,6 +258,96 @@ def gh_grid(d, q):
     return torch.as_tensor(G), torch.as_tensor(W)
 
 
+def sobol_grid(d, n, seed=0):
+    """Scrambled-Sobol nodes for E_{z~N(0,I_d)}[g(z)] -- n nodes at ANY dimension d.
+
+    Same (nodes, weights) contract as gh_grid, so _log_Z_adaptive integrates with it
+    unchanged; the weights are uniform 1/n because a QMC rule is an equal-weight average.
+
+    This is what removes the two constraints that shaped the model.
+
+    RANK.  A tensor grid costs q^d and Smolyak costs O(d^q), so Kz was held at 4.  Sobol
+    costs n regardless of d.  Verified against exact subset enumeration at J=16, all
+    products at grocery strength ||phi_j||=0.96, 16384 nodes:
+
+            Kz        c      exact     error      sd(3)     sec
+            32     3.30      4.003   -0.0004    0.00086    0.15
+           128     3.77      4.328   +0.0008    0.00105    0.05
+           256     3.73      4.367   +0.0005    0.00239    0.09
+           512     3.63      4.225   -0.0003    0.00182    0.17
+
+    Flat to 0.0005 nats at Kz=512, and no more expensive than Kz=32.  f(z) = F(Phi z)
+    depends on z only through Phi z, so the EFFECTIVE dimension is rank(Phi) however large
+    Kz is, which is the regime Sobol is built for.
+
+    PRODUCTS.  The 20-product mask was protecting against c = max_u sum_j max(phi_j'u, 0),
+    which grows with the catalogue.  c is a worst case over directions the mass never
+    visits.  The mode solves the mean-field equation z* = Phi' pi(z*), so
+
+        ||z*||  =  || sum_j pi_j phi_j ||  ~  rho sqrt(sum_j pi_j^2)  <=  rho E[n]
+
+    and sum_j pi_j = E[n] is pinned near 8 by the size law whatever the catalogue size.
+    Spreading the same E[n] over more products SHRINKS sum_j pi_j^2.  Measured, every
+    product carrying phi at ||phi_j||=0.96, b recalibrated so E[n] = 8:
+
+            J       Kz         c   ||z*||   sd(4 scrambles)    4k vs 64k
+           20       32      4.33     1.91           0.00474     -0.00092
+          100       32     14.03     0.62           0.00525     +0.00493
+          500       64     40.13     0.27           0.00200     -0.00222
+
+    c rises 10x, ||z*|| FALLS 7x, and the error does not move.  Adding products makes the
+    integral easier.  The mask was budgeting against a bound that does not bind.
+
+    WHAT DOES BIND is the per-product norm rho.  Failure is multimodality -- Z is exactly a
+    Gaussian mixture with one component per subset, centred at mu_S = sum_{j in S} phi_j --
+    and it is driven by rho, not by c or J.  Adversarial check, A products sharing ONE phi
+    direction so nothing cancels and ||z*|| saturates its bound, exact enumeration at J=20:
+
+            A      rho         c   ||z*||    exact     error
+           12     0.96     12.69    11.95    74.66   -0.0001
+            8     1.40     13.30    12.55    71.26   -0.0031
+            8     2.00     19.00    18.44   143.57   +0.0644
+
+    Twelve aligned products drive ||z*|| to 12 and c to 12.7 and it is still exact to
+    0.0001, because alignment makes the integrand UNIMODAL, just displaced, and a
+    mode-shifted rule absorbs a displacement exactly.  So the constraint to enforce is
+    max_j ||phi_j|| <= ~1.4 (see fit.py --phi-norm-max), which unlike c does not scale with
+    the catalogue.  Grocery needs 0.96.
+    """
+    e = torch.quasirandom.SobolEngine(d, scramble=True, seed=seed)
+    u = e.draw(n).double().clamp(1e-12, 1.0 - 1e-12)
+    x = torch.erfinv(2.0 * u - 1.0) * math.sqrt(2.0)
+    return x, torch.full((n,), 1.0 / n, dtype=torch.float64)
+
+
+def set_quad(model, quad_q=0, qmc_n=0, qmc_seed=0, Kz=None, probe=8,
+             steps=4, chunk=0):
+    """ONE place that decides how log Z is integrated, for training and every eval.
+
+    The scripts each built their own grid, and recommend_pi.py hardcoded smolyak_grid(4, 8)
+    -- which against a Kz=128 checkpoint is not merely inaccurate, the nodes are the wrong
+    SHAPE.  Every serious defect in this project has come from two code paths computing the
+    same quantity differently (b_flat vs energy applying different terms; evalall's lo/hi
+    passes; size_dist bypassing the quadrature), so the integrator is chosen here or
+    nowhere.  Returns a one-line description for the log.
+    """
+    d = int(model.Kz if Kz is None else Kz)
+    model.quad = model.quad_a = None
+    if qmc_n > 0:
+        model.quad_a = sobol_grid(d, int(qmc_n), seed=int(qmc_seed))
+        model.quad_probe = int(probe)
+        model.quad_steps = int(steps)
+        model.quad_chunk = int(chunk)
+        return (f"adaptive scrambled-Sobol, Kz={d}, {int(qmc_n)} nodes, seed {int(qmc_seed)}, "
+                f"{'isotropic scale from %d dirs' % int(probe) if probe else 'exact diagonal'}, "
+                f"{int(steps)} mode steps"
+                + (f", node chunk {int(chunk)}" if chunk else ""))
+    if quad_q > 0:
+        model.quad = smolyak_grid(d, int(quad_q))
+        return f"Smolyak, Kz={d}, q={int(quad_q)}, {len(model.quad[0])} nodes"
+    return "SAMPLED (no deterministic rule) -- importance sampling, known wrong by 8-36 nats"
+
+
 def smolyak_grid(d, q):
     """Smolyak sparse grid for E_{z~N(0,I_d)}[g(z)], by the combination technique:
 
@@ -490,6 +580,18 @@ class RaggedModel(torch.nn.Module):
         # softplus(0.5413) = 1.0: starts as the un-split model, so a resumed run is unchanged
         self.price_kappa = torch.nn.Parameter(torch.tensor(0.5413))
         self.quad = None        # (nodes, weights) -> deterministic log Z
+        self.quad_a = None      # dense GH for ADAPTIVE (mode-centred) log Z
+        self.quad_probe = 0     # 0 = exact diagonal (2*Kz); n = isotropic from n dirs
+        self.quad_chunk = 0     # 0 = all nodes at once; n = accumulate n at a time
+        # Mode-ascent iterations for the ADAPTIVE rule.  --mode-steps fed the sampler,
+        # which is inert under quadrature, so this path silently always ran 8.  Measured
+        # against exact enumeration at Kz=128, 512 nodes (error / ms):
+        #     0 steps  -0.0349 / 1.9      2 steps  -0.0095 / 4.0      8 steps  -0.0039 / 10.6
+        #     1 step   -0.0165 / 3.0      4 steps  -0.0052 / 6.2
+        # Monotone -- the ascent is doing real work, not spinning -- but 4 buys 1.7x the
+        # speed for 0.0013 nats, well inside the ~0.01 tolerance the rest of this operates at.
+        self.quad_steps = 4
+        self.quad_share = False  # one shift/scale for the batch (shared nodes)
         self.quad_z = None      # dense GH grid -> deterministic z sampling
         # --- conditioning blocks (Eq. 7) -------------------------------------------------
         # softplus(-2.8) = 0.060, so gamma.beta starts at about 8 * 0.060^2 = 0.029 --
@@ -647,6 +749,172 @@ class RaggedModel(torch.nn.Module):
             self._b_override = None
         return pi
 
+    def _log_Z_adaptive(self, ix, drop_empty, return_ess, return_size, return_mode,
+                        mode_steps=8):
+        """log Z by ADAPTIVE Gauss-Hermite: shift the grid to the mode, scale by the
+        curvature, then integrate in the transformed coordinates.
+
+            Z = int f(z) N(z;0,I) dz
+              = (2pi)^{d/2}|S|^{1/2} E_{x~N(0,I)}[ exp(||x||^2/2) f(zh+Lx) N(zh+Lx;0,I) ]
+
+        with S = LL' the inverse Hessian of -log[f N] at the mode.  Deterministic, so unlike
+        importance sampling it adds no variance.
+
+        Why: a fixed grid sits near the origin, but the integrand keeps its mass at
+        ||z|| ~ c = max_u sum_j max(phi_j'u, 0), which grows with the number of products
+        carrying phi.  That radius -- NOT the integration dimension -- is what forced the
+        20-product mask.  The dimension is rank(Phi) = min(n_phi, Kz), so products are free:
+        verified against exact enumeration, 2, 6 and 12 phi-carrying products at Kz=2 all
+        integrate to the same accuracy.
+
+        Measured against exact enumeration at Kz=3, q=7:
+
+            c      plain Smolyak     adaptive
+            3.73        -0.0006       +0.0000
+            7.46        -2.8860       -0.1130
+           11.94       -24.1488       -0.0059
+           16.42       -64.1183      -24.3396     <- both fail
+
+        The ceiling at c ~ 16 is structural: Z is exactly a Gaussian mixture with one
+        component per subset, centred at mu_S = sum_{j in S} phi_j, and once those separate
+        the target is multimodal (12 distinct modes found there).  No single-centre grid
+        tracks that.
+        """
+        B = ix.B
+        nodes, wts = self.quad_a                        # dense GH in the transformed frame
+        # --- locate the mode of log f(z) - ||z||^2/2, one shared z per trip ---
+        z = torch.zeros(B, 1, self.Kz, dtype=self.lam.dtype, device=self.lam.device)
+        for _ in range(mode_steps):
+            zz = z.detach().requires_grad_(True)
+            with torch.enable_grad():
+                obj = (log_f_sparse(self, zz, ix, sparse_prepare(self, ix), drop_empty)
+                       - 0.5 * (zz ** 2).sum(-1)).sum()
+                gz = torch.autograd.grad(obj, zz)[0]
+            z = (zz + 0.5 * gz).detach()                # damped ascent; the curvature is
+        zh = z.detach()                                 # picked up by the scale below
+        # --- local scale.  A full Hessian per trip is B x Kz x Kz autograd calls; the
+        # DIAGONAL curvature is one extra evaluation per axis and is what the grid needs. ---
+        eps = 0.35
+        C = sparse_prepare(self, ix)
+        f0 = log_f_sparse(self, zh, ix, C, drop_empty) - 0.5 * (zh ** 2).sum(-1)
+        # All 2*Kz probes in ONE evaluation.  As a python loop this is 2*Kz sequential
+        # single-node calls, which at Kz=128 is 256 kernel launches per batch per step and
+        # costs more wall-clock than the 4096-node integral it is scaling.  Batched, the
+        # probes are just 2*Kz extra nodes -- 6% on top of a 4096-node rule.
+        # n_probe=0 -> exact diagonal, 2*Kz probes.  Otherwise an ISOTROPIC scale from
+        # n_probe random directions, which costs the same at every Kz.  At Kz=128 the
+        # diagonal is 256 probes on top of a 512-node rule -- 50% overhead to estimate a
+        # curvature that is 1 in every direction orthogonal to span(Phi), i.e. in almost
+        # every direction once Kz exceeds the number of active products.
+        if self.quad_probe and self.quad_probe < self.Kz:
+            g_ = torch.Generator(device=zh.device).manual_seed(20250819)
+            D_ = torch.randn(self.quad_probe, self.Kz, generator=g_,
+                             dtype=zh.dtype, device=zh.device)
+            D_ = D_ / D_.norm(dim=1, keepdim=True) * eps
+            probe = torch.cat([D_, -D_], 0).unsqueeze(0)
+            zp = zh + probe
+            fpm = log_f_sparse(self, zp, ix, C, drop_empty) - 0.5 * (zp ** 2).sum(-1)
+            k_ = ((2.0 * f0 - fpm[:, :self.quad_probe] - fpm[:, self.quad_probe:])
+                  / (eps * eps)).clamp_min(0.05).mean(-1, keepdim=True)
+            sd = k_.rsqrt().clamp(0.2, 8.0).expand(-1, self.Kz)       # [B, Kz]
+        else:
+            E = torch.eye(self.Kz, dtype=zh.dtype, device=zh.device) * eps
+            probe = torch.cat([E, -E], 0).unsqueeze(0)               # [1, 2Kz, Kz]
+            zp = zh + probe                                          # [B, 2Kz, Kz]
+            fpm = log_f_sparse(self, zp, ix, C, drop_empty) - 0.5 * (zp ** 2).sum(-1)
+            curv = ((2.0 * f0 - fpm[:, :self.Kz] - fpm[:, self.Kz:]) / (eps * eps)).clamp_min(0.05)
+            sd = curv.rsqrt().clamp(0.2, 8.0)                        # [B, Kz]
+        # --- share the shift/scale across the batch ---------------------------------
+        # _log_Z_quad shares ONE node set over all trips, so z @ phi' is computed once for
+        # the batch.  Adaptivity makes zs = zh + x*sd per-trip, [B, P, Kz], so that matmul
+        # runs B times -- which is the whole 0.20 -> 0.80 s gap, not the rank (Kz=8..128 is
+        # flat to 6%), not the node count (12%), not the mode steps (6%).
+        #
+        # ||z*|| is 0.07..0.9 and varies little between trips, so one shift and one scale
+        # for the batch recovers the shared-node structure.  MEASURED, that is worth much
+        # less than the reasoning above predicts -- 1.08x at 20 phi products, 1.35x at 200,
+        # 1.05x at 400, and 0.81x (SLOWER) at Kz=32 -- so the per-trip matmul is evidently
+        # not the bottleneck it looked like.  Accuracy is fine (max |dlogZ| 0.024, mean
+        # 0.005 at 400 phi), so this stays available, but it is off by default and is not
+        # the speed lever.  The per-trip path is the one verified against exact enumeration.
+        #
+        # What the sweeps actually show is that cost tracks nodes * active_slots * Kz --
+        # i.e. the NUMBER OF EMBEDDING PARAMETERS.  Kz looks free at 20 phi products
+        # (Kz=8..128 flat to 6%) only because the z-dependent work is negligible there; at
+        # 400 phi products Kz=32 takes 0.88 s against Kz=128's 2.61 s.
+        if self.quad_share:
+            zh = zh.mean(dim=0, keepdim=True).expand_as(zh).contiguous()
+            sd = sd.mean(dim=0, keepdim=True).expand_as(sd).contiguous()
+        x = nodes.to(zh.dtype)                                       # [P, Kz]
+        # --- chunk over NODES -------------------------------------------------------
+        # Every intermediate here is [B, P, slots]: at 512 nodes and 130,380 assortment
+        # slots that is the whole working set at once, and once phi stops being sparse it
+        # no longer fits.  Measured, the cost is not arithmetic but SWAP -- 400 products
+        # take 5.89 s and 1,000 take 118.91 s, a 20x jump for 2.5x the work.
+        #
+        # A quadrature is a SUM over nodes, so it can be accumulated in pieces with a
+        # running max.  Under no_grad (every eval) nothing is retained and this is free;
+        # under grad the chunks are checkpointed, trading one recompute for the memory.
+        # Numerically identical either way -- logsumexp is exact under this rearrangement.
+        if (self.quad_chunk and not return_size and x.shape[0] > self.quad_chunk):
+            acc = Mrun = None
+            for lo in range(0, x.shape[0], self.quad_chunk):
+                xc = x[lo:lo + self.quad_chunk]
+                wc = wts.to(zh.dtype)[lo:lo + self.quad_chunk]
+                # BOTH xc and wc are bound as DEFAULT ARGUMENTS, not read from the
+                # enclosing scope.  checkpoint re-executes this in backward, by which time
+                # the loop variable `lo` holds its final value -- so a closure over `lo`
+                # would recompute every chunk with the LAST chunk's weights.  That is
+                # invisible with Sobol's uniform 1/n weights (slicing a constant vector
+                # gives the same answer anywhere) and silently wrong with any non-uniform
+                # rule, which set_quad makes reachable via gh_grid and Smolyak.
+                def _blk(xc=xc, wc=wc):
+                    zc = zh + xc.unsqueeze(0) * sd.unsqueeze(1)
+                    lwc = (wc.log().unsqueeze(0)
+                           + 0.5 * (xc ** 2).sum(-1).unsqueeze(0)
+                           + sd.log().sum(-1, keepdim=True))
+                    return (log_f_sparse(self, zc, ix, C, drop_empty)
+                            - 0.5 * (zc ** 2).sum(-1) + lwc)
+                t = (torch.utils.checkpoint.checkpoint(_blk, use_reentrant=False)
+                     if torch.is_grad_enabled() else _blk())
+                mc = t.max(dim=1).values
+                if acc is None:
+                    Mrun, acc = mc, torch.exp(t - mc.unsqueeze(1)).sum(1)
+                else:
+                    Mn = torch.maximum(Mrun, mc)
+                    acc = acc * torch.exp(Mrun - Mn) + torch.exp(t - Mn.unsqueeze(1)).sum(1)
+                    Mrun = Mn
+            lz = Mrun + acc.clamp_min(1e-300).log()
+            out = [lz]
+            if return_ess:
+                out.append(torch.ones(B, dtype=lz.dtype, device=lz.device))
+            if return_mode:
+                out.append(zh[:, 0, :])
+            return out[0] if len(out) == 1 else tuple(out)
+        # --- unchunked (small grids, and the return_size path) -----------------------
+        zs = zh + x.unsqueeze(0) * sd.unsqueeze(1)                   # [B, P, Kz]
+        lw = (wts.to(zh.dtype).log().unsqueeze(0)
+              + 0.5 * (x ** 2).sum(-1).unsqueeze(0)
+              + sd.log().sum(-1, keepdim=True))                      # [B, P]
+        if return_size:
+            lg = log_f_sparse(self, zs, ix, C, drop_empty, return_terms=True)   # [P,B,n]
+            lf = torch.logsumexp(lg, dim=-1).transpose(0, 1)
+        else:
+            lf = log_f_sparse(self, zs, ix, C, drop_empty)
+        tot = lf - 0.5 * (zs ** 2).sum(-1) + lw
+        lz = torch.logsumexp(tot, dim=1)
+        out = [lz]
+        if return_ess:
+            out.append(torch.ones(B, dtype=lz.dtype, device=lz.device))
+        if return_size:
+            t = lg.permute(1, 0, 2) + (lw - 0.5 * (zs ** 2).sum(-1)).unsqueeze(-1)
+            M = t.reshape(B, -1).max(dim=1).values.view(B, 1, 1)
+            pn = torch.exp(t - M).sum(1)
+            out.append(pn / pn.sum(-1, keepdim=True).clamp_min(1e-300))
+        if return_mode:
+            out.append(zh[:, 0, :])
+        return out[0] if len(out) == 1 else tuple(out)
+
     def _log_Z_quad(self, ix, drop_empty, return_ess, return_size, return_mode):
         """log Z by DETERMINISTIC Smolyak quadrature -- no proposal, no draws, no bias.
 
@@ -732,6 +1000,9 @@ class RaggedModel(torch.nn.Module):
 
         Pass laplace=True to restore the curvature; if ESS ever falls, that is the switch.
         """
+        if getattr(self, "quad_a", None) is not None:
+            return self._log_Z_adaptive(ix, drop_empty, return_ess, return_size, return_mode,
+                                        mode_steps=self.quad_steps)
         if getattr(self, "quad", None) is not None:
             return self._log_Z_quad(ix, drop_empty, return_ess, return_size, return_mode)
         B = ix.B

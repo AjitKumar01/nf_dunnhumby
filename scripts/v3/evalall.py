@@ -44,9 +44,12 @@ import torch
 from data import build
 from features import Features
 from fit import Batcher, evaluate
-from ragged import RaggedModel, smolyak_grid
+from ragged import RaggedModel, set_quad
 
 SPLITS = {"train": 0, "valid": 1, "test": 2}
+
+
+_QUAD_Q_DEFAULT = 8
 
 
 def log(m):
@@ -58,6 +61,20 @@ def load_any(path, m, J, D):
     meta = ""
     if isinstance(sd, dict) and sd.get("format") == 2:
         meta = f"iter {sd.get('iter')}, cum_iter {sd.get('cum_iter', '?')}"
+        # The normaliser is a property of the CHECKPOINT, not of this script, so it is
+        # chosen here where the blob is in scope.  Checkpoints written before the quad key
+        # existed carry none and fall back to the Smolyak q=8 rule they were trained under.
+        _d = sd.get("data") or {}
+        if _d and int(_d.get("n_cat", 0)) not in (0, int(m.rho_c.shape[0])):
+            raise SystemExit(
+                f"{os.path.basename(path)} was trained on a data partition with "
+                f"{_d['n_cat']} categories; this build has {int(m.rho_c.shape[0])}.\n"
+                f"  re-run with V3_PARTITION={_d.get('partition','')!r} "
+                f"V3_AFFINITY={_d.get('affinity','0')}\n"
+                f"  (run97 needs V3_AFFINITY=1 -- 280 categories, not the default 188)")
+        _q = sd.get("quad") or {}
+        log("log Z: " + set_quad(m, _q.get("quad_q", _QUAD_Q_DEFAULT), _q.get("qmc_n", 0),
+                                 _q.get("qmc_seed", 0), Kz=m.Kz, probe=_q.get("probe", 8), steps=_q.get("steps", 4), chunk=_q.get("chunk", 0)))
         sd = sd["model"]
     missing, _ = m.load_state_dict(sd, strict=False)
     fitted = [k for k in missing if k != "cat_of"]
@@ -128,11 +145,12 @@ def main(a):
     F = Features(J, S, 712)
     Bt = Batcher(D, F, a.nmax)
     m = RaggedModel(J=J, N=N, C=C, K=32, Kz=a.Kz, nmax=a.nmax, R=a.R, S=S, Kp=8)
-    # Deterministic normaliser when the checkpoint is low-rank enough for a grid.
-    # Importance sampling is wrong by 8-36 nats here (verified against exact
-    # enumeration), so scoring a Kz<=4 checkpoint with it would repeat the error.
-    if a.quad_q > 0:
-        m.quad = smolyak_grid(a.Kz, a.quad_q)
+    # Deterministic normaliser -- set per checkpoint inside load_any, where the blob that
+    # records how the model was trained is in scope.  Importance sampling is wrong by 8-36
+    # nats here (verified against exact enumeration), so a silent fallback to it would
+    # reintroduce that error.
+    global _QUAD_Q_DEFAULT
+    _QUAD_Q_DEFAULT = a.quad_q if a.quad_q > 0 else 8
     ptr = D["line_ptr"]
 
     picks = {s: sample_split(D, s, a.n_trips, a.nmax, a.R) for s in a.splits.split(",")}

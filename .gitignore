@@ -44,3 +44,15 @@ basket_input/
 # reimplementation and reads neither file.
 1711.03560v3.pdf
 shopper-src-master.zip
+
+# codex_checked/ holds a snapshot of the codex working tree.  Its scripts are worth
+# keeping; its out/ is 3.7 GB of .pt checkpoints and .npz per-trip dumps that the
+# pipeline regenerates, so only the small result artefacts are tracked.
+codex_checked/out/**
+!codex_checked/out/*.json
+!codex_checked/out/*.log
+codex_checked/__pycache__/
+scripts/v3_codex/__pycache__/
+
+# per-run training logs from the arm experiments
+out_arms/*.pt

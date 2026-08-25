@@ -37,8 +37,10 @@ def main(a):
     co=torch.zeros(J,dtype=torch.long)
     co[torch.as_tensor(D["line_item"],dtype=torch.long)]=torch.as_tensor(D["line_cat"],dtype=torch.long)
     with torch.no_grad(): m.cat_of.copy_(co)
-    from ragged import smolyak_grid
-    m.quad=smolyak_grid(a.Kz,a.quad_q)
+    from ragged import set_quad
+    _q=blob.get("quad") or {} if isinstance(blob,dict) else {}
+    log("log Z: "+set_quad(m, _q.get("quad_q",a.quad_q), _q.get("qmc_n",0),
+                           _q.get("qmc_seed",0), Kz=a.Kz, probe=_q.get("probe", 8), steps=_q.get("steps", 4), chunk=_q.get("chunk", 0)))
     m.double().eval()
     it=pd.read_parquet("../../basket_input/items.parquet").set_index("item_id")
     lp=D["line_ptr"]; li=D["line_item"]

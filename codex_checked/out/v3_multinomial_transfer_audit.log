@@ -1,0 +1,13 @@
+[dat] loaded cache /Users/ajit/Projects/nf_dunnhumby/scripts/v3/../../basket_input/v3_index_affinity.npz
+[fea] price deviation panel (5455, 712), |mean| 0.1233
+[fea] store price deviations: 244,880 cells (0.75% of the grid)
+[fea] recency: 1,358,594 purchase events over 758 sub-commodities; median gap 35.0 days
+[fea] promotion cells: 6,519,807; display rate 0.401, mailer 0.739
+[ev] log Z: size-stratified multimode scrambled-Sobol, Kz=32, 32 one-mode/64 two-mode nodes in 4 scrambles, seed 0, 2 vectorised size-mode steps, second mode within 8 nats and separation 1, node chunk 32
+[transfer] scoring main
+[transfer] scoring transferred_nonprice
+[transfer] scoring multinomial
+[transfer] main                   joint  -49.7013  size  -2.9184  composition  -46.7829
+[transfer] transferred_nonprice   joint  -53.4416  size  -8.0813  composition  -45.3603
+[transfer] multinomial            joint  -48.2691  size  -3.0070  composition  -45.2621
+[transfer] wrote /Users/ajit/Projects/nf_dunnhumby/out/v3_multinomial_transfer_audit.json

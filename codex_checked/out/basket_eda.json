@@ -1,0 +1,110 @@
+{
+  "raw": {
+    "lines": 2553406,
+    "households": 2500,
+    "products": 91856,
+    "baskets": 253183,
+    "days": 711,
+    "commodities": 307,
+    "sub_commodities": 2373
+  },
+  "unit_demand": {
+    "baskets_with_multiple_items_in_one_category": 0.5611553698313078,
+    "baskets_spanning_2plus_categories": 0.8148256399521295,
+    "baskets_spanning_5plus_categories": 0.48375680831651413,
+    "mean_distinct_items_per_basket": 10.085218991796447,
+    "median_distinct_items_per_basket": 5.0,
+    "mean_units_per_basket": 13.219307773428707,
+    "categories_over_15pct": 132,
+    "categories_total": 307,
+    "median_category_multi_share": 0.1306875631951466,
+    "pooled_multi_share": 0.2314304277019919,
+    "trip_weighted_median_multi_share": 0.21493242744258179
+  },
+  "cooccurrence": {
+    "stratum": "baskets with 5-20 distinct sub-commodities",
+    "baskets": 83928,
+    "pairs_measured": 29117,
+    "median_lift": 1.1255686471671034,
+    "share_lift_above_1_5": 0.23625373493148333,
+    "share_lift_above_2": 0.10962667857265515,
+    "share_lift_below_0_67": 0.04526565236803242,
+    "p99_lift": 6.471118069237585
+  },
+  "within_sub_copurchase": {
+    "observed_share_of_pairs_same_sub": 0.03228572674613757,
+    "expected_if_random": 0.004095985522780814,
+    "ratio": 7.882285366140259
+  },
+  "state": {
+    "repeat_purchase_events": 1082615,
+    "median_gap_days": 27.0,
+    "p25_gap_days": 10.0,
+    "p75_gap_days": 71.0,
+    "hazard_by_days_since": {
+      "0-3": 0.10932953690255348,
+      "3-7": 0.14099291920389612,
+      "7-14": 0.14853923522085205,
+      "14-21": 0.12473635587163799,
+      "21-28": 0.10468441364328865,
+      "28-42": 0.09010266688167584,
+      "42-56": 0.07047008686832333,
+      "56-84": 0.05928399653389674,
+      "84-+": 0.034546841698694264
+    },
+    "hazard_ratio_max_over_min": 4.299647317006876
+  },
+  "catalogue": [
+    {
+      "min_lines": 20,
+      "items": 18597,
+      "share_of_lines": 0.8942205039073301,
+      "sub_commodities": 1366,
+      "commodities": 271,
+      "sub_commodities_with_2plus_items": 1098,
+      "items_in_testable_subs": 18329
+    },
+    {
+      "min_lines": 50,
+      "items": 10333,
+      "share_of_lines": 0.7918811187880032,
+      "sub_commodities": 1033,
+      "commodities": 229,
+      "sub_commodities_with_2plus_items": 802,
+      "items_in_testable_subs": 10102
+    },
+    {
+      "min_lines": 100,
+      "items": 5455,
+      "share_of_lines": 0.6574516547701384,
+      "sub_commodities": 758,
+      "commodities": 188,
+      "sub_commodities_with_2plus_items": 545,
+      "items_in_testable_subs": 5242
+    },
+    {
+      "min_lines": 200,
+      "items": 2259,
+      "share_of_lines": 0.4846416903539821,
+      "sub_commodities": 512,
+      "commodities": 153,
+      "sub_commodities_with_2plus_items": 309,
+      "items_in_testable_subs": 2056
+    },
+    {
+      "min_lines": 500,
+      "items": 589,
+      "share_of_lines": 0.2901332573041655,
+      "sub_commodities": 247,
+      "commodities": 103,
+      "sub_commodities_with_2plus_items": 121,
+      "items_in_testable_subs": 463
+    }
+  ],
+  "price_variation": {
+    "items": 5455,
+    "share_item_weeks_price_moves": 0.30504544086130475,
+    "median_within_item_cv": 0.1358765348994361,
+    "median_promo_depth_when_on": 0.2564102564102564
+  }
+}

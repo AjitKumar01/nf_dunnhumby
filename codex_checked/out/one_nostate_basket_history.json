@@ -1,0 +1,87 @@
+{
+  "config": {
+    "label": "one_nostate",
+    "K": 64,
+    "Kp": 8,
+    "n_neg": 20,
+    "batch_baskets": 256,
+    "iters": 12000,
+    "eval_every": 2000,
+    "lr": 0.005,
+    "l2": 0.01,
+    "lr_decay": true,
+    "final_lr_frac": 0.05,
+    "l2_price": 0.0001,
+    "no_context": false,
+    "tie_context": true,
+    "no_state": true,
+    "no_price": false,
+    "no_taste": false,
+    "Kt": 8,
+    "no_season": false,
+    "placebo_price": "none",
+    "seed": 0,
+    "device": "cpu"
+  },
+  "history": [
+    {
+      "iter": 2000,
+      "train_loss": 2.227599859237671,
+      "val_loglik": -2.2279229722979386,
+      "val_top1": 0.34243535314550366,
+      "knn_purity": 0.3082666666666667,
+      "median_price_coef": 0.5892118215560913,
+      "secs": 34.10573196411133
+    },
+    {
+      "iter": 4000,
+      "train_loss": 2.067711591720581,
+      "val_loglik": -2.208074865478092,
+      "val_top1": 0.3504022716516801,
+      "knn_purity": 0.33286666666666664,
+      "median_price_coef": 0.772449254989624,
+      "secs": 68.25481700897217
+    },
+    {
+      "iter": 6000,
+      "train_loss": 1.9958833456039429,
+      "val_loglik": -2.169927135238516,
+      "val_top1": 0.36043091873921107,
+      "knn_purity": 0.3476,
+      "median_price_coef": 0.8239060044288635,
+      "secs": 102.35473799705505
+    },
+    {
+      "iter": 8000,
+      "train_loss": 1.9043104648590088,
+      "val_loglik": -2.1878963601983425,
+      "val_top1": 0.3587092230367833,
+      "knn_purity": 0.3542666666666667,
+      "median_price_coef": 0.8409826755523682,
+      "secs": 136.52185606956482
+    },
+    {
+      "iter": 10000,
+      "train_loss": 1.9560490846633911,
+      "val_loglik": -2.180459407384443,
+      "val_top1": 0.3591671669141575,
+      "knn_purity": 0.35946666666666666,
+      "median_price_coef": 0.8451641201972961,
+      "secs": 170.55824422836304
+    },
+    {
+      "iter": 12000,
+      "train_loss": 1.9567334651947021,
+      "val_loglik": -2.16581611866378,
+      "val_top1": 0.36414842158859473,
+      "knn_purity": 0.36046666666666666,
+      "median_price_coef": 0.846522331237793,
+      "secs": 204.63778114318848
+    }
+  ],
+  "n_parameters": 591023,
+  "best_val_loglik": -2.16581611866378,
+  "best_iter": 12000,
+  "test_loglik": -2.253797435080821,
+  "test_top1": 0.34120362428457807
+}

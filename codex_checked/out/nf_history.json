@@ -1,0 +1,362 @@
+{
+  "config": {
+    "label": "nf",
+    "indir": "",
+    "device": "cpu",
+    "K": 40,
+    "Kp": 20,
+    "no_user_obs": false,
+    "item_obs": false,
+    "lr": 0.005,
+    "iters": 3000,
+    "batch": 5000,
+    "eval_every": 100,
+    "K2": 40,
+    "Kiv": 40,
+    "Ktime": 10,
+    "cat_user_obs": false,
+    "lr2": 0.01,
+    "iters2": 3000,
+    "batch2": 2000,
+    "eval_every2": 250,
+    "prior_var": 1.0,
+    "homogeneous": false,
+    "extras": [],
+    "seed": 0,
+    "stage1_only": false,
+    "no_pool": false,
+    "price_prior_var": 0.25,
+    "no_center_iv": false,
+    "price_prior_mean": 0.5,
+    "no_scale_prior": false,
+    "intercept_var": 10.0
+  },
+  "stage1": [
+    {
+      "iter": 100,
+      "elbo_per_obs": -3.60823655128479,
+      "val_loglik": -1.7139333486557007,
+      "val_loglik_price_weeks": -1.6088628768920898,
+      "secs": 0.9523277282714844,
+      "mean_price_coef": 0.6541761755943298
+    },
+    {
+      "iter": 200,
+      "elbo_per_obs": -2.65950870513916,
+      "val_loglik": -1.648075819015503,
+      "val_loglik_price_weeks": -1.5800626277923584,
+      "secs": 1.888887882232666,
+      "mean_price_coef": 0.6451175212860107
+    },
+    {
+      "iter": 300,
+      "elbo_per_obs": -2.3371849060058594,
+      "val_loglik": -1.6326111555099487,
+      "val_loglik_price_weeks": -1.559247374534607,
+      "secs": 2.8207337856292725,
+      "mean_price_coef": 0.6497408747673035
+    },
+    {
+      "iter": 400,
+      "elbo_per_obs": -2.217177152633667,
+      "val_loglik": -1.636619210243225,
+      "val_loglik_price_weeks": -1.5540868043899536,
+      "secs": 3.7515928745269775,
+      "mean_price_coef": 0.6565753221511841
+    },
+    {
+      "iter": 500,
+      "elbo_per_obs": -2.254317283630371,
+      "val_loglik": -1.6357024908065796,
+      "val_loglik_price_weeks": -1.5534015893936157,
+      "secs": 4.681717872619629,
+      "mean_price_coef": 0.6528468132019043
+    },
+    {
+      "iter": 600,
+      "elbo_per_obs": -2.1902554035186768,
+      "val_loglik": -1.6376898288726807,
+      "val_loglik_price_weeks": -1.5511928796768188,
+      "secs": 5.612494945526123,
+      "mean_price_coef": 0.6497354507446289
+    },
+    {
+      "iter": 700,
+      "elbo_per_obs": -2.1661744117736816,
+      "val_loglik": -1.6483951807022095,
+      "val_loglik_price_weeks": -1.5540059804916382,
+      "secs": 6.543442726135254,
+      "mean_price_coef": 0.6470144987106323
+    },
+    {
+      "iter": 800,
+      "elbo_per_obs": -2.1521918773651123,
+      "val_loglik": -1.6434345245361328,
+      "val_loglik_price_weeks": -1.5599511861801147,
+      "secs": 7.472745895385742,
+      "mean_price_coef": 0.6387405395507812
+    },
+    {
+      "iter": 900,
+      "elbo_per_obs": -2.1519887447357178,
+      "val_loglik": -1.6469892263412476,
+      "val_loglik_price_weeks": -1.5561740398406982,
+      "secs": 8.402147054672241,
+      "mean_price_coef": 0.6381707191467285
+    },
+    {
+      "iter": 1000,
+      "elbo_per_obs": -2.145458459854126,
+      "val_loglik": -1.6417524814605713,
+      "val_loglik_price_weeks": -1.5553635358810425,
+      "secs": 9.330672025680542,
+      "mean_price_coef": 0.6342236399650574
+    },
+    {
+      "iter": 1100,
+      "elbo_per_obs": -2.1622610092163086,
+      "val_loglik": -1.6511393785476685,
+      "val_loglik_price_weeks": -1.5563024282455444,
+      "secs": 10.259015798568726,
+      "mean_price_coef": 0.6376639604568481
+    },
+    {
+      "iter": 1200,
+      "elbo_per_obs": -2.175758123397827,
+      "val_loglik": -1.6513617038726807,
+      "val_loglik_price_weeks": -1.5575942993164062,
+      "secs": 11.187941074371338,
+      "mean_price_coef": 0.6301617622375488
+    },
+    {
+      "iter": 1300,
+      "elbo_per_obs": -2.0995116233825684,
+      "val_loglik": -1.6544402837753296,
+      "val_loglik_price_weeks": -1.562644124031067,
+      "secs": 12.116820812225342,
+      "mean_price_coef": 0.6306233406066895
+    },
+    {
+      "iter": 1400,
+      "elbo_per_obs": -2.124657154083252,
+      "val_loglik": -1.6602383852005005,
+      "val_loglik_price_weeks": -1.564834713935852,
+      "secs": 13.047756910324097,
+      "mean_price_coef": 0.6289994120597839
+    },
+    {
+      "iter": 1500,
+      "elbo_per_obs": -2.138929605484009,
+      "val_loglik": -1.6633081436157227,
+      "val_loglik_price_weeks": -1.5692267417907715,
+      "secs": 13.97623085975647,
+      "mean_price_coef": 0.6308084726333618
+    },
+    {
+      "iter": 1600,
+      "elbo_per_obs": -2.153679132461548,
+      "val_loglik": -1.6616151332855225,
+      "val_loglik_price_weeks": -1.5655388832092285,
+      "secs": 14.905060052871704,
+      "mean_price_coef": 0.6249138712882996
+    },
+    {
+      "iter": 1700,
+      "elbo_per_obs": -2.1148452758789062,
+      "val_loglik": -1.6650911569595337,
+      "val_loglik_price_weeks": -1.571463704109192,
+      "secs": 15.832058906555176,
+      "mean_price_coef": 0.6279088258743286
+    },
+    {
+      "iter": 1800,
+      "elbo_per_obs": -2.1543445587158203,
+      "val_loglik": -1.6653773784637451,
+      "val_loglik_price_weeks": -1.5701675415039062,
+      "secs": 16.76180386543274,
+      "mean_price_coef": 0.6324244141578674
+    },
+    {
+      "iter": 1900,
+      "elbo_per_obs": -2.1159706115722656,
+      "val_loglik": -1.668521523475647,
+      "val_loglik_price_weeks": -1.567726969718933,
+      "secs": 17.69023895263672,
+      "mean_price_coef": 0.628787100315094
+    },
+    {
+      "iter": 2000,
+      "elbo_per_obs": -2.1147212982177734,
+      "val_loglik": -1.6648740768432617,
+      "val_loglik_price_weeks": -1.5659410953521729,
+      "secs": 18.617135047912598,
+      "mean_price_coef": 0.6331272125244141
+    },
+    {
+      "iter": 2100,
+      "elbo_per_obs": -2.0985355377197266,
+      "val_loglik": -1.6631410121917725,
+      "val_loglik_price_weeks": -1.5659688711166382,
+      "secs": 19.547910690307617,
+      "mean_price_coef": 0.6314762234687805
+    },
+    {
+      "iter": 2200,
+      "elbo_per_obs": -2.1471850872039795,
+      "val_loglik": -1.6664113998413086,
+      "val_loglik_price_weeks": -1.5723527669906616,
+      "secs": 20.477099895477295,
+      "mean_price_coef": 0.6349478960037231
+    },
+    {
+      "iter": 2300,
+      "elbo_per_obs": -2.1257762908935547,
+      "val_loglik": -1.6655436754226685,
+      "val_loglik_price_weeks": -1.566239833831787,
+      "secs": 21.405936002731323,
+      "mean_price_coef": 0.6349409818649292
+    },
+    {
+      "iter": 2400,
+      "elbo_per_obs": -2.0931169986724854,
+      "val_loglik": -1.6676251888275146,
+      "val_loglik_price_weeks": -1.5760637521743774,
+      "secs": 22.33355212211609,
+      "mean_price_coef": 0.6330965757369995
+    },
+    {
+      "iter": 2500,
+      "elbo_per_obs": -2.081211805343628,
+      "val_loglik": -1.6718331575393677,
+      "val_loglik_price_weeks": -1.573632001876831,
+      "secs": 23.26433777809143,
+      "mean_price_coef": 0.6346009373664856
+    },
+    {
+      "iter": 2600,
+      "elbo_per_obs": -2.12237286567688,
+      "val_loglik": -1.672957420349121,
+      "val_loglik_price_weeks": -1.5754497051239014,
+      "secs": 24.192816019058228,
+      "mean_price_coef": 0.6305948495864868
+    },
+    {
+      "iter": 2700,
+      "elbo_per_obs": -2.1453137397766113,
+      "val_loglik": -1.672987937927246,
+      "val_loglik_price_weeks": -1.5797315835952759,
+      "secs": 25.121263027191162,
+      "mean_price_coef": 0.6341739296913147
+    },
+    {
+      "iter": 2800,
+      "elbo_per_obs": -2.102437973022461,
+      "val_loglik": -1.6717145442962646,
+      "val_loglik_price_weeks": -1.5759609937667847,
+      "secs": 26.050253868103027,
+      "mean_price_coef": 0.6318551898002625
+    },
+    {
+      "iter": 2900,
+      "elbo_per_obs": -2.099311590194702,
+      "val_loglik": -1.668181300163269,
+      "val_loglik_price_weeks": -1.5695619583129883,
+      "secs": 26.978636980056763,
+      "mean_price_coef": 0.6340039372444153
+    },
+    {
+      "iter": 3000,
+      "elbo_per_obs": -2.1024158000946045,
+      "val_loglik": -1.667850136756897,
+      "val_loglik_price_weeks": -1.565940499305725,
+      "secs": 27.907299041748047,
+      "mean_price_coef": 0.6345944404602051
+    }
+  ],
+  "stage2": [
+    {
+      "iter": 250,
+      "elbo_per_cell": -0.17393244802951813,
+      "val_loglik": -0.1483423113822937,
+      "secs": 2.138123035430908,
+      "mean_nesting_coef": 1.028079867362976
+    },
+    {
+      "iter": 500,
+      "elbo_per_cell": -0.16515736281871796,
+      "val_loglik": -0.1441054791212082,
+      "secs": 4.261329889297485,
+      "mean_nesting_coef": 1.0414259433746338
+    },
+    {
+      "iter": 750,
+      "elbo_per_cell": -0.16495797038078308,
+      "val_loglik": -0.14318913221359253,
+      "secs": 6.394294023513794,
+      "mean_nesting_coef": 1.0347524881362915
+    },
+    {
+      "iter": 1000,
+      "elbo_per_cell": -0.16160576045513153,
+      "val_loglik": -0.1433136910200119,
+      "secs": 8.501507759094238,
+      "mean_nesting_coef": 1.0266432762145996
+    },
+    {
+      "iter": 1250,
+      "elbo_per_cell": -0.15616659820079803,
+      "val_loglik": -0.1426296830177307,
+      "secs": 10.602099895477295,
+      "mean_nesting_coef": 1.022316336631775
+    },
+    {
+      "iter": 1500,
+      "elbo_per_cell": -0.15874947607517242,
+      "val_loglik": -0.14244094491004944,
+      "secs": 12.719406843185425,
+      "mean_nesting_coef": 1.0048296451568604
+    },
+    {
+      "iter": 1750,
+      "elbo_per_cell": -0.15751086175441742,
+      "val_loglik": -0.14252634346485138,
+      "secs": 14.841722965240479,
+      "mean_nesting_coef": 0.9952472448348999
+    },
+    {
+      "iter": 2000,
+      "elbo_per_cell": -0.15670791268348694,
+      "val_loglik": -0.14253254234790802,
+      "secs": 16.79023003578186,
+      "mean_nesting_coef": 1.0275827646255493
+    },
+    {
+      "iter": 2250,
+      "elbo_per_cell": -0.15717440843582153,
+      "val_loglik": -0.14260290563106537,
+      "secs": 18.398452043533325,
+      "mean_nesting_coef": 1.0193195343017578
+    },
+    {
+      "iter": 2500,
+      "elbo_per_cell": -0.1564558893442154,
+      "val_loglik": -0.1425328403711319,
+      "secs": 20.02340292930603,
+      "mean_nesting_coef": 1.020163893699646
+    },
+    {
+      "iter": 2750,
+      "elbo_per_cell": -0.15904925763607025,
+      "val_loglik": -0.1423858404159546,
+      "secs": 21.660558938980103,
+      "mean_nesting_coef": 0.9995641708374023
+    },
+    {
+      "iter": 3000,
+      "elbo_per_cell": -0.1565408557653427,
+      "val_loglik": -0.14263182878494263,
+      "secs": 23.28678297996521,
+      "mean_nesting_coef": 0.9908656477928162
+    }
+  ]
+}
