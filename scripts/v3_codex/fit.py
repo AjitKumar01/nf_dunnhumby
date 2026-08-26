@@ -369,6 +369,15 @@ def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes,
     """
     blob = dict(
         format=2,
+        # WHICH PARAMETERISATION the stored gamma/beta are in.  Under --price-soft they
+        # are the price coefficients themselves; otherwise they are softplus pre-images.
+        # The tensors look identical, so a loader that guesses wrong reads softplus(0.0207)
+        # = 0.7036 as the coefficient -- 34x too large.  That is not a small error: it
+        # dropped run409's MRR from 0.0705 to 0.0044 in eval_mrr_cutoffs.py while the
+        # training log, which had the flag, reported the model working normally.  Recorded
+        # for the same reason the data partition is.
+        model_flags=dict(price_soft=int(bool(getattr(m, "price_soft", False))),
+                         poly_degree=int(getattr(m, "poly_degree", 0) or 0)),
         # How log Z was integrated.  Carried in the checkpoint so an eval cannot score
         # this model with a different normaliser than the one it was trained against --
         # recommend_pi.py hardcoded smolyak_grid(4, 8) regardless of the checkpoint.
@@ -423,12 +432,17 @@ def load_ckpt(path, m):
     blob = torch.load(path, map_location="cpu", weights_only=False)
     if isinstance(blob, dict) and blob.get("format") == 2:
         missing, _ = m.load_state_dict(blob["model"], strict=False)
+        # Tells the caller whether these weights are ALREADY unconstrained, so the warm
+        # start is not applied a second time (softplus(softplus(x)) is not a warm start).
+        blob["_ckpt_price_soft"] = bool(
+            (blob.get("model_flags") or {}).get("price_soft", 0))
         return blob, [k for k in missing if k != "cat_of"]
     missing, _ = m.load_state_dict(blob, strict=False)
     return None, [k for k in missing if k != "cat_of"]
 
 
-def optimizer_parameter_groups(model, lr, lam_lr_scale=1.0):
+def optimizer_parameter_groups(model, lr, lam_lr_scale=1.0, price_lr_scale=1.0,
+                               kappa_lr_scale=1.0):
     """Build Adam groups with an independently controlled product-intercept rate.
 
     ``lam`` has a qualitatively different information set from the other parameters: its
@@ -440,20 +454,51 @@ def optimizer_parameter_groups(model, lr, lam_lr_scale=1.0):
 
     The group metadata is saved in Adam's state dict.  ``--fresh-sched`` uses ``lr_scale``
     when it resets a continuation, so it cannot silently restore lam to the main rate.
+
+    ``price_lr_scale`` exists for the same reason, one level down.  Under the softplus
+    constraint the trained parameter is the PRE-image: gamma = -3.9186, and the quantity
+    that enters the utility is softplus(gamma) = 0.0195.  An Adam step of lr moves the raw
+    parameter by ~lr and the effective coefficient by only lr * sigma(gamma) = 0.0195 lr.
+    Dropping the softplus makes gamma itself the coefficient, so the SAME lr now moves the
+    coefficient 51x further -- 10% of its own value per iteration.  Adam normalises the
+    gradient, so this is not visible as a gradient change; run407 diverged in 500 steps
+    with E[n] pinned at n_max and the price sign flipped.  Rescaling this group restores
+    the effective step while keeping what the reparameterisation was for: no positivity
+    floor, and no per-product freezing as sigma -> 0.
     """
-    if lam_lr_scale < 0:
-        raise ValueError("lam_lr_scale must be non-negative")
+    if lam_lr_scale < 0 or price_lr_scale < 0:
+        raise ValueError("lr scales must be non-negative")
     named = [(name, value) for name, value in model.named_parameters()
              if value.requires_grad]
-    lam = [value for name, value in named if name == "lam"]
-    other = [value for name, value in named if name != "lam"]
-    if lam_lr_scale == 1.0 or not lam:
+    price = [v for n, v in named if n in ("gamma", "beta")] if price_lr_scale != 1.0 else []
+    # price_kappa is the SAME failure one level up, with the sign reversed.  It splits the
+    # price response into an aggregate part (governed by gamma.beta) and an idiosyncratic
+    # part scaled by kappa, and its natural scale is ~40 -- so lr = 0.002 moves it 0.005%
+    # per step.  Measured: it travelled 10.12 -> 19.59 over 25,000 iterations and would
+    # need ~50,000 more to reach its own likelihood optimum at 40-60, where the fitted
+    # own-price elasticity (-0.71 to -1.00) finally brackets the -0.7725 the data shows.
+    # Left at the structural rate the block is not converged, it is merely slow.
+    kappa = [v for n, v in named if n == "price_kappa"] if kappa_lr_scale != 1.0 else []
+    _price_ids = {id(v) for v in price} | {id(v) for v in kappa}
+    lam = [v for n, v in named if n == "lam" and id(v) not in _price_ids]
+    other = [v for n, v in named if n != "lam" and id(v) not in _price_ids]
+    if lam_lr_scale == 1.0 and not price and not kappa:
         return [dict(params=other + lam, lr=lr, lr_scale=1.0, group_name="main")]
     groups = []
+    if lam_lr_scale == 1.0:
+        other = other + lam
+        lam = []
     if other:
         groups.append(dict(params=other, lr=lr, lr_scale=1.0, group_name="main"))
-    groups.append(dict(params=lam, lr=lr * lam_lr_scale,
-                       lr_scale=lam_lr_scale, group_name="lam"))
+    if lam:
+        groups.append(dict(params=lam, lr=lr * lam_lr_scale,
+                           lr_scale=lam_lr_scale, group_name="lam"))
+    if price:
+        groups.append(dict(params=price, lr=lr * price_lr_scale,
+                           lr_scale=price_lr_scale, group_name="price"))
+    if kappa:
+        groups.append(dict(params=kappa, lr=lr * kappa_lr_scale,
+                           lr_scale=kappa_lr_scale, group_name="kappa"))
     return groups
 
 
@@ -744,14 +789,18 @@ def main(a):
             f"(zero gradient under this objective; costs ~0.008 nats). "
             f"Evaluation still uses the exact normaliser.")
     if a.price_soft:
-        # warm start so the model is IDENTICAL at step 0: gamma' = softplus(gamma) etc.
-        with torch.no_grad():
-            m.gamma.copy_(torch.nn.functional.softplus(m.gamma))
-            m.beta.copy_(torch.nn.functional.softplus(m.beta))
+        # The reparameterisation is gamma' = softplus(gamma), so the warm start is only
+        # identity if it is applied to the weights the run will actually TRAIN.  Doing it
+        # here would convert the FRESH init and then have --resume/--warm-start overwrite
+        # gamma with the checkpoint's raw pre-softplus values while price_soft stayed set:
+        # price_g() would return raw gamma, which is below -3 for 100% of products, i.e. a
+        # large negative price coefficient instead of ~0.01.  That is run406's initial eval
+        # of -270,161.  The conversion is deferred to just before the optimiser is
+        # built, after every checkpoint load path has run.
         m.price_soft = True
         log(f"  price: UNCONSTRAINED bilinear + hinge penalty (weight {a.price_hinge_w}). "
             f"softplus saturated 100% of gamma below -3, block gradient 5.6e-4 vs 0.05-2.2 "
-            f"elsewhere; warm-started so step 0 is identical")
+            f"elsewhere; warm start applied after checkpoint load so step 0 is identical")
     if a.poly_degree != 0:
         # The degree cap must be DERIVED from the data, not read off one dataset.  32 happens
         # to be safe here because the largest single-affinity-row count over all 198,690 trips
@@ -915,6 +964,36 @@ def main(a):
         else:
             log(f"resumed from {os.path.basename(a.resume)} at iteration "
                 f"{resume_blob['iter']} -- optimiser, schedule and RNG restored")
+    if a.kappa_init > 0 and hasattr(m, "price_kappa"):
+        # kappa is SLOW: measured, it moves 1.41 units per 1,000 iterations even at 20x the
+        # structural rate, because its gradient is small and sign-noisy over 24-trip
+        # minibatches, so Adam's averaging cancels most of it.  Where it STARTS therefore
+        # decides where it ends.  It is also identified from the data without the model:
+        # the item-week panel with item fixed effects gives an own-price elasticity of
+        # -0.7725 (controlling for display and mailer, which the model carries separately),
+        # and a sweep on the fitted model puts the likelihood's OWN optimum at kappa 40-60,
+        # spanning elasticity -0.71 to -1.00.  Data and likelihood agree, so start at the
+        # value they agree on instead of waiting ~13,500 iterations to walk there.
+        with torch.no_grad():
+            _k0 = float(torch.nn.functional.softplus(m.price_kappa))
+            m.price_kappa.fill_(float(np.log(np.expm1(a.kappa_init))))
+        log(f"  kappa initialised {_k0:.2f} -> {a.kappa_init:.2f} "
+            f"(data-implied own-price elasticity -0.7725; likelihood optimum 40-60)")
+    if a.price_soft and resume_blob is not None and resume_blob.get("_ckpt_price_soft"):
+        log("  price warm start SKIPPED: checkpoint already stores unconstrained "
+            "gamma/beta (applying softplus again would not be a warm start)")
+    elif a.price_soft:
+        # Now that gamma/beta hold the weights this run starts from -- fresh init, warm
+        # start, or resume -- map them through the constraint so the model is unchanged at
+        # step 0 while the gradient is free.  Verified |dloss| = 0.00e+00 on run404's best.
+        with torch.no_grad():
+            _g0, _b0 = m.gamma.detach().clone(), m.beta.detach().clone()
+            m.gamma.copy_(torch.nn.functional.softplus(m.gamma))
+            m.beta.copy_(torch.nn.functional.softplus(m.beta))
+        log(f"  price warm start: gamma {_g0.mean():+.4f} -> {m.gamma.mean():+.4f}, "
+            f"beta {_b0.mean():+.4f} -> {m.beta.mean():+.4f} "
+            f"(softplus applied to the loaded weights, identity in the likelihood)")
+
     if a.multinomial_utility_start:
         try:
             transfer_multinomial_nonprice(m, a.multinomial_utility_start)
@@ -998,8 +1077,20 @@ def main(a):
             _parameter.requires_grad_(_name == "rho_0_free")
         log("  size stage: training rho_0 only; composition and units fixed exactly")
     opt = torch.optim.Adam(
-        optimizer_parameter_groups(m, a.lr, a.lam_lr_scale),
+        optimizer_parameter_groups(m, a.lr, a.lam_lr_scale,
+                                   a.price_lr_scale if a.price_soft else 1.0,
+                                   a.kappa_lr_scale),
         lr=a.lr, weight_decay=a.wd)
+    if a.price_soft and a.price_lr_scale != 1.0:
+        log(f"  separate price learning rate: {a.lr * a.price_lr_scale:g} "
+            f"({a.price_lr_scale:g}x structural rate {a.lr:g}) -- gamma/beta are now the "
+            f"coefficients themselves, not softplus pre-images, so an unscaled step is "
+            f"51x the constrained one and diverges")
+    if a.kappa_lr_scale != 1.0 and hasattr(m, "price_kappa"):
+        log(f"  separate kappa learning rate: {a.lr * a.kappa_lr_scale:g} "
+            f"({a.kappa_lr_scale:g}x structural rate {a.lr:g}) -- kappa's natural scale is "
+            f"~40, so the structural rate moves it 0.005% per step and it cannot reach "
+            f"its optimum inside a run")
     if a.lam_lr_scale != 1.0 and m.lam.requires_grad:
         log(f"  separate lam learning rate: {a.lr * a.lam_lr_scale:g} "
             f"({a.lam_lr_scale:g}x structural rate {a.lr:g})")
@@ -1037,6 +1128,15 @@ def main(a):
     if resume_blob is not None:
         try:
             opt.load_state_dict(resume_blob["opt"])
+            if a.price_soft:
+                # gamma/beta are no longer the same coordinates they were when these
+                # moments were accumulated (the gradient is 43x larger unconstrained), so
+                # the carried exp_avg/exp_avg_sq are about a function that no longer
+                # exists.  Clear just those two; everything else resumes untouched.
+                for _p in (m.gamma, m.beta):
+                    opt.state.pop(_p, None)
+                log("  price warm start: cleared Adam moments for gamma/beta "
+                    "(reparameterised; carried moments describe the old coordinates)")
         except ValueError:
             # The parameter set changed since the checkpoint (see _NEW_OK above), so Adam's
             # saved moments no longer line up.  Weights ARE restored; only the moment
@@ -1104,6 +1204,35 @@ def main(a):
 
     _initial_eval = None
     _initial_rec = None
+    # The mask MUST be applied before the initial evaluation.  It used to sit ~80 lines
+    # later, so iteration zero was scored with phi on all 5,455 products: sparse_prepare
+    # then treats ~127,000 slots as z-dependent instead of 720, and the eval goes from
+    # 0.47 s per 48 trips to 44.63 s -- 95x, about six minutes of apparent "startup stall"
+    # for a number that is wrong anyway, since it describes an unmasked model.
+    phi_mask = None
+    if a.phi_init_file:
+        _pi = np.load(a.phi_init_file)
+        if _pi.shape != tuple(m.phi.shape):
+            raise SystemExit(f"--phi-init-file has shape {_pi.shape}, model phi is "
+                             f"{tuple(m.phi.shape)} -- wrong mask or rank")
+        with torch.no_grad():
+            m.phi.copy_(torch.as_tensor(_pi, dtype=m.phi.dtype))
+        _n = m.phi.norm(dim=1)
+        log(f"phi initialised from {os.path.basename(a.phi_init_file)}: "
+            f"{int((_n > 0).sum())} active rows, |phi_j| median "
+            f"{float(_n[_n > 0].median()):.3f} max {float(_n.max()):.3f} "
+            f"(spectral placement, not the 0.03 saddle seed)")
+    if a.phi_mask:
+        _mk = np.load(a.phi_mask)
+        if _mk.shape[0] != m.phi.shape[0]:
+            raise SystemExit(f"mask covers {_mk.shape[0]} products, model has "
+                             f"{m.phi.shape[0]} -- wrong partition or catalogue")
+        phi_mask = torch.as_tensor(_mk, dtype=m.phi.dtype).unsqueeze(1)
+        with torch.no_grad():
+            m.phi.mul_(phi_mask)          # applied at init too, not only after each step
+        log(f"phi restricted to {int(_mk.sum())} of {_mk.shape[0]} products "
+            f"({100.0*_mk.sum()/_mk.shape[0]:.2f}%) from {os.path.basename(a.phi_mask)}")
+
     if a.eval_initial:
         # Baseline scripts historically reported only post-training values while fit.py's
         # first visible point was iteration 100 or 200.  Log iteration zero explicitly on
@@ -1187,17 +1316,6 @@ def main(a):
         _bt = dict(weight=_tw, z=(_tt - _tm) / _ts)
         log(f"  beta calibration: {int((_tw > 0).sum()):,} products with a measured price "
             f"response, weight {a.beta_cal_w}")
-    phi_mask = None
-    if a.phi_mask:
-        _mk = np.load(a.phi_mask)
-        if _mk.shape[0] != m.phi.shape[0]:
-            raise SystemExit(f"mask covers {_mk.shape[0]} products, model has "
-                             f"{m.phi.shape[0]} -- wrong partition or catalogue")
-        phi_mask = torch.as_tensor(_mk, dtype=m.phi.dtype).unsqueeze(1)
-        with torch.no_grad():
-            m.phi.mul_(phi_mask)          # applied at init too, not only after each step
-        log(f"phi restricted to {int(_mk.sum())} of {_mk.shape[0]} products "
-            f"({100.0*_mk.sum()/_mk.shape[0]:.2f}%) from {os.path.basename(a.phi_mask)}")
     _pn_cache = [None]
     for it in range(it0 + 1, a.iters + 1):
         if a.qmc_n > 0 and a.qmc_refresh_every > 0:
@@ -1497,8 +1615,8 @@ def main(a):
         if pn is None:
             elast = float("nan")
         else:
-            gb = (softplus(m.gamma[hh][ix.item_trip])
-                  * softplus(m.beta[ix.item])).sum(-1).mean()
+            gb = (m.price_g()[hh][ix.item_trip]
+                  * m.price_b()[ix.item]).sum(-1).mean()
             nax = torch.arange(1, pn.shape[1] + 1, dtype=pn.dtype)
             e_b = (pn * nax).sum(1)
             v_b = (pn * nax ** 2).sum(1) - e_b ** 2
@@ -1523,7 +1641,7 @@ def main(a):
         # Toward the MEAN, not toward zero: the average price sensitivity is identified by
         # the elasticity target and must not be shrunk, only its dispersion across products.
         if a.pool_beta > 0:
-            _g = softplus(m.beta)
+            _g = m.price_b()
             loss = loss + a.pool_beta * ((_g - _g.mean(0, keepdim=True)) ** 2).mean()
         # PARTIAL POOLING on the contextual item embeddings, for the same reason.
         #
@@ -1556,7 +1674,7 @@ def main(a):
         # get zero weight.  The empirical slopes are confounded by promotions and
         # seasonality, so this is a weak pull toward a pattern, not a fit to a truth.
         if a.beta_cal_w > 0 and _bt is not None:
-            _bj = (softplus(m.gamma).mean(0) * softplus(m.beta)).sum(-1)      # [J]
+            _bj = (m.price_g().mean(0) * m.price_b()).sum(-1)      # [J]
             _cw = _bt["weight"]
             _cs = _cw.sum().clamp_min(1e-9)
             _bm = (_cw * _bj).sum() / _cs
@@ -2257,6 +2375,59 @@ def main(a):
                 f"drop {n_drop}  redo {n_redo}  "
                 f"bang {n_bang}  "
                 f"{(time.time()-t0)/60:.1f} min")
+            # MACHINE-READABLE eval record, one JSON object per line.
+            #
+            # The human line above is ~1,200 characters and every diagnosis this run has
+            # needed so far started by regex-ing it back apart -- badly, and differently
+            # each time.  This writes the same scalars as data, so later analysis is a
+            # query.  It also captures things the text line omits and that mattered here:
+            # per-block gradient norms (which located the dead price block and the fact
+            # that lambda had no available gain), the lz guard, and wall-clock, so a stall
+            # can be told apart from a slowdown after the fact.
+            # Divergence tripwire.  A blown-up utility block shows first as E[n] running
+            # away to n_max while the data sits near 8.6; run407 reached -6.6e9 that way
+            # and every later eval was wasted compute.  Stop at the first eval that shows
+            # it, with the diagnosis, rather than clamping -- a clamp would hide it.
+            if float(ho_e) > 0.5 * a.nmax and float(vobs.mean()) < 0.25 * a.nmax:
+                log(f"DIVERGED at it {it}: model E[n] = {float(ho_e):.1f} against observed "
+                    f"{float(vobs.mean()):.2f} (n_max {a.nmax}).  The utility block has run "
+                    f"away; set/basket {vb:.4f}.  Stopping.")
+                raise SystemExit(3)
+            if a.metrics_jsonl:
+                try:
+                    _gn = {}
+                    for _n, _p in m.named_parameters():
+                        if _p.grad is not None:
+                            _gn[_n] = float(_p.grad.norm())
+                    _rec = dict(
+                        it=int(it), cum_it=int(cum_it), epoch=float(ep), cum_epoch=float(cum_ep),
+                        wall_min=float((time.time() - t0) / 60.0), unix=float(time.time()),
+                        train_loss=float(np.mean(hist[-a.eval_every:])),
+                        set_per_basket=float(vb), set_per_line=float(vl),
+                        size_per_basket=float(vsz), comp_per_basket=float(vco),
+                        units_per_basket=float(vu), total_per_basket=float(vt),
+                        mrr=float(rec_mrr), mrr_median_rank=float(rec_med),
+                        phi_mean=float(m.phi.detach().norm(dim=1).mean()),
+                        phi_max=float(m.phi.detach().norm(dim=1).max()),
+                        phi_zero_frac=float((m.phi.detach().norm(dim=1) < 1e-8).double().mean()),
+                        lam_max=float(lam_max), lam_sd=float(m.lam.std()),
+                        en_model=float(ho_e), en_obs=float(vobs.mean()),
+                        var_model=float(ho_v), var_obs=float(vobs.var()),
+                        elast=float(np.mean(el_hist[-a.eval_every:])) if el_hist else None,
+                        elast_target=float(a.elast_target),
+                        ess_mean=float(np.mean(ess_hist[-a.eval_every:])) if ess_hist else None,
+                        ess_min=float(np.min(emin_hist[-a.eval_every:])) if emin_hist else None,
+                        qmc_se_mean=float(np.mean(qmc_se_hist[-a.eval_every:])) if qmc_se_hist else None,
+                        qmc_se_max=float(np.max(qmc_se_max_hist[-a.eval_every:])) if qmc_se_max_hist else None,
+                        n_skip=int(n_skip), n_qretry=int(n_qretry), n_qbad=int(n_qbad),
+                        n_gradbad=int(n_gradbad), n_drop=int(n_drop),
+                        lr=float(opt.param_groups[0]["lr"]),
+                        grad_norms=_gn,
+                    )
+                    with open(a.metrics_jsonl, "a") as _fh:
+                        _fh.write(json.dumps(_rec) + "\n")
+                except Exception as _e:      # logging must never kill a run
+                    log(f"  [metrics] record skipped: {type(_e).__name__}: {_e}")
             if vb > 0:
                 log("  ABORT: held-out log-likelihood is positive, which is impossible. "
                     "The objective is being maximised through a defect, not a fit.")
@@ -2611,6 +2782,13 @@ if __name__ == "__main__":
     p.add_argument("--elast-w", type=float, default=20.0)
     p.add_argument("--elast-target", type=float, default=-0.121)
     p.add_argument("--phi-init", type=float, default=0.03)
+    p.add_argument("--phi-init-file", default="",
+                   help="npy [J, Kz] spectral initialisation from build by "
+                        "phi_spectral_init.py. phi=0 is a saddle (dE/dphi_j = sum_k phi_k "
+                        "= 0 there), so SGD escapes only exponentially: measured 0.03 -> "
+                        "0.099 over 2,600 updates against the ~0.93 the data implies. "
+                        "Placing phi at the rank-Kz factorisation of the empirical log-lift "
+                        "beat 15,000 updates of SGD by +0.022 nats on held-out data.")
     p.add_argument("--phi-topk", type=float, default=0.0)
     p.add_argument("--phi-mask", default="")
     p.add_argument("--ess-floor", type=float, default=0.30)
@@ -2626,8 +2804,18 @@ if __name__ == "__main__":
     p.add_argument("--lam-q", type=float, default=0.90)
     p.add_argument("--phi-l1", type=float, default=0.0,
                    help="row sparsity penalty; keep 0 to retain all catalogue products")
-    p.add_argument("--phi-centre", type=int, default=1)
-    p.add_argument("--phi-whiten", type=float, default=0.0)
+    p.add_argument("--phi-centre", type=int, default=0,
+                   help="DEPRECATED: not a gauge. Proposition 2 -- centering adds "
+                        "-(n-1) m'sum_j phi_j, which depends on basket COMPOSITION "
+                        "and cannot be absorbed into rho_0, so it changes the law. "
+                        "Measured -5.05e-03 nats against a 6.27e-07 orthogonal-rotation "
+                        "control on run403. Default off; only a right orthogonal "
+                        "rotation Phi -> Phi Q is a true gauge.")
+    p.add_argument("--phi-whiten", type=float, default=0.0,
+                   help="DEPRECATED: not a gauge. Corollary 1 -- altering the singular "
+                        "values of Phi changes the Gram matrix W and hence the law, even "
+                        "at fixed Frobenius norm. Measured +1.10e-05 nats. Declare it as "
+                        "a regulariser if wanted; it is not estimator hygiene.")
     p.add_argument("--adapt-draws", type=int, default=1)
     p.add_argument("--lz-gap", type=float, default=1.0)
     p.add_argument("--lz-strikes", type=int, default=1)
@@ -2640,6 +2828,8 @@ if __name__ == "__main__":
                    help="refresh exact incidence weights for the phi budget every N updates; "
                         "0 disables the nonbinding global budget")
     p.add_argument("--pseudo", type=int, default=0)
+    p.add_argument("--metrics-jsonl", default="",
+                   help="append one JSON record per eval here, for later analysis")
     p.add_argument("--poly-degree-tol", type=float, default=1e-3,
                    help="max tolerated |d log Z| when auto-calibrating the degree")
     p.add_argument("--poly-degree", type=int, default=0,
@@ -2655,6 +2845,19 @@ if __name__ == "__main__":
                    help="unconstrained price bilinear + hinge penalty instead "
                         "of the softplus hard constraint")
     p.add_argument("--price-hinge-w", type=float, default=10.0)
+    p.add_argument("--kappa-init", type=float, default=0.0,
+                   help="Set softplus(price_kappa) to this value after the checkpoint "
+                        "load.  0 leaves it alone.  kappa moves ~1.4 units per 1,000 "
+                        "iterations, so its initial value effectively fixes it.")
+    p.add_argument("--kappa-lr-scale", type=float, default=20.0,
+                   help="Adam rate for price_kappa relative to --lr.  kappa ~ 40 while "
+                        "gamma ~ 0.02, a 400x spread that one rate cannot serve.")
+    p.add_argument("--price-lr-scale", type=float, default=0.05,
+                   help="Adam rate for gamma/beta relative to --lr when --price-soft "
+                        "is on.  Unconstrained, these ARE the price coefficients "
+                        "(~0.02), so the structural rate moves them 10%% per step; "
+                        "0.05 keeps the effective step near the constrained one "
+                        "(softplus' = 0.0195) while leaving the block free to move.")
     p.add_argument("--phi-pool", default="sum", choices=("sum", "mean"))
     p.add_argument("--size-bands", type=int, default=3)
     p.add_argument("--comp-ce-w", type=float, default=0.0,

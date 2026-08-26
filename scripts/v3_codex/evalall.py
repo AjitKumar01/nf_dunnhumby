@@ -86,6 +86,16 @@ def load_any(path, m, J, D):
                                  mode_logtol=_q.get("mode_logtol", 8.0),
                                  mode_sep=_q.get("mode_sep", 1.0),
                                  mix_n=_q.get("mix_n", 0)))
+        # The price parameterisation is a property of the WEIGHTS, so a script cannot
+        # choose it; reading it wrong scales every price coefficient by 34x.
+        _f = sd.get("model_flags") or {}
+        m.price_soft = bool(_f.get("price_soft", 0))
+        if m.price_soft:
+            log("price block: UNCONSTRAINED (gamma/beta are the coefficients; "
+                "softplus NOT applied)")
+        elif "model_flags" not in sd:
+            log("price block: softplus (checkpoint predates model_flags; "
+                "assuming the constrained form it was trained in)")
         sd = sd["model"]
     missing, _ = m.load_state_dict(sd, strict=False)
     zero_start = {"cat_of", "factored_size_enabled", "factored_size_log_p"}

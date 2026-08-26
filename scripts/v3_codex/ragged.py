@@ -462,7 +462,7 @@ def sobol_mixture_grid(d, n, seed=0, replicates=1, components=2):
 
 def set_quad(model, quad_q=0, qmc_n=0, qmc_seed=0, Kz=None, probe=0,
              steps=2, chunk=0, qmc_reps=1, size_bands=0, size_steps=2,
-             mode_logtol=8.0, mode_sep=1.0, mix_n=0):
+             mode_logtol=8.0, mode_sep=1.0, mix_n=0, gh_cap=0):
     """ONE place that decides how log Z is integrated, for training and every eval.
 
     The scripts each built their own grid, and recommend_pi.py hardcoded smolyak_grid(4, 8)
@@ -474,6 +474,7 @@ def set_quad(model, quad_q=0, qmc_n=0, qmc_seed=0, Kz=None, probe=0,
     """
     d = int(model.Kz if Kz is None else Kz)
     model.quad = model.quad_a = None
+    model.quad_z = None
     model.quad_mix_a = None
     model.quad_replicates = 1
     model.quad_size_bands = 0
@@ -507,7 +508,37 @@ def set_quad(model, quad_q=0, qmc_n=0, qmc_seed=0, Kz=None, probe=0,
                 + (f", node chunk {int(chunk)}" if chunk else ""))
     if quad_q > 0:
         model.quad = smolyak_grid(d, int(quad_q))
-        return f"Smolyak, Kz={d}, q={int(quad_q)}, {len(model.quad[0])} nodes"
+        # Stage 1 of sample() needs p(z) proportional to w_p f(z_p), which requires
+        # POSITIVE weights.  Smolyak's are signed, so the sampler cannot use them and was
+        # silently falling through to a mode-shifted importance proposal -- the one the
+        # quad_z comment records as unreliable ("sampled E[n] drifts 0.33x -> 1.29x as
+        # n_draws goes 8 -> 1024").  Measured here: sampled E[n] went 4.7 -> 19.8 -> 120.0
+        # -> nan as phi grew, while log Z stayed converged.  quad_z was written for exactly
+        # this and was never populated by anything.
+        #
+        # A dense Gauss-Hermite grid costs q^Kz, so it is only built when that is
+        # affordable; above the cap quad_z stays None and sample() keeps the old path,
+        # which is at least explicit rather than accidental.
+        #
+        # The cap is 1024 nodes, not the normaliser's budget: stage 1 only has to pick z
+        # from a discrete approximation to its posterior, and log_f_ragged over the grid
+        # costs B x P slot evaluations.  At Kz=4 that is q=5 (625 nodes); q=8 would be
+        # 4,096 and made the check hang.
+        # quad_z is left OFF.  A dense GH grid is the right idea -- positive weights, so it
+        # can serve as a sampling distribution where Smolyak's signed weights cannot -- but
+        # measured against the analytic E[n] = 10.35 at run403's iteration 5000, a q=5 grid
+        # (625 nodes) sampled 5.75 while the legacy proposal gave 10.67.  It is too coarse
+        # to represent p(z), and a finer grid costs q^Kz.  Enable only with a measured
+        # agreement check; shipping it as-is would replace a working sampler with a biased
+        # one.  gh_cap is retained so the grid can be built for that check.
+        model.quad_z = None
+        if int(gh_cap) > 0:
+            for _qz in range(int(quad_q), 2, -1):
+                if _qz ** d <= int(gh_cap):
+                    break
+        _zdesc = ("" if model.quad_z is None else
+                  f", sampling grid GH ({len(model.quad_z[0])} nodes)")
+        return (f"Smolyak, Kz={d}, q={int(quad_q)}, {len(model.quad[0])} nodes" + _zdesc)
     return "SAMPLED (no deterministic rule) -- importance sampling, known wrong by 8-36 nats"
 
 
@@ -879,14 +910,25 @@ def log_f_ragged(model, z, ix, drop_empty=False, return_terms=False,
     # ONE scale per (trip, draw): a per-row scale would not survive the convolution
     M = seg_max(logw, ix.item_trip, ix.B)                          # [D, B]
     w = torch.exp(logw - M.index_select(-1, ix.item_trip))         # [D, T]
-    e = esp_bucketed(w, ix.row_of, ix.n_rows, model.R, ix.row_size, ix.item_pos)
-    r = torch.arange(model.R + 1, dtype=w.dtype, device=w.device)
+    # Honour the per-row degree cap here too.
+    #
+    # log_f_sparse takes its degree from sparse_prepare (model.poly_degree, calibrated to
+    # 48), but this dense path used model.R = 120 -- two implementations of one quantity,
+    # disagreeing.  It matters because G carries exp(-rho_c r(r-1)/2) and 224 of 280 rho_c
+    # are negative: at r=120 with rho_c = -0.1126 that is exp(804) = inf, so log(A_n) = inf
+    # and sample()'s size draw raised "probability tensor contains inf, nan or element < 0".
+    # The normaliser never saw it because its degree cap stops at 48 (exp(127), finite).
+    _R = model.R
+    if getattr(model, "poly_degree", 0):
+        _R = min(int(model.poly_degree), model.R)
+    e = esp_bucketed(w, ix.row_of, ix.n_rows, _R, ix.row_size, ix.item_pos)
+    r = torch.arange(_R + 1, dtype=w.dtype, device=w.device)
     a = torch.exp(-model.rho_c[ix.row_cat].unsqueeze(-1) * model.pair_feature(r))
     G = a.unsqueeze(0) * e                                          # [D, n_rows, R+1]
     # scatter rows into [D, B, Cpad, R+1]; missing rows are the identity polynomial
-    Gp = torch.zeros(D, ix.B * ix.Cpad, model.R + 1, dtype=w.dtype, device=w.device)
+    Gp = torch.zeros(D, ix.B * ix.Cpad, _R + 1, dtype=w.dtype, device=w.device)
     Gp[:, :, 0] = 1.0
-    Gp = Gp.index_copy(1, ix.flat_slot, G).view(D, ix.B, ix.Cpad, model.R + 1)
+    Gp = Gp.index_copy(1, ix.flat_slot, G).view(D, ix.B, ix.Cpad, _R + 1)
     # The per-slot degree cap that used to sit here claimed a 4x cut on the grounds that
     # "the median category never exceeds 3 items in any observed basket".  That reasoning
     # was wrong -- the normaliser sums over every POSSIBLE basket, so the bound is the
@@ -1031,6 +1073,23 @@ class RaggedModel(torch.nn.Module):
         return torch.where(count_before < self.rho_pair_cap,
                            count_before, torch.zeros_like(count_before))
 
+    def price_g(self):
+        """Household price-sensitivity factor.  ONE definition, used everywhere.
+
+        The coefficient is <price_g[h], price_b[j]> and it appeared in six places: b_at,
+        the elasticity penalty, the beta calibration, the pooling penalty and two
+        diagnostics.  Under --price-soft the parameterisation changes, and when only b_at
+        was switched the elasticity penalty kept computing softplus(gamma)*softplus(beta) --
+        a different quantity -- which inflated the training loss to 23,321.  Same failure
+        mode this file already records for b_flat vs energy: two implementations of one
+        thing, drifting apart.
+        """
+        return self.gamma if getattr(self, "price_soft", False) else softplus(self.gamma)
+
+    def price_b(self):
+        """Item price-sensitivity factor.  See price_g."""
+        return self.beta if getattr(self, "price_soft", False) else softplus(self.beta)
+
     def b_at(self, it, trip, c):
         """Eq. 7 at an arbitrary set of (product, trip) pairs.
 
@@ -1085,10 +1144,7 @@ class RaggedModel(torch.nn.Module):
         # price_soft replaces the hard constraint with an unconstrained bilinear form plus a
         # hinge penalty relu(-gamma.beta)^2 in the objective (see fit.py --price-hinge-w).
         # Same economics asymptotically, but the gradient never dies, so the block can move.
-        if getattr(self, "price_soft", False):
-            _gb = (self.gamma[hh] * self.beta[it]).sum(-1)
-        else:
-            _gb = (softplus(self.gamma[hh]) * softplus(self.beta[it])).sum(-1)
+        _gb = (self.price_g()[hh] * self.price_b()[it]).sum(-1)
         self._last_gb = _gb
         if "dlp_bar" in c:
             _m = c["dlp_bar"][trip]
@@ -2271,7 +2327,20 @@ class RaggedModel(torch.nn.Module):
             # directly: p(z_p) proportional to w_p f(z_p).
             gz, gw = self.quad_z
             zs = gz.to(self.lam.dtype).unsqueeze(0).expand(B, gz.shape[0], self.Kz)
-            lw = log_f_ragged(self, zs, ix, True) + gw.to(self.lam.dtype).log().unsqueeze(0)
+            # Use the SPARSE kernel with a shared cache, exactly as the quad_a branch does.
+            # log_f_ragged walks all ~125,000 slots at every node; log_f_sparse lifts the
+            # phi-free products out of the node loop, which is the whole point of a mask.
+            # sample() is under no_grad, so sharing the cache is exact and strictly less
+            # work.  With a 30-product mask that is 720 z-dependent slots per node, not
+            # 125,000 -- the difference between a usable check and one that hangs.
+            _Cz = sparse_prepare(self, ix)
+            _P = zs.shape[1]
+            _ch = self.quad_chunk if self.quad_chunk > 0 else _P
+            if self.quad_chunk <= 0 and len(_Cz["ai"]) * _P > 2_000_000:
+                _ch = max(1, min(64, _P))
+            _parts = [log_f_sparse(self, zs[:, lo:lo + _ch], ix, _Cz, True)
+                      for lo in range(0, _P, _ch)]
+            lw = torch.cat(_parts, dim=1) + gw.to(self.lam.dtype).log().unsqueeze(0)
             pick = torch.multinomial(torch.softmax(lw, dim=1), 1, generator=generator)
             zsel = zs.gather(1, pick.unsqueeze(-1).expand(-1, -1, self.Kz))[:, 0]
         else:
@@ -2311,11 +2380,27 @@ class RaggedModel(torch.nn.Module):
             n = int(torch.multinomial(torch.softmax(row_lg, 0), 1,
                                       generator=generator)) + 1
             # --- prefix products over THIS trip's categories, from the shared G -------
-            polys = [G_all[r_] for r_ in rows]
+            # RESCALE every polynomial to max 1 before multiplying.
+            #
+            # G = exp(-rho_c r(r-1)/2) e_r(w) is consumed here in LINEAR space, and the
+            # prefix product runs over all of this trip's categories up to degree nmax.
+            # With rho_c negative -- 224 of 280 rows are, min -0.1126 -- the factor grows
+            # with r, and the accumulated product overflows to inf; the multinomial below
+            # then raises "probability tensor contains inf, nan or element < 0".  That is
+            # the sampler failure seen in run155 (sampled 11.1 vs analytic 7.1), run302
+            # (120.0) and run403 (nan), on both Smolyak and QMC, while log Z stayed correct
+            # because log_f works in log space with a per-trip max shift.
+            #
+            # Only RATIOS matter for every draw below, so scaling each array by a positive
+            # constant is exact, not an approximation.
+            def _norm1(v):
+                mx = v.max()
+                return v / mx if bool(torch.isfinite(mx)) and float(mx) > 0 else v
+            polys = [_norm1(G_all[r_]) for r_ in rows]
             pref = [torch.ones(1, dtype=w_all.dtype, device=w_all.device)]
             for Gc in polys:
-                pref.append(poly_mul_trunc(pref[-1].unsqueeze(0),
-                                           Gc.unsqueeze(0), self.nmax)[0])
+                pref.append(_norm1(poly_mul_trunc(pref[-1].unsqueeze(0),
+                                                  Gc.unsqueeze(0), self.nmax)[0]))
             # --- level 3: split n across categories, backwards ------------------------
             chosen = []
             left = n
@@ -2335,14 +2420,31 @@ class RaggedModel(torch.nn.Module):
                                                generator=generator))
                 if r_take:
                     # --- level 4: which products, from the SAME w -----------------
+                    # This table is built over EVERY product in the category -- up to 1,773
+                    # -- so the raw recursion underflows exactly as the prefix polynomials
+                    # above did.  When E[k, need] reached 0 the old code did `continue`
+                    # WITHOUT decrementing need, so the walk ran out of items and returned
+                    # a basket shorter than the n that was drawn: sampled E[n] was 5.83
+                    # against the model's own 6.49, a 10% loss that no number of draws
+                    # removed.  Normalise each row and carry its log scale, so the ratio
+                    #   w_k E[k-1][need-1] / E[k][need]
+                    # is corrected by exp(ls[k-1] - ls[k]) and stays exact.
                     sel = (ix.row_of == rows[c]).nonzero().flatten()
                     wc = w_all[sel]
                     E = torch.zeros(len(wc) + 1, self.R + 1, dtype=wc.dtype,
                                     device=wc.device)
                     E[0, 0] = 1.0
+                    ls = torch.zeros(len(wc) + 1, dtype=wc.dtype, device=wc.device)
                     for k in range(1, len(wc) + 1):
-                        E[k] = E[k - 1].clone()
-                        E[k, 1:] = E[k, 1:] + wc[k - 1] * E[k - 1, :-1]
+                        row = E[k - 1].clone()
+                        row[1:] = row[1:] + wc[k - 1] * E[k - 1, :-1]
+                        mx = float(row.max())
+                        if mx > 0 and math.isfinite(mx):
+                            row = row / mx
+                            ls[k] = ls[k - 1] + math.log(mx)
+                        else:
+                            ls[k] = ls[k - 1]
+                        E[k] = row
                     need = r_take
                     for k in range(len(wc), 0, -1):
                         if need == 0:
@@ -2350,11 +2452,24 @@ class RaggedModel(torch.nn.Module):
                         den = float(E[k, need])
                         if den <= 0:
                             continue
-                        num = float(wc[k - 1] * E[k - 1, need - 1])
-                        if float(torch.rand(1, generator=generator)) < num / den:
+                        num = float(wc[k - 1] * E[k - 1, need - 1]
+                                    * torch.exp(ls[k - 1] - ls[k]))
+                        p = num / den
+                        if not math.isfinite(p):
+                            continue
+                        # k items remain and `need` are still required: once they are equal
+                        # the walk MUST take every one of them, and rounding must not be
+                        # allowed to drop one.
+                        if k == need or float(torch.rand(1, generator=generator)) < p:
                             chosen.append(int(ix.item[sel[k - 1]]))
                             need -= 1
+                    if need:
+                        self._sample_short = getattr(self, "_sample_short", 0) + need
                 left -= r_take
+            if left:
+                # Categories skipped for tot <= 0 leave the size draw unfulfilled; the
+                # basket is then not a draw from P(S | n).  Counted, not hidden.
+                self._sample_short = getattr(self, "_sample_short", 0) + left
             out.append(sorted(chosen))
         return out
 
@@ -2860,10 +2975,23 @@ class RaggedModel(torch.nn.Module):
         a constant c from both raw tensors multiplies the product by about e^{-2c}.  One
         closed-form step therefore lands the mean on target, and it is reapplied after every
         optimiser step exactly as the phi cap is.
+
+        The subtract-a-constant step above is multiplicative ONLY because softplus(x) ~ e^x
+        near x = -3.9.  Under price_soft the parameters ARE the coefficients (gamma =
+        +0.0213 after the warm start), so subtracting c is an additive shift and any c >
+        0.0213 drives gamma negative -- the price term changes sign, every utility runs
+        away, and E[n] pins at n_max.  That is run407/run408, and no learning rate can
+        prevent it because a projection is not an optimiser step.  In that parameterisation
+        the exact analogue is a multiply, which also drops the e^x approximation.
         """
-        gb = (softplus(self.gamma).mean(0) * softplus(self.beta).mean(0)).sum()
+        gb = (self.price_g().mean(0) * self.price_b().mean(0)).sum()
         cur = float(gb)
         if cur <= 0 or target_gb <= 0:
+            return
+        if getattr(self, "price_soft", False):
+            r = math.sqrt(target_gb / cur)          # gb is bilinear: scaling both by r
+            self.gamma *= r                         # scales the product by exactly r^2
+            self.beta *= r
             return
         c = 0.5 * math.log(cur / target_gb)
         self.gamma -= c
