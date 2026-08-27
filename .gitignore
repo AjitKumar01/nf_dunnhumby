@@ -1,58 +1,25 @@
 # ---------------------------------------------------------------------------
-# Everything the pipeline can regenerate from the raw dunnhumby CSVs.
-# `bash scripts/run_all.sh` rebuilds all of it in ~35 minutes.
+# Everything regenerable from the raw dunnhumby CSVs, plus run artifacts.
+# `src/run/prepare.sh` rebuilds all model inputs in ~35 minutes.
 # ---------------------------------------------------------------------------
 
-# Stage 01-04 outputs: cleaned transactions, price panels, model input files.
+# Stage 1-2 outputs: cleaned transactions and price panels.
 data/
-model_input/
-model_input_clean/
 
-# Stage 05-17 outputs.  The bulk artefacts (fitted parameters, the 61 MB C++
-# inner-product dump, the elasticity table) are ignored; the small text results
-# that the markdown reports quote are kept so the repo reads without a rerun.
-out/**
-!out/*.md
-!out/*.csv
-!out/*.json
-!out/log_*.txt
+# Stage 2-3 outputs: model input and the cached ragged index.  The two small
+# auxiliary inputs the training flags reference ARE committed (see below), so a
+# fresh clone can train without rerunning the co-purchase scans.
+basket_input/*
+!basket_input/v3_beta_target.npz
+!basket_input/v3_phimask_lift30.npy
+
+# Checkpoints, logs and evaluation artifacts.
+out/
+out_arms/
+codex_checked/
 
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
 .ipynb_checkpoints/
 .venv/
-venv/
-env/
-*.egg-info/
-
-# Compiled C++ (run_bemb_loc.sh builds this from the authors' source)
-out/emb
-scripts/emb
-
-# macOS / editors
-.DS_Store
-.idea/
-.vscode/
-*.swp
-
-# rebuilt by 22_basket_data.py (~120 MB, derived from dunnhumby transaction data)
-basket_input/
-
-# Third-party material: not ours to redistribute.  The SHOPPER paper is on arXiv
-# (1711.03560) and its source is released by its authors; 45_shopper.py is a from-scratch
-# reimplementation and reads neither file.
-1711.03560v3.pdf
-shopper-src-master.zip
-
-# codex_checked/ holds a snapshot of the codex working tree.  Its scripts are worth
-# keeping; its out/ is 3.7 GB of .pt checkpoints and .npz per-trip dumps that the
-# pipeline regenerates, so only the small result artefacts are tracked.
-codex_checked/out/**
-!codex_checked/out/*.json
-!codex_checked/out/*.log
-codex_checked/__pycache__/
-scripts/v3_codex/__pycache__/
-
-# per-run training logs from the arm experiments
-out_arms/*.pt
