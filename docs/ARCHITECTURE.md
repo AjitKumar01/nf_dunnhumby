@@ -1,97 +1,137 @@
 # Architecture
 
-What each module does, the exact shapes flowing between them, and the facts that are not
-guessable from reading the code. Mathematics is in [`THEORY.md`](THEORY.md); the raw-CSV
-lineage is in [`DATA_TO_MODEL_INPUT.md`](DATA_TO_MODEL_INPUT.md).
+## How to read this
+
+This follows **one basket** from a row in a CSV to a number the optimiser can use, and
+explains each piece of machinery at the point where the basket meets it. Reference tables —
+exact shapes, every parameter, every flag — come afterwards, once you know where they sit.
+
+The mathematics is in [`THEORY.md`](THEORY.md); this is about the code. Section references
+like *(THEORY §5)* point there.
 
 **Contents**
 
-1. [Module map](#1-module-map)
-2. [Data flow and shapes](#2-data-flow-and-shapes)
+*Part I — orientation*
+1. [The one-screen map](#1-the-one-screen-map)
+2. [Follow one basket through the system](#2-follow-one-basket)
+
+*Part II — the pieces*
+
 3. [`RaggedIndex`: the central structure](#3-raggedindex)
 4. [`RaggedModel`: parameters and methods](#4-raggedmodel)
 5. [The forward pass, step by step](#5-the-forward-pass)
+
+*Part III — running it*
+
 6. [Checkpoints and `model_flags`](#6-checkpoints)
 7. [The training loop](#7-the-training-loop)
 8. [Optimiser groups and the 400× scale spread](#8-optimiser-groups)
+
+*Part IV — what will bite you*
+
 9. [Guards](#9-guards)
 10. [Resuming](#10-resuming)
 11. [Environment variables](#11-environment-variables)
 
 ---
 
-## 1. Module map
+# Part I — orientation
+
+## 1. The one-screen map
+
+**The question: what are the moving parts, and which one would I edit?**
+
+Three stages, and you almost always want the middle one.
 
 ```
-src/basket/
-  paths.py              Root discovery.  REPO is the checkout (where code lives); ROOT is
-                        where artifacts go and follows NF_ROOT; RAW is an INPUT and stays
-                        anchored to REPO.  Nothing else hardcodes a relative path, so the
-                        tree can be rearranged and scripts run from any directory.
-
-  data.py               build() -> the ragged assortment index, cached to
-                        basket_input/v3_index*.npz.  Asserts every purchased product lies
-                        in its store's assortment: otherwise the likelihood is evaluated on
-                        a support excluding the observed basket and is silently wrong.
-
-  features.py           Features: memory-maps price, store price, recency and promotion and
-                        answers batch queries by vectorised searchsorted.
-
-  ragged.py             THE KERNEL.  Energy, normaliser, marginals, sampler, projections.
-  fit.py                Batcher, training loop, objectives, schedules, checkpointing.
-  evalall.py            load_any() -- the ONLY correct way to load a checkpoint.
-
-  downstream.py         counterfactual / personalisation / segmentation / generation
-  eval_mrr_cutoffs.py   MRR and MRR@k on the fixed holdout
-  elasticity_targets.py estimates the external targets the model is calibrated to
-  diagnose_bucket_coverage.py   comparison against the historical truncated kernel
-  stamp_flags.py        backfills model_flags onto pre-2026-08 checkpoints
-
-  pairmask.py           selects the interaction products by co-purchase lift
-  phi_spectral_init.py  places phi by eigendecomposing the empirical log-lift matrix
-  beta_target.py        per-product price-coefficient calibration target
-
-src/pipeline/           raw dunnhumby CSVs -> data/ -> basket_input/
-src/run/                prepare.sh, train.sh, evaluate.sh
+  RAW CSVs  ──►  src/pipeline/  ──►  basket_input/  ──►  src/basket/  ──►  out/
+   142 MB +       run once,          the modelling      the model,        checkpoints,
+   696 MB         ~10 min            universe           training, eval    metrics
 ```
 
-`src/pipeline/*` import `paths` from `src/basket/` through a two-line bootstrap; that is the
-only cross-directory dependency.
+| if you want to change... | edit |
+|---|---|
+| which products/households are in scope, how price is reconstructed | `src/pipeline/` — then re-run `prepare.sh` |
+| the model, its energy, its normaliser, its sampler | `src/basket/ragged.py` — **the kernel** |
+| the objective, schedules, what is constrained | `src/basket/fit.py` |
+| how a checkpoint is scored | `src/basket/downstream.py`, `eval_mrr_cutoffs.py` |
+| where files live | nothing — `src/basket/paths.py` discovers the root |
+
+The rest of `src/basket/` is support: `data.py` builds the assortment index, `features.py`
+serves context, `evalall.py` loads checkpoints correctly, and four small scripts build
+auxiliary inputs (`pairmask.py`, `phi_spectral_init.py`, `beta_target.py`,
+`elasticity_targets.py`).
 
 ---
 
-## 2. Data flow and shapes
+## 2. Follow one basket
 
-```
-  dunnhumby CSVs                                  (read-only; NF_RAW_DIR)
-        |  01_build_base.py         reconstructs shelf price from SALES_VALUE + discounts
-        v
-  data/tx.parquet (39 MB), trips, price_week, price_store_week
-        |  22_basket_data.py + 23_promo_data.py
-        v
-  basket_input/   baskets.parquet   1,566,063 x 10
-                  items.parquet     5,455 x 14
-                  log_price.npy     [5455, 712]      log price by item and day
-                  log_price_dev.npy [5455, 712]      deviation from the item's own mean
-                  store_price.npz   244,880 cells    store-level deviations (0.53% of grid)
-                  state.npz         1.36 M keys      days since last purchase, by sub-commodity
-                  promo.npz         6.52 M keys      display and mailer flags
-        |  data.py :: build()                        cached once, ~3 min
-        v
-  basket_input/v3_index_affinity.npz  (8.4 MB)
-        |  features.py + fit.py :: Batcher           per minibatch, never written
-        v
-  RaggedIndex + ctx/lctx dicts  ->  RaggedModel
-```
+**The question: what actually happens between a CSV row and a gradient?**
 
-**Scale.** 5,455 products, 2,066 households, 115 stores, 712 days. Stage 2 reports 199,345
-baskets; the index then drops held-out lines outside the training support, leaving
-**198,690 trips and 1,558,093 lines**. Split temporally by household-week: train
-`week < 83`, validation `83..90`, test `>= 91`.
+Take one real trip: household 1042 visits store 367 on day 415 and buys four items.
+
+### Stage 1 — it becomes a row in a table (`src/pipeline/`)
+
+`01_build_base.py` reads `transaction_data.csv`. The raw file has no price column — it has
+`SALES_VALUE` and three discount columns — so the shelf price is **reconstructed**, because
+the model must condition on what every shopper saw, including those who did **not** buy.
+That derivation is audited in [`PREPROCESSING.md`](PREPROCESSING.md).
+
+`22_basket_data.py` then decides the modelling universe: products with ≥100 purchase lines,
+households with 20–300 trips. Our trip survives as four rows in `baskets.parquet`.
+
+### Stage 2 — it becomes an index entry (`data.py`)
+
+The likelihood must sum over **every subset of the store's assortment** (THEORY §4), so the
+assortment must be an indexed structure, and each purchased product must be expressed in
+**assortment-local coordinates**.
+
+`build()` produces, for store 367, the list of products it carries grouped by category, and
+records each of our four purchases as *"position 7 within the (store 367, category 12)
+row"*. That position is what the polynomial recursion of THEORY §7 indexes.
+
+It also **asserts** every purchased product lies in its store's assortment. If one did not,
+the likelihood would be evaluated on a support that excludes the observed basket — silently
+wrong, rather than an error.
+
+### Stage 3 — it becomes tensors (`Batcher.make`)
+
+Our trip is batched with 23 others. `Batcher` gathers ~127,000 assortment slots and, for
+each, looks up: the item's log-price deviation that day, whether it was on display or in the
+mailer that week, how long since this household last bought its sub-commodity, and the
+**price reference** $\bar\ell$ (THEORY §10.4 — the choice that decides whether the model can
+substitute at all).
+
+Two parallel views come out: `ctx` over all 127,000 slots, `lctx` over the 4 purchased
+lines. They carry identical keys so that `energy()` and `log_Z()` score a product
+*identically* — a product must not be worth one thing as a candidate and another as a
+purchase.
+
+### Stage 4 — it becomes a number (`ragged.py`)
+
+1. `b_flat(ix)` → a utility for each of the 127,000 slots (THEORY 3.2).
+2. For each of **681 Smolyak quadrature nodes** $z$, form the tilted weights
+   $w_j(z)$ (THEORY 5.3).
+3. `esp_bucketed` runs the elementary-symmetric recursion per category row — bucketed by row
+   size so a 3-product row does not pay for the 1,773-product one.
+4. Convolve across rows → $A_n(z)$, weight by the size potential → $f(z)$.
+5. Integrate over the 681 nodes → $\log Z$.
+6. `energy()` scores the *observed* four-item basket.
+
+The loss for our trip is $E(S) - \log Z$: how good this basket is, minus how good all
+possible baskets are. Backpropagation from there reaches every parameter — including through
+the normaliser, which is why $\log Z$ has to be differentiable and not merely computable.
+
+> **Where we are.** That is the whole path. The rest of this document is the detail of each
+> piece, and the things that will bite you when you run it.
 
 ---
+
+# Part II — the pieces
 
 ## 3. `RaggedIndex`
+
+**The question: how is a ragged assortment held in a dense tensor?**
 
 Represents "the assortments of the trips in this batch", grouped into
 $(\text{trip},\text{category})$ **rows**.
@@ -121,6 +161,8 @@ identically. Keys: `dlp`, `dlp_bar`, `disp`, `mail`, `week`, `store`, `rec`.
 ---
 
 ## 4. `RaggedModel`
+
+**The question: what does the model own, and what can I ask it?**
 
 ### Parameters
 
@@ -157,6 +199,8 @@ identically. Keys: `dlp`, `dlp_bar`, `disp`, `mail`, `week`, `store`, `rec`.
 
 ## 5. The forward pass
 
+**The question: in what order does it all happen?**
+
 For one minibatch of $B$ trips:
 
 1. **`Batcher.make(trips)`** gathers the assortment into a `RaggedIndex`, looks up
@@ -174,7 +218,11 @@ For one minibatch of $B$ trips:
 
 ---
 
+# Part III — running it
+
 ## 6. Checkpoints
+
+**The question: why can two checkpoints with identical weights be different models?**
 
 Written by `fit.py::save_ckpt` as a dict with `format = 2`:
 
@@ -211,6 +259,8 @@ checkpoints.
 
 ## 7. The training loop
 
+**The question: what happens before the first gradient step, and why does the order matter?**
+
 `fit.py::main`, in order:
 
 ```
@@ -245,6 +295,8 @@ is what distinguishes a stall from a slowdown after the fact.
 
 ## 8. Optimiser groups
 
+**The question: why can one learning rate not serve this model?**
+
 One learning rate cannot serve this model. `optimizer_parameter_groups` splits it:
 
 | group | scale | natural parameter scale | why |
@@ -260,7 +312,11 @@ a parameter that never arrives.
 
 ---
 
+# Part IV — what will bite you
+
 ## 9. Guards
+
+**The question: what fails loudly, and what used to fail silently?**
 
 | guard | trigger | why |
 |---|---|---|
@@ -273,6 +329,8 @@ a parameter that never arrives.
 ---
 
 ## 10. Resuming
+
+**The question: why did my resumed run get worse?**
 
 Two traps, both of which cost a run here.
 
@@ -296,6 +354,8 @@ checkable in one line before the run gets going.
 ---
 
 ## 11. Environment variables
+
+**The question: which switch silently changes the model?**
 
 | variable | effect |
 |---|---|

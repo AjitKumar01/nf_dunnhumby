@@ -79,6 +79,7 @@ raised at once) and are not comparable to +0.1351.
 
 | | |
 |---|---|
+| [`docs/MOTIVATION.md`](docs/MOTIVATION.md) | **start here** — what a retailer can do with this, why a basket model rather than per-SKU regressions, a worked commercial example, and where it is not ready |
 | [`docs/THEORY.md`](docs/THEORY.md) | the model, why a `2^5000` normaliser is computable, the quadrature and the budget it imposes, exact sampling, and how the price parameters are identified |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | module map, data flow, the central data structure, checkpoint format, training loop, resuming |
 | [`docs/DATA_TO_MODEL_INPUT.md`](docs/DATA_TO_MODEL_INPUT.md) | every file from raw CSV to tensor, and how to rebuild any of it |
