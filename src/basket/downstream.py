@@ -34,6 +34,11 @@ def log(s=""):
 
 
 def safe_degree(m, ix, floor, cand=(26, 32, 40, 48, 64, 96), tol=0.02):
+    # Bounded to [floor, 1.5*floor], matching fit.py: above the floor there is no accuracy
+    # gain on OBSERVED data, only unobserved tail mass, and exp(-rho_c C(n,2)) grows
+    # explosively in n -- so reaching for headroom is how the recursion loses precision.
+    # An untrained model (rho_c ~ 0) otherwise selects 96, which is unsafe the moment
+    # rho_c trains negative.
     """Largest truncation degree whose E[n] still agrees with the floor's.
 
     sum_j pi_j = E[n] by construction, so a degree that inflates it is wrong on its face.
@@ -41,7 +46,7 @@ def safe_degree(m, ix, floor, cand=(26, 32, 40, 48, 64, 96), tol=0.02):
     that reference is the overflowing one.  Calibrate upward from the floor instead, and
     stop at the first degree that moves the answer.
     """
-    cand = sorted({int(c) for c in cand if c >= floor} | {int(floor)})
+    cand = sorted({int(c) for c in cand if floor <= c <= int(1.5 * floor)} | {int(floor)})
     base, chosen, table = None, int(floor), []
     for d in cand:
         m.poly_degree = d
