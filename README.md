@@ -112,7 +112,8 @@ without re-running the co-purchase scans.
 **`prepare.sh`** — builds every model input from the raw CSVs. Idempotent. Reads
 `transaction_data.csv` (142 MB), `product.csv` and `causal_data.csv` (696 MB); the raw data
 is never modified. Produces `data/`, then `basket_input/` (5,455 products, 2,066 households,
-115 stores, 199,345 baskets), then the cached ragged index.
+115 stores, 199,345 baskets), then the cached ragged index — which drops held-out lines
+outside the training support, leaving 198,690 trips and 1,558,093 lines to model.
 
 **`train.sh [label] [iterations]`** — trains the shipped configuration from scratch, in one
 run. About 0.7 s/iteration on 8 threads. Writes `out/v3_<label>.pt`,

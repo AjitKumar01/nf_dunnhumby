@@ -14,10 +14,14 @@ import os
 _MARKERS = ("requirements.txt", "src")
 
 
-def find_root(start=None):
-    """First ancestor of `start` that looks like this repository."""
+def find_root(start=None, use_env=True):
+    """First ancestor of `start` that looks like this repository.
+
+    `use_env=False` ignores NF_ROOT, which is how the location of the CODE is found even
+    when generated artifacts have been redirected elsewhere.
+    """
     env = os.environ.get("NF_ROOT")
-    if env:
+    if use_env and env:
         return os.path.abspath(os.path.expanduser(env))
     here = os.path.abspath(start or os.path.dirname(os.path.abspath(__file__)))
     d = here
@@ -31,16 +35,22 @@ def find_root(start=None):
         d = parent
 
 
+# The checkout itself, ignoring NF_ROOT: this is where the CODE is.
+REPO = find_root(os.path.dirname(os.path.abspath(__file__)), use_env=False)
+
+# Where generated artifacts go.  NF_ROOT moves these without moving the code, which is what
+# you want to run against a scratch tree or keep large inputs on another volume.
 ROOT = find_root()
 DATA = os.path.join(ROOT, "data")
 BI = os.path.join(ROOT, "basket_input")
 OUT = os.path.join(ROOT, "out")
 
-# The raw dunnhumby CSVs. Default: a sibling of the repository, which is how the archive
-# unpacks. Override with NF_RAW_DIR.
+# The raw dunnhumby CSVs are an INPUT, so they default relative to the checkout, not to
+# NF_ROOT -- otherwise redirecting the outputs would silently move where inputs are looked
+# for.  Default: a sibling of the repository, which is how the archive unpacks.
 RAW = os.environ.get(
     "NF_RAW_DIR",
-    os.path.join(os.path.dirname(ROOT), "dunnhumby_The-Complete-Journey",
+    os.path.join(os.path.dirname(REPO), "dunnhumby_The-Complete-Journey",
                  "dunnhumby_The-Complete-Journey CSV"))
 if not RAW.endswith(os.sep):
     RAW += os.sep

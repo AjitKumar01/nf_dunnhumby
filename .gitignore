@@ -12,6 +12,10 @@ data/
 basket_input/*
 !basket_input/v3_beta_target.npz
 !basket_input/v3_phimask_lift30.npy
+# The affinity partition IS the model's category structure (280 groups, not the
+# default 188).  It is derived, but from a clustering that is not part of the
+# pipeline, so it ships rather than being rebuilt.
+!basket_input/items_affinity.parquet
 
 # Checkpoints, logs and evaluation artifacts.
 out/

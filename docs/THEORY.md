@@ -123,7 +123,8 @@ term `exp(-rho_c C(r,2))` — a function of `r` alone — multiplies straight in
 
 The assortment is organised as **(store, category) rows**:
 
-* rows are ragged: the median row holds 9 products, the largest 1,773;
+* rows are ragged: the median row holds 3 products and the largest 1,773, but weighted
+  by where purchases actually fall the median is 128 -- shoppers buy from the big rows;
 * padding every row to the maximum would waste ~20× the work, so items live in one flat
   array with a row index, and only the short category axis is padded;
 * a purchased product is stored as its **position within its row**, because that is what
@@ -264,10 +265,10 @@ d b_j / d dbar  =  gb_j * (kappa - 1)  =  +0.535 at kappa = 35.6
 
 — strongly positive, i.e. substitution. But the magnitude is scaled by how much one rival
 actually moves the reference, `n_riv / n_ref`. Referenced to the **whole assortment**
-(~5,292 products) that is `d/5292`: the channel is diluted ~5,000× and the basket-size
+(a median of 5,312 products per store) that is tiny: the channel is diluted ~5,000× and the basket-size
 effect swamps it, giving cross-price **−0.162**, the wrong sign. Referenced to the store's
-own **category** (median 128) it is `d/n_c`, giving **+0.044**. Referenced to the
-**sub-commodity** (median 16), **+0.502**.
+own **category** (median 128 purchase-weighted) it is `d/n_c`, giving **+0.044**. Referenced to the
+**sub-commodity** (median 16 purchase-weighted), **+0.502**.
 
 The reference width is a single knob trading own-price against cross-price, and the data's
 `+0.1351` sits at an effective width of ~85 products, between the last two. The shipped

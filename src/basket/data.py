@@ -83,6 +83,16 @@ def build(min_lines_per_store_cat=1, force=False):
         _sz = it.groupby("cat_id").size()
         log(f"category partition: {_part}, C = {C}, group size median "
             f"{int(_sz.median())} max {int(_sz.max())}")
+    elif os.environ.get("V3_AFFINITY", "0") == "1" and not os.path.exists(_aff):
+        # Falling through to the default here would build the DEFAULT 188-commodity
+        # partition and cache it under the affinity filename -- a different model, under
+        # the right name, with nothing in the log to say so.  Measured on a fresh tree:
+        # 188 categories, median 18 products per row, against the affinity partition's 280
+        # and median 9.  Checkpoints are not comparable across partitions.
+        raise SystemExit(
+            f"V3_AFFINITY=1 but {_aff} is missing.\n"
+            f"  It ships with the repository; restore it, or unset V3_AFFINITY to build "
+            f"the default 188-commodity partition (which trains a DIFFERENT model).")
     elif os.environ.get("V3_AFFINITY", "0") == "1" and os.path.exists(_aff):
         it = pd.read_parquet(_aff)[["item_id", "cat_id"]]
         C = int(it.cat_id.max()) + 1        # the partition sets C, not meta.json

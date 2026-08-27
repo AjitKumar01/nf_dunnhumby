@@ -68,8 +68,8 @@ only cross-directory dependency.
   RaggedIndex + context dicts  ->  RaggedModel
 ```
 
-Scale: **5,455 products, 2,066 households, 115 stores, 712 days, 199,345 baskets,
-1,566,063 purchase lines.** Split temporally by household-week: train `week < 83`,
+Scale: **5,455 products, 2,066 households, 115 stores, 712 days.** After dropping held-out
+lines outside the training support: **198,690 trips, 1,558,093 purchase lines.** Split temporally by household-week: train `week < 83`,
 validation `83..90`, test `>= 91`.
 
 ---
@@ -85,7 +85,7 @@ grouped by `(trip, category)` rows:
 | `row_of` | `[T]` | which `(trip, category)` row each slot belongs to |
 | `item_trip` | `[T]` | which trip each slot belongs to (`row_trip[row_of]`) |
 | `row_trip`, `row_cat` | `[n_rows]` | the trip and category each row is |
-| `row_size` | `[n_rows]` | products in that row — median 9, max 1,773 |
+| `row_size` | `[n_rows]` | products in that row — median 3, max 1,773; purchase-weighted median 128 |
 | `B` | scalar | trips in the batch |
 
 Everything downstream is a segment operation over `row_of` or `item_trip`. `T` is about
