@@ -14,7 +14,7 @@ export V3_AFFINITY=1
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 
 CKPT="${1:?usage: evaluate.sh <checkpoint.pt>}"
-[[ "$CKPT" = /* ]] || CKPT="$ROOT/out/$CKPT"
+# absolute, relative, or a bare name -- src/basket/paths.py resolves all three
 
 echo "=== ranking: MRR and MRR@k ==="
 python3 -u eval_mrr_cutoffs.py --ckpt "$CKPT" --n-trips 384 --nmax 120 --R 120 \

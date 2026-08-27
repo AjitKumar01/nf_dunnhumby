@@ -30,18 +30,17 @@ Outputs (parquet, in ../data):
     price_store_week.parquet  product x store x week panel: price, base_price, n_tx
 """
 import os
+import sys
 import numpy as np
 import pandas as pd
 
 # Raw dunnhumby CSVs.  Defaults to a sibling of the repository; override with
 # NF_RAW_DIR if the download lives somewhere else.
-RAW = os.path.join(os.environ.get(
-    "NF_RAW_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
-                 "dunnhumby_The-Complete-Journey",
-                 "dunnhumby_The-Complete-Journey CSV")), "")
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "data")
-os.makedirs(OUT, exist_ok=True)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "basket"))
+from paths import DATA, BI, RAW, ensure_dirs   # noqa: E402  depth-independent
+ensure_dirs()
+OUT = DATA
 
 
 def log(msg):

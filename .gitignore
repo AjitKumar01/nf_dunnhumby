@@ -23,3 +23,6 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .venv/
+
+# stray evaluation output if a checkpoint is passed by bare name
+src/**/*_downstream.json

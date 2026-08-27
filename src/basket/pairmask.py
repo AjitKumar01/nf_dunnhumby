@@ -38,7 +38,7 @@ import numpy as np
 from data import build
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BI = os.path.join(HERE, "..", "..", "basket_input")
+from paths import BI
 
 
 def log(m):

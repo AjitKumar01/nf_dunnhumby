@@ -40,6 +40,7 @@ import os
 
 import numpy as np
 import torch
+from paths import OUT as _OUT
 
 from data import build
 from features import Features
@@ -187,7 +188,7 @@ def main(a):
     log("")
 
     for name in a.ckpts.split(","):
-        path = os.path.join("..", "..", "out", name)
+        path = os.path.join(_OUT, name)
         if not os.path.exists(path):
             log(f"{name}: absent")
             continue

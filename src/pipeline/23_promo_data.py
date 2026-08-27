@@ -28,17 +28,16 @@ key = (item * n_stores + store) * 128 + week, sorted, with int8 disp/mail beside
 import argparse
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "..", "..", "data")
-IN = os.path.join(HERE, "..", "..", "basket_input")
-RAW = os.path.join(os.environ.get(
-    "NF_RAW_DIR",
-    os.path.join(HERE, "..", "..", "..", "dunnhumby_The-Complete-Journey",
-                 "dunnhumby_The-Complete-Journey CSV")), "")
+sys.path.insert(0, os.path.join(HERE, "..", "basket"))
+from paths import DATA, BI, RAW, ensure_dirs   # noqa: E402  depth-independent
+ensure_dirs()
+IN = BI
 
 
 def log(m):

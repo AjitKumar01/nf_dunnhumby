@@ -18,6 +18,7 @@ import argparse, itertools, math, os
 from collections import defaultdict
 import numpy as np
 import torch
+from paths import BI as _BI
 from data import build
 
 
@@ -57,7 +58,7 @@ def main(a):
     out = np.zeros((J, a.rank))
     out[keep] = np.asarray(F)
     tag = os.path.splitext(os.path.basename(a.mask))[0] if a.mask else "all"
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+    dst = os.path.join(_BI,
                        "basket_input", f"v3_phiinit_{tag}_r{a.rank}.npy")
     np.save(dst, out)
     print(f"[spec] {nb:,} training baskets, {used:,} usable pairs over {len(keep)} products")

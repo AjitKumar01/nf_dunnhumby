@@ -20,6 +20,7 @@ legacy scripts:
 import argparse, json, os, sys
 import numpy as np
 import torch
+from paths import BI as _BI, resolve_ckpt
 
 from data import build
 from evalall import load_any
@@ -83,6 +84,21 @@ def purchased_mask(ix, LI, LT):
 
 
 
+def _sub_of(J):
+    """Sub-commodity id per product; -1 where unknown."""
+    import pandas as pd
+    out = np.full(J, -1, dtype=np.int64)
+    p = os.path.join(_BI, "items.parquet")
+    if not os.path.exists(p):
+        return out
+    it = pd.read_parquet(p)
+    col = "sub_id" if "sub_id" in it.columns else it.columns[2]
+    ii = it["item_id"].astype(int).values
+    ss = it[col].astype(int).values
+    ok = ii < J
+    out[ii[ok]] = ss[ok]
+    return out
+
 _SUBKEY = {}
 
 
@@ -123,6 +139,13 @@ def counterfactual(m, Bt, trips, chunk, price_ref="trip"):
     log("1. PRICE COUNTERFACTUAL")
     log("=" * 78)
     mult = np.array([1.10, 1.25, 1.50, 2.00])
+    # The panel regression this is checked against defines the rival price as the mean log
+    # price of the OTHER items in the same sub-commodity, and measures the response of the
+    # item itself.  The "cross, same cat" columns below are a different quantity (all
+    # purchased prices raised, response of the non-purchased), so they are not comparable
+    # to +0.1351 -- this one is.
+    _sub = _sub_of(int(len(m.lam)))
+    sub_cross, sub_n = 0.0, 0.0
     own_num = np.zeros(len(mult)); own_den = 0.0
     cross_same = np.zeros(len(mult)); cross_same_n = 0.0
     cross_diff = np.zeros(len(mult)); cross_diff_n = 0.0
@@ -171,6 +194,24 @@ def counterfactual(m, Bt, trips, chunk, price_ref="trip"):
                 m.ctx = c3
                 uni_en[gi] += float(m.pi_quad(ix).sum())
             m.ctx = ctx
+        with torch.no_grad():
+            pass
+        itn = ix.item.numpy(); sb = _sub[itn]
+        tsub = set(int(x) for x in sb[onb.numpy()] if x >= 0)
+        riv = torch.tensor([(sb[i] >= 0 and int(sb[i]) in tsub)
+                            for i in range(len(itn))]) & (~onb)
+        if bool(riv.any()) and bool(good.any()):
+            d = float(np.log(1.10))
+            c4 = dict(ctx); dd4 = ctx["dlp"].clone(); dd4[riv] = dd4[riv] + d
+            c4["dlp"] = dd4
+            if "dlp_bar" in ctx:
+                c4["dlp_bar"] = _rebar(ix, dd4, price_ref)
+            m.ctx = c4
+            with torch.enable_grad():
+                p4 = m.pi_quad(ix)
+            m.ctx = ctx
+            sub_cross += float(torch.log(p4[good] / base[good]).sum())
+            sub_n += float(good.sum())
         own_den += float(good.sum())
         cross_same_n += float((same_cat & (base > 1e-8)).sum())
         cross_diff_n += float(((~onb) & (~same_cat) & (base > 1e-8)).sum())
@@ -182,6 +223,11 @@ def counterfactual(m, Bt, trips, chunk, price_ref="trip"):
         cs = cross_same[gi] / max(cross_same_n, 1) / lg
         cd = cross_diff[gi] / max(cross_diff_n, 1) / lg
         log(f"  {g:>9.2f}{oe:>18.4f}{cs:>18.4f}{cd:>18.4f}")
+    sub_cross = sub_cross / max(sub_n, 1) / float(np.log(1.10))
+    log(f"\n  cross-price, matched to the data's definition: raise every OTHER item in the")
+    log(f"  purchased item's sub-commodity and measure that item's own response.")
+    log(f"    price x1.10   cross-price elasticity {sub_cross:+.4f}"
+        f"   ({int(sub_n):,} cells)   data: +0.1351")
     log(f"\n  uniform price rise (every product), E[n] per basket:")
     log(f"    baseline           {uni_base / max(nb,1):.3f}")
     for gi, g in enumerate(mult):
@@ -306,7 +352,7 @@ def generation(m, D, Bt, lab, k, n_trips, chunk, seed=0):
     items = None
     try:
         import pandas as pd
-        ip = os.path.join("..", "..", "basket_input", "items.parquet")
+        ip = os.path.join(_BI, "items.parquet")
         if os.path.exists(ip):
             items = pd.read_parquet(ip)
     except Exception:
@@ -360,6 +406,7 @@ def main(a):
     J, N, C, S = (int(D[k]) for k in ("n_item", "n_user", "n_cat", "n_store"))
     # The reference is a property of the CHECKPOINT; a flag cannot override what the
     # weights were fitted under without changing what they mean.
+    a.ckpt = resolve_ckpt(a.ckpt)      # absolute, relative, or a bare checkpoint name
     _blob = torch.load(a.ckpt, map_location="cpu", weights_only=False)
     _ref = str(((_blob.get("model_flags") or {}) if isinstance(_blob, dict) else {})
                .get("price_ref", a.price_ref))

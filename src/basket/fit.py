@@ -33,7 +33,7 @@ from ragged import (RaggedIndex, RaggedModel, set_quad, sobol_grid, size_band_sc
                     sobol_mixture_grid)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "..", "out")
+from paths import OUT
 
 
 def log(m):
@@ -693,6 +693,93 @@ def evaluate(m, B, trips, draws, gen, chunk=48, use_units=True,
     return base
 
 
+def calibrate_poly_degree(m, a, B, D, tr, va, log):
+    """Pick the per-row ESP truncation degree, on the model that will actually train.
+
+    Must run AFTER any --resume/--warm-start: the safe degree depends on rho_c, which
+    is ~0 on a fresh model (every degree agrees, so anything looks fine) and -0.34 on a
+    trained one (degree 40 already returns garbage).  Calibrating before the load chose
+    96 for a checkpoint whose true safe ceiling was 32.
+    """
+    if a.poly_degree == 0:
+        return
+    if True:
+        # The degree cap must be DERIVED from the data, not read off one dataset.  32 happens
+        # to be safe here because the largest single-affinity-row count over all 198,690 trips
+        # is 26 -- but a catalogue with bigger categories would be silently truncated by a
+        # hardcoded constant.  So:
+        #   1. floor the cap above the largest row count actually present, with margin;
+        #   2. CALIBRATE against the uncapped polynomial on real trips and pick the smallest
+        #      degree meeting --poly-degree-tol;
+        #   3. keep the measured error in the log and the checkpoint.
+        # --poly-degree -1 calibrates; a positive value forces that degree but still verifies.
+        _lp, _lc = D["line_ptr"], D["line_cat"]
+        _worst = 0
+        for _t in np.concatenate([tr, va]):
+            _lo, _hi = int(_lp[_t]), int(_lp[_t + 1])
+            if _hi > _lo:
+                _worst = max(_worst, int(np.bincount(_lc[_lo:_hi]).max()))
+        # HARD floor: a row that actually contains _worst items needs degree _worst to have
+        # a non-zero coefficient there, else an observed basket gets probability zero.
+        # Anything ABOVE that is a judgement about unobserved tail mass, and the calibration
+        # below measures that directly rather than guessing a multiplier.
+        _floor = min(a.R, _worst)
+        _ixc, _cc, _, _hhc, _, _, _, _ = B.make(va[:16])
+        _oh, _oc = m.house, m.ctx
+        m.house, m.ctx = _hhc, _cc
+        # CALIBRATE UPWARD, never against the untruncated polynomial.  exp(-rho_c C(n,2))
+        # at rho_c = -0.34 and n = 120 is 10^1045 against float64's 10^308, so degree a.R
+        # is precisely the value that overflows -- using it as the reference compares
+        # everything to NaN, and NaN <= tol is False, so the loop falls through and returns
+        # a.R itself.  Worse, degrees just below overflow are FINITE AND MEANINGLESS: at
+        # degree 64 sum_j pi_j = 120.00 = n_max ("every product certain") when the truth is
+        # 7.6.  The floor is the largest per-category count actually present, which is the
+        # smallest degree that can give an observed basket non-zero probability; go up from
+        # there and stop at the first degree that moves the answer.
+        with torch.no_grad():
+            _z = torch.zeros(_ixc.B, 1, a.Kz, dtype=m.lam.dtype)
+            _cands = ([a.poly_degree] if a.poly_degree > 0 else
+                      # Above the floor there is no accuracy gain on OBSERVED data, only
+                      # unobserved tail mass -- and exp(-rho_c C(n,2)) grows explosively in
+                      # n, so reaching for headroom is how the recursion loses precision.
+                      # Stay within 1.5x the floor.
+                      sorted({_floor} | {d for d in (32, 40, 48, 64, 96)
+                                         if _floor <= d <= int(1.5 * _floor)}))
+            _base, _chosen, _err, _table = None, int(_floor), 0.0, []
+            for _d in _cands:
+                _v = log_f_sparse(m, _z, _ixc, sparse_prepare(m, _ixc, degree=_d), True)
+                if not bool(torch.isfinite(_v).all()):
+                    _table.append((_d, float("nan")))
+                    break
+                _val = float(_v.mean())
+                _table.append((_d, _val))
+                if a.poly_degree > 0:
+                    _chosen, _err = _d, 0.0
+                    break
+                if _base is None:
+                    _base = _val
+                else:
+                    _e = abs(_val - _base) / max(abs(_base), 1e-9)
+                    if _e > a.poly_degree_tol:
+                        break
+                    _err = _e
+                _chosen = _d
+        m.house, m.ctx = _oh, _oc
+        if _chosen < _floor:
+            raise SystemExit(
+                f"--poly-degree {_chosen} < largest observed single-row count {_worst}: an "
+                f"observed basket would get probability zero.  Use at least {_worst}, or "
+                f"--poly-degree -1 to calibrate automatically.")
+        m.poly_degree = m._poly_degree = int(_chosen)
+        log(f"  per-row polynomial degree {_chosen} (support unchanged at 1..{a.nmax}). "
+            f"largest observed single-row count {_worst}, floor {_floor}; calibrated "
+            f"upward, relative |d log f| vs the floor = {_err:.2e} on 16 real trips")
+        log("    log f by degree: " + "  ".join(
+            f"d{_d}:{'NaN' if _v != _v else f'{_v:.4f}'}" for _d, _v in _table))
+        if _err > max(a.poly_degree_tol, 1e-9):
+            log(f"  WARNING: degree {_chosen} exceeds the {a.poly_degree_tol:g} tolerance")
+
+
 def main(a):
     # Subnormal arithmetic runs one to two orders of magnitude slower on CPU, and the ESP
     # coefficients underflow into that range as soon as the mode iteration wanders.
@@ -857,6 +944,9 @@ def main(a):
             f"0.063 s/step vs 2.292 (36.6x). rho_0 FROZEN at the empirical size law "
             f"(zero gradient under this objective; costs ~0.008 nats). "
             f"Evaluation still uses the exact normaliser.")
+    # Now that the weights are final (fresh, warm-started or resumed), choose the
+    # truncation degree against THEIR rho_c.
+    calibrate_poly_degree(m, a, B, D, tr, va, log)
     m.price_ref = a.price_ref
     if a.price_ref != "trip":
         _grp = {"category": "the store's own category (median 128 products as purchases "
@@ -881,54 +971,7 @@ def main(a):
         log(f"  price: UNCONSTRAINED bilinear + hinge penalty (weight {a.price_hinge_w}). "
             f"softplus saturated 100% of gamma below -3, block gradient 5.6e-4 vs 0.05-2.2 "
             f"elsewhere; warm start applied after checkpoint load so step 0 is identical")
-    if a.poly_degree != 0:
-        # The degree cap must be DERIVED from the data, not read off one dataset.  32 happens
-        # to be safe here because the largest single-affinity-row count over all 198,690 trips
-        # is 26 -- but a catalogue with bigger categories would be silently truncated by a
-        # hardcoded constant.  So:
-        #   1. floor the cap above the largest row count actually present, with margin;
-        #   2. CALIBRATE against the uncapped polynomial on real trips and pick the smallest
-        #      degree meeting --poly-degree-tol;
-        #   3. keep the measured error in the log and the checkpoint.
-        # --poly-degree -1 calibrates; a positive value forces that degree but still verifies.
-        _lp, _lc = D["line_ptr"], D["line_cat"]
-        _worst = 0
-        for _t in np.concatenate([tr, va]):
-            _lo, _hi = int(_lp[_t]), int(_lp[_t + 1])
-            if _hi > _lo:
-                _worst = max(_worst, int(np.bincount(_lc[_lo:_hi]).max()))
-        # HARD floor: a row that actually contains _worst items needs degree _worst to have
-        # a non-zero coefficient there, else an observed basket gets probability zero.
-        # Anything ABOVE that is a judgement about unobserved tail mass, and the calibration
-        # below measures that directly rather than guessing a multiplier.
-        _floor = min(a.R, _worst)
-        _ixc, _cc, _, _hhc, _, _, _, _ = B.make(va[:16])
-        _oh, _oc = m.house, m.ctx
-        m.house, m.ctx = _hhc, _cc
-        with torch.no_grad():
-            _z = torch.zeros(_ixc.B, 1, a.Kz, dtype=m.lam.dtype)
-            _full = log_f_sparse(m, _z, _ixc, sparse_prepare(m, _ixc, degree=a.R), True)
-            _cands = ([a.poly_degree] if a.poly_degree > 0 else
-                      [d for d in (16, 24, 32, 48, 64, 96) if d >= _floor] + [a.R])
-            _chosen, _err = a.R, 0.0
-            for _d in _cands:
-                _v = log_f_sparse(m, _z, _ixc, sparse_prepare(m, _ixc, degree=_d), True)
-                _e = float((_v - _full).abs().max())
-                if a.poly_degree > 0 or _e <= a.poly_degree_tol:
-                    _chosen, _err = _d, _e
-                    break
-        m.house, m.ctx = _oh, _oc
-        if _chosen < _floor:
-            raise SystemExit(
-                f"--poly-degree {_chosen} < largest observed single-row count {_worst}: an "
-                f"observed basket would get probability zero.  Use at least {_worst}, or "
-                f"--poly-degree -1 to calibrate automatically.")
-        m.poly_degree = m._poly_degree = int(_chosen)
-        log(f"  per-row polynomial degree {_chosen} (support unchanged at 1..{a.nmax}). "
-            f"largest observed single-row count {_worst}, floor {_floor}; "
-            f"measured max |d log Z| vs degree {a.R} = {_err:.2e} on 16 real trips")
-        if _err > max(a.poly_degree_tol, 1e-9):
-            log(f"  WARNING: degree {_chosen} exceeds the {a.poly_degree_tol:g} tolerance")
+    # degree calibration happens after the checkpoint load; see below.
     if a.phi_pool == "mean":
         m.size_bands = size_band_scales(a.nmax, a.size_bands, pool="mean")
         m._phi_pool, m._size_bands_n = a.phi_pool, a.size_bands

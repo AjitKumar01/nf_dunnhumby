@@ -10,6 +10,7 @@ import os
 
 import numpy as np
 import torch
+from paths import resolve_ckpt
 
 import ragged
 from data import build
@@ -18,22 +19,6 @@ from features import Features
 from fit import Batcher
 
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-
-
-def _resolve_ckpt(p):
-    """Accept an absolute path, a path relative to the CWD, or a bare checkpoint name.
-
-    Blindly prefixing "../../out" turned a perfectly good relative path into
-    ../../out/../../out/<name>.  Take the path as given when it exists; only fall back to
-    the repository's out/ directory for a bare name.
-    """
-    if os.path.exists(p):
-        return p
-    cand = os.path.join(_HERE, "..", "..", "out", os.path.basename(p))
-    if os.path.exists(cand):
-        return cand
-    raise SystemExit(f"checkpoint not found: {p} (also tried {os.path.normpath(cand)})")
 
 
 
@@ -70,7 +55,7 @@ def main(a):
     torch.set_default_dtype(torch.float64)
     D = build()
     J, N, C, S = (int(D[k]) for k in ("n_item", "n_user", "n_cat", "n_store"))
-    path = _resolve_ckpt(a.ckpt)
+    path = resolve_ckpt(a.ckpt)
     blob = torch.load(path, map_location="cpu", weights_only=False)
     q = blob.get("quad") or {}
     kz = int(q.get("Kz", blob["model"]["phi"].shape[1]))

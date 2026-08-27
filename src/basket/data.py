@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.join(HERE, "..", "..")
+from paths import ROOT
 BI = os.path.join(ROOT, "basket_input")
 CACHE = os.path.join(BI, "v3_index.npz")
 CACHE_AFF = os.path.join(BI, "v3_index_affinity.npz")

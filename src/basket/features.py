@@ -37,7 +37,7 @@ import numpy as np
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BI = os.path.join(HERE, "..", "..", "basket_input")
+from paths import BI  # repository-relative, depth independent
 
 
 def log(m):

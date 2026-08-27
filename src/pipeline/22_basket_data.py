@@ -45,17 +45,16 @@ The last weeks are held out rather than a random slice: a model meant to answer
 import argparse
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "..", "..", "data")
-OUT = os.path.join(HERE, "..", "..", "basket_input")
-RAW = os.path.join(os.environ.get(
-    "NF_RAW_DIR",
-    os.path.join(HERE, "..", "..", "..", "dunnhumby_The-Complete-Journey",
-                 "dunnhumby_The-Complete-Journey CSV")), "")
+sys.path.insert(0, os.path.join(HERE, "..", "basket"))
+from paths import DATA, BI, RAW, ensure_dirs   # noqa: E402  depth-independent
+ensure_dirs()
+OUT = BI
 
 DAY_STRIDE = 1024          # > 711, so group_id * DAY_STRIDE + day never collides
 
@@ -67,7 +66,7 @@ def log(m):
 def main(a):
     global OUT
     if a.outdir:
-        OUT = os.path.join(HERE, "..", "..", a.outdir)
+        OUT = os.path.join(os.path.dirname(BI), a.outdir)
     os.makedirs(OUT, exist_ok=True)
     tx = pd.read_parquet(os.path.join(DATA, "tx.parquet"),
                          columns=["household_key", "DAY", "WEEK_NO", "PRODUCT_ID",
