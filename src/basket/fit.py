@@ -1113,6 +1113,26 @@ def main(a):
             _g0, _b0 = m.gamma.detach().clone(), m.beta.detach().clone()
             m.gamma.copy_(torch.nn.functional.softplus(m.gamma))
             m.beta.copy_(torch.nn.functional.softplus(m.beta))
+            # DESATURATE whatever we were handed.  A checkpoint trained long under the
+            # constraint arrives with gamma ratcheted deep into softplus saturation --
+            # measured, mean -4.72 and min -5.88 after 38,500 iterations, i.e. effective
+            # coefficients of 0.0097 and 0.0028.  Unconstrained, an Adam step of lr moves
+            # those by lr regardless of their size, so the smallest cross ZERO within a few
+            # hundred iterations, the price coefficient changes sign, and E[n] runs to
+            # n_max.  Stage 2 must not depend on stage 1 having been floored: it can see the
+            # saturation in the weights it loads, so it repairs it here.  The likelihood
+            # cost is tiny (these coefficients are ~0 by construction) and project_price
+            # puts the aggregate straight back on target at the next projection.
+            _sat = 0
+            if a.price_soft_floor > 0:
+                _sat = int((m.gamma < a.price_soft_floor).sum()
+                           + (m.beta < a.price_soft_floor).sum())
+                m.gamma.clamp_(min=a.price_soft_floor)
+                m.beta.clamp_(min=a.price_soft_floor)
+        if a.price_soft_floor > 0:
+            log(f"  price warm start: desaturated {_sat:,} coefficients below "
+                f"{a.price_soft_floor:g} (an Adam step of lr moves them by lr regardless "
+                f"of size, so saturated ones cross zero and flip the price sign)")
         log(f"  price warm start: gamma {_g0.mean():+.4f} -> {m.gamma.mean():+.4f}, "
             f"beta {_b0.mean():+.4f} -> {m.beta.mean():+.4f} "
             f"(softplus applied to the loaded weights, identity in the likelihood)")
@@ -2987,6 +3007,12 @@ if __name__ == "__main__":
                    help="What dlp is measured against: the whole assortment (trip) or the "
                         "store's own category (category).  Substitution is only expressible "
                         "under 'category' -- see Batcher.make.")
+    p.add_argument("--price-soft-floor", type=float, default=0.02,
+                   help="Floor on the EFFECTIVE price coefficients when --price-soft "
+                        "converts them.  Repairs a checkpoint that arrived saturated, so "
+                        "stage 2 does not depend on how stage 1 was run.  0 disables.  "
+                        "Measured on a stage-1 checkpoint with gamma min -5.876: 0 and "
+                        "0.01 both diverged at the same iteration, 0.02 survived.")
     p.add_argument("--gamma-floor", type=float, default=-3.0,
                    help="Floor on the pre-softplus price parameters while the block is "
                         "CONSTRAINED.  softplus(-3) = 0.0486 with slope 0.047, so the "
