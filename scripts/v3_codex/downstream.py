@@ -82,8 +82,29 @@ def purchased_mask(ix, LI, LT):
     return onb
 
 
+
+def _rebar(ix, dlp, price_ref):
+    """Recompute the price reference after a counterfactual price change.
+
+    b_j = ... - gb_j [dbar + kappa (dlp_j - dbar)], so dbar is not a constant: perturbing
+    dlp while holding dbar fixed silently deletes the substitution channel, which enters
+    ONLY through dbar (a rival's rise moves b_j by gb(kappa-1) d_dbar, positive at kappa
+    = 35.6).  Holding it fixed is what made this script report cross-price elasticities of
+    -0.116 -- the pure basket-size effect -- for a model that actually substitutes.
+    """
+    if price_ref == "category":
+        num = torch.zeros(ix.n_rows, dtype=dlp.dtype).index_add_(0, ix.row_of, dlp)
+        den = torch.zeros(ix.n_rows, dtype=dlp.dtype).index_add_(
+            0, ix.row_of, torch.ones_like(dlp))
+        return (num / den.clamp_min(1.0))[ix.row_of]
+    num = torch.zeros(ix.B, dtype=dlp.dtype).index_add_(0, ix.item_trip, dlp)
+    den = torch.zeros(ix.B, dtype=dlp.dtype).index_add_(
+        0, ix.item_trip, torch.ones_like(dlp))
+    return num / den.clamp_min(1.0)
+
+
 # ---------------------------------------------------------------- 1. counterfactual
-def counterfactual(m, Bt, trips, chunk):
+def counterfactual(m, Bt, trips, chunk, price_ref="trip"):
     """Own-price and uniform-price response, as arc elasticities.
 
     elasticity = d log pi_j / d log p_j, estimated as log(pi_g / pi_1) / log(g).  Reported
@@ -120,7 +141,10 @@ def counterfactual(m, Bt, trips, chunk):
                 d = float(np.log(g))
                 # own price: only the purchased items move
                 c2 = dict(ctx); dd = ctx["dlp"].clone(); dd[onb] = dd[onb] + d
-                c2["dlp"] = dd; m.ctx = c2
+                c2["dlp"] = dd
+                if "dlp_bar" in ctx:
+                    c2["dlp_bar"] = _rebar(ix, dd, price_ref)
+                m.ctx = c2
                 p = m.pi_quad(ix)
                 own_num[gi] += float((torch.log(p[good] / base[good])).sum())
                 sel = same_cat & (base > 1e-8)
@@ -132,7 +156,7 @@ def counterfactual(m, Bt, trips, chunk):
                 # uniform: every price moves
                 c3 = dict(ctx); c3["dlp"] = ctx["dlp"] + d
                 if "dlp_bar" in ctx:
-                    c3["dlp_bar"] = ctx["dlp_bar"] + d
+                    c3["dlp_bar"] = ctx["dlp_bar"] + d   # uniform shift: bar moves by d too
                 m.ctx = c3
                 uni_en[gi] += float(m.pi_quad(ix).sum())
             m.ctx = ctx
@@ -323,7 +347,13 @@ def main(a):
     torch.set_default_dtype(torch.float64)
     D = build()
     J, N, C, S = (int(D[k]) for k in ("n_item", "n_user", "n_cat", "n_store"))
-    Bt = Batcher(D, Features(J, S, 712), a.nmax)
+    # The reference is a property of the CHECKPOINT; a flag cannot override what the
+    # weights were fitted under without changing what they mean.
+    _blob = torch.load(a.ckpt, map_location="cpu", weights_only=False)
+    _ref = str(((_blob.get("model_flags") or {}) if isinstance(_blob, dict) else {})
+               .get("price_ref", a.price_ref))
+    del _blob
+    Bt = Batcher(D, Features(J, S, 712), a.nmax, price_ref=_ref)
     m = RaggedModel(J=J, N=N, C=C, K=32, Kz=a.Kz, nmax=a.nmax, R=a.R, S=S, Kp=8)
     meta = load_any(a.ckpt, m, J, D)
     m.double().eval()
@@ -342,7 +372,7 @@ def main(a):
     safe_degree(m, ixc, worst)
     res = {}
     if not a.skip_cf:
-        res["counterfactual"] = counterfactual(m, Bt, trips, a.chunk)
+        res["counterfactual"] = counterfactual(m, Bt, trips, a.chunk, _ref)
     if not a.skip_pers:
         res["personalisation"] = personalisation(m, Bt, trips[:a.n_pers], a.chunk)
     lab, rows = segmentation(m, D, a.k)
@@ -366,6 +396,7 @@ if __name__ == "__main__":
     p.add_argument("--Kz", type=int, default=4)
     p.add_argument("--nmax", type=int, default=120)
     p.add_argument("--R", type=int, default=120)
+    p.add_argument("--price-ref", choices=("trip", "category"), default="trip")
     p.add_argument("--skip-cf", action="store_true")
     p.add_argument("--skip-pers", action="store_true")
     p.add_argument("--skip-gen", action="store_true")

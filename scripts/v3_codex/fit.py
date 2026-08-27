@@ -43,8 +43,9 @@ def log(m):
 class Batcher:
     """Builds the ragged index and the per-slot features for a set of trips."""
 
-    def __init__(self, D, F, nmax):
+    def __init__(self, D, F, nmax, price_ref="trip"):
         self.D, self.F, self.nmax = D, F, nmax
+        self.price_ref = price_ref
         self.C = int(D["n_cat"])
         self.ptr = D["store_cat_ptr"]
         self.items = D["store_items"]
@@ -81,11 +82,38 @@ class Batcher:
         # splitting dlp into a common level and an idiosyncratic deviation, and it must be
         # the same number whether b_at is called on assortment slots or on purchased lines
         # -- so it is computed once here, from the assortment, and carried in both views.
-        _dbar = torch.zeros(ix.B, dtype=torch.float64).index_add_(
-            0, ix.item_trip, dlp.double())
-        _dcnt = torch.zeros(ix.B, dtype=torch.float64).index_add_(
-            0, ix.item_trip, torch.ones_like(dlp, dtype=torch.float64))
-        _dbar = _dbar / _dcnt.clamp_min(1.0)
+        #
+        # WHICH reference decides whether the model can express substitution at all.
+        # b_j = ... - gb_j [dbar + kappa (dlp_j - dbar)], so a rival's price rise moves b_j
+        # by gb_j (kappa - 1) * d_dbar -- strongly POSITIVE at kappa = 35.6 (gb(kappa-1) =
+        # 0.535).  Averaged over the whole assortment, though, one rival moves dbar by
+        # d / 5,292, so the channel is diluted ~5,000x and the size effect swamps it: the
+        # fitted cross-price elasticity is -0.116 where the data (item-week panel, rival =
+        # mean log price within the sub-commodity) shows +0.1351.
+        #
+        # Referencing the RAGGED ROW instead -- the store's own category, median 9 products
+        # -- moves the reference by d/n_c, giving 0.535 * (n_riv/n_c) ~ +0.18 for three
+        # rivals in a nine-product category.  That is the right order, and it is the right
+        # economics: a shopper judges a price against close alternatives, not against the
+        # whole store.  Nothing in the normaliser changes; dbar is a feature.
+        #
+        # Pairwise phi cannot do this job.  d pi_k / d b_j = Cov(1_j, 1_k), so an
+        # interaction's leverage on a marginal is second order in pi_j pi_k ~ 1e-3:
+        # measured, driving phi_j.phi_k to -0.64 moved the cross-price elasticity by 0.014
+        # against the 0.25 required, with lambda_max never exceeding 0.216.
+        if self.price_ref == "category":
+            _rb = torch.zeros(ix.n_rows, dtype=torch.float64).index_add_(
+                0, ix.row_of, dlp.double())
+            _rc = torch.zeros(ix.n_rows, dtype=torch.float64).index_add_(
+                0, ix.row_of, torch.ones_like(dlp, dtype=torch.float64))
+            _rowbar = _rb / _rc.clamp_min(1.0)
+            _dbar = _rowbar[ix.row_of]            # per SLOT, not per trip
+        else:
+            _dbar = torch.zeros(ix.B, dtype=torch.float64).index_add_(
+                0, ix.item_trip, dlp.double())
+            _dcnt = torch.zeros(ix.B, dtype=torch.float64).index_add_(
+                0, ix.item_trip, torch.ones_like(dlp, dtype=torch.float64))
+            _dbar = _dbar / _dcnt.clamp_min(1.0)
         ctx = dict(dlp_bar=_dbar, dlp=dlp.double(), disp=disp.double(), mail=mail.double(),
                    week=(wk_i - 1) % 52, store=st_i,
                    rec=self.F.recency(ix.item, user[ix.item_trip], dy_i))
@@ -101,7 +129,17 @@ class Batcher:
         # the SAME features, gathered at the purchased lines, so energy() and log_Z score
         # each product identically
         dlp_l, disp_l, mail_l = self.F.gather(LI, store[LT], day[LT], week[LT])
-        lctx = dict(dlp_bar=_dbar, dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
+        if self.price_ref == "category":
+            # each purchased line sits in the row (trip, category); look up that row's
+            # reference so energy() and log_Z score the product identically.
+            _slot_row = torch.full((ix.B, int(ix.row_cat.max()) + 1), -1, dtype=torch.long)
+            _slot_row[ix.row_trip, ix.row_cat] = torch.arange(ix.n_rows)
+            _lrow = _slot_row[LT, torch.as_tensor(np.concatenate(lc), dtype=torch.long)]
+            _dbar_l = _rowbar[_lrow.clamp_min(0)]
+            _dbar_l = torch.where(_lrow >= 0, _dbar_l, torch.zeros_like(_dbar_l))
+        else:
+            _dbar_l = _dbar
+        lctx = dict(dlp_bar=_dbar_l, dlp=dlp_l.double(), disp=disp_l.double(), mail=mail_l.double(),
                     week=(week[LT] - 1) % 52, store=store[LT],
                     rec=self.F.recency(LI, user[LT], day[LT]))
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
@@ -377,7 +415,11 @@ def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes,
         # training log, which had the flag, reported the model working normally.  Recorded
         # for the same reason the data partition is.
         model_flags=dict(price_soft=int(bool(getattr(m, "price_soft", False))),
-                         poly_degree=int(getattr(m, "poly_degree", 0) or 0)),
+                         poly_degree=int(getattr(m, "poly_degree", 0) or 0),
+                         # What dlp is measured against.  Same trap as price_soft: the
+                         # weights look identical, but scoring a category-referenced model
+                         # against a trip mean silently deletes its substitution channel.
+                         price_ref=str(getattr(m, "price_ref", "trip"))),
         # How log Z was integrated.  Carried in the checkpoint so an eval cannot score
         # this model with a different normaliser than the one it was trained against --
         # recommend_pi.py hardcoded smolyak_grid(4, 8) regardless of the checkpoint.
@@ -716,7 +758,7 @@ def main(a):
         log("version-4 experiment guard: PASS (fresh-lineage, affinity-280, original joint law, "
             "full catalogue/rank/support, QMC normalizer)")
     F = Features(J, S, 712)
-    B = Batcher(D, F, a.nmax)
+    B = Batcher(D, F, a.nmax, price_ref=a.price_ref)
 
     tr = np.flatnonzero(D["trip_split"] == 0)
     va = np.flatnonzero(D["trip_split"] == 1)
@@ -788,6 +830,13 @@ def main(a):
             f"0.063 s/step vs 2.292 (36.6x). rho_0 FROZEN at the empirical size law "
             f"(zero gradient under this objective; costs ~0.008 nats). "
             f"Evaluation still uses the exact normaliser.")
+    m.price_ref = a.price_ref
+    if a.price_ref != "trip":
+        log(f"  price reference: {a.price_ref} -- dlp is measured against the store's own "
+            f"category, not the whole assortment.  A rival's rise then moves the reference "
+            f"by d/n_c instead of d/5,292, which is the only channel through which this "
+            f"model can substitute (measured: cross-price -0.1621 -> +0.0702 against the "
+            f"data's +0.1351, before refitting)")
     if a.price_soft:
         # The reparameterisation is gamma' = softplus(gamma), so the warm start is only
         # identity if it is applied to the weights the run will actually TRAIN.  Doing it
@@ -2845,6 +2894,10 @@ if __name__ == "__main__":
                    help="unconstrained price bilinear + hinge penalty instead "
                         "of the softplus hard constraint")
     p.add_argument("--price-hinge-w", type=float, default=10.0)
+    p.add_argument("--price-ref", choices=("trip", "category"), default="trip",
+                   help="What dlp is measured against: the whole assortment (trip) or the "
+                        "store's own category (category).  Substitution is only expressible "
+                        "under 'category' -- see Batcher.make.")
     p.add_argument("--kappa-init", type=float, default=0.0,
                    help="Set softplus(price_kappa) to this value after the checkpoint "
                         "load.  0 leaves it alone.  kappa moves ~1.4 units per 1,000 "

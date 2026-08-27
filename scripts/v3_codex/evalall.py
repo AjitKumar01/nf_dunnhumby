@@ -90,6 +90,10 @@ def load_any(path, m, J, D):
         # choose it; reading it wrong scales every price coefficient by 34x.
         _f = sd.get("model_flags") or {}
         m.price_soft = bool(_f.get("price_soft", 0))
+        m.price_ref = str(_f.get("price_ref", "trip"))
+        if m.price_ref != "trip":
+            log(f"price reference: {m.price_ref} (the Batcher must match, or the "
+                f"substitution channel is scored away)")
         if m.price_soft:
             log("price block: UNCONSTRAINED (gamma/beta are the coefficients; "
                 "softplus NOT applied)")

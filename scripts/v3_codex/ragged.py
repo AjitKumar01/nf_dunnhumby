@@ -1147,7 +1147,10 @@ class RaggedModel(torch.nn.Module):
         _gb = (self.price_g()[hh] * self.price_b()[it]).sum(-1)
         self._last_gb = _gb
         if "dlp_bar" in c:
-            _m = c["dlp_bar"][trip]
+            # Trip-level references are one scalar per trip and must be gathered by trip;
+            # category-level ones are already aligned with the elements being scored.
+            _db = c["dlp_bar"]
+            _m = _db if _db.shape[0] == it.shape[0] else _db[trip]
             b = b - _gb * (_m + softplus(self.price_kappa) * (c["dlp"] - _m))
         else:
             b = b - _gb * c["dlp"]
