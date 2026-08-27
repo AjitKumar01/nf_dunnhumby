@@ -59,5 +59,11 @@ if [ ! -f "$BI/v3_phimask_lift30.npy" ]; then
     fi
 fi
 
+echo "--- estimating the elasticity targets from this data ---"
+# The model is calibrated to these; they must come from the data on THIS machine, not from
+# constants in a script.  Two independent estimators are reported and their agreement is
+# checked -- see the notes it prints.
+python3 elasticity_targets.py
+
 echo
-echo "done.  train with:  ./src/run/train.sh my_run 40000"
+echo "done.  train with:  ./src/run/train.sh my_run 40000 20000"

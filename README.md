@@ -31,13 +31,23 @@ That is the whole thing. The scripts set what they need and can be run from any 
 | median rank | **380** | 468 |
 | MRR@5 / Recall@5 | 0.0660 / 0.1234 | 0.0575 / 0.0918 |
 | MRR@20 / Recall@20 | 0.0720 / 0.1835 | 0.0667 / 0.1772 |
-| own-price elasticity | **−0.681** | **−0.7725** measured from the data |
-| cross-price elasticity (same sub-commodity) | **+0.044** | **+0.1351** measured from the data |
+| own-price elasticity | **−0.681** | **−0.789** measured from the data |
+| cross-price elasticity (same sub-commodity) | **+0.044** | **+0.099** measured from the data |
 | aggregate elasticity | −0.171 | −0.121 measured from the data |
 | E[n] per basket | 7.94 | 7.82 observed |
 
-The elasticity references are estimated **independently of the model**, from an item-week
-panel with item fixed effects and display/mailer controls. They are targets the model is
+The elasticity references are estimated **independently of the model** by
+`src/basket/elasticity_targets.py`, which `prepare.sh` runs and `train.sh` reads — so a
+from-scratch run calibrates to the data on your machine, not to constants in a script.
+
+It reports **two** estimators on deliberately different variation. They do **not** agree:
+the item-week time series gives −0.789, cross-store-within-item-week gives −0.131, 22.9σ
+apart. The second is identified off only 2,719 usable cells (store price deviations cover
+0.53% of the grid) and is consistent with attenuation, so the first is adopted — but the
+targets rest on **one** credible estimator, and the price calibration moves if that number
+moves. The aggregate estimator is worse: it returns a positive elasticity (a composition
+artifact of non-random price observation), so the script refuses it and falls back to
+−0.121 with a printed warning. They are targets the model is
 checked against, not quantities fitted to it.
 
 Every row above is what `evaluate.sh` prints for the shipped checkpoint. Two notes on

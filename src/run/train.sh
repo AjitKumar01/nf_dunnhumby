@@ -1,42 +1,116 @@
 #!/usr/bin/env bash
 #
-# Train the shipped model from scratch, in one run.
+# Train the shipped model from scratch.
 #
-# This is the FINAL configuration.  The published checkpoint was reached across several
-# runs only because the settings below were discovered one at a time; there is nothing
-# staged about them, and starting here goes straight to the same place.  What matters and
-# why is in docs/THEORY.md section 6 (price identification) -- in particular kappa, which
-# moves ~1.4 units per 1,000 iterations and so is INITIALISED at the value the data implies
-# rather than trained toward it.
+# TWO STAGES, and the split is not cosmetic.  Stage 2's settings -- an UNCONSTRAINED price
+# block, kappa initialised at the data-implied 44, and the category price reference -- all
+# assume a utility block that already roughly fits.  Applied from iteration zero they drive
+# E[n] to n_max within 500 iterations; the divergence tripwire catches it, but the run is
+# lost.  Verified: every one of those three settings diverges from a cold start, alone or
+# together, while the constrained configuration in stage 1 trains cleanly.
 #
-#   usage:  ./src/run/train.sh [label] [iterations]
-#   e.g.    OMP_NUM_THREADS=8 ./src/run/train.sh my_run 40000
+#   stage 1  constrained price block (softplus), trip-wide price reference
+#   stage 2  --price-soft, --kappa-init 44, --price-ref category, resumed from stage 1
 #
-# ~0.7 s/iteration on 8 CPU threads, so 40,000 iterations is about 8 hours.  Writes
-# out/v3_<label>.pt, out/v3_<label>_best.pt and out/<label>_metrics.jsonl.
+# Why each setting exists is in docs/THEORY.md section 6.
+#
+#   usage:  ./src/run/train.sh [label] [stage1_iters] [stage2_iters]
+#   e.g.    OMP_NUM_THREADS=8 ./src/run/train.sh my_run 40000 20000
+#
+# ~0.7 s/iteration on 8 CPU threads: 40,000 + 20,000 is about 12 hours.  Writes
+# out/v3_<label>_s1_best.pt then out/v3_<label>_best.pt, plus per-eval JSON metrics.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# The 280-category co-purchase affinity partition.  Omitting this silently trains a
-# DIFFERENT model on 188 merchandiser commodities, and the two are not comparable
-# (rho_c changes shape).  See docs/ARCHITECTURE.md.
+# The 280-category co-purchase affinity partition.  Without it a DIFFERENT model is trained
+# (188 merchandiser commodities); data.py now refuses rather than falling back silently.
 export V3_AFFINITY=1
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 
 LABEL="${1:-run_local}"
-ITERS="${2:-40000}"
+IT1="${2:-40000}"
+IT2="${3:-20000}"
 
+# Ask the code where artifacts go, rather than assuming "$ROOT/out" -- NF_ROOT may point
+# elsewhere, and stage 2 has to find the checkpoint stage 1 actually wrote.
+eval "$(python3 -c "
+import sys; sys.path.insert(0, '$ROOT/src/basket')
+from paths import OUT, BI
+print(f'OUT={OUT!r}'); print(f'BI={BI!r}')
+")"
+AUX_BETA="$BI/v3_beta_target.npz"
+AUX_MASK="$BI/v3_phimask_lift30.npy"
+TARGETS="$BI/v3_elasticity_targets.json"
+
+# The elasticity targets are ESTIMATED FROM THE DATA on this machine (prepare.sh runs
+# src/basket/elasticity_targets.py), not baked in here.  --elast-target pins the aggregate
+# price response by projection; --kappa-init sets the idiosyncratic/aggregate split, and
+# kappa must be initialised rather than trained because it moves ~1.4 units per 1,000
+# iterations.  docs/THEORY.md section 6.
+eval "$(python3 -c "
+import json
+t = json.load(open('$TARGETS'))['training']
+print(f\"ELAST_TARGET={t['elast_target']}\"); print(f\"KAPPA_INIT={t['kappa_init']}\")
+")"
+echo "elasticity targets (estimated from this data): elast=$ELAST_TARGET kappa=$KAPPA_INIT"
+for f in "$AUX_BETA" "$AUX_MASK" "$TARGETS"; do
+    [ -f "$f" ] || { echo "missing $f -- run ./src/run/prepare.sh first" >&2; exit 1; }
+done
 cd "$ROOT/src/basket"
+
+echo "=============================================================="
+echo " stage 1/2: base model, constrained price block  ($IT1 iters)"
+echo "=============================================================="
 python3 -u fit.py \
-    --label "$LABEL" --iters "$ITERS" \
+    --label "${LABEL}_s1" --iters "$IT1" \
+    --lr 0.002 --lr-milestones 25000,33000 \
     --lr 0.002 --lr-milestones 25000,33000 \
     --K 32 --Kp 8 --Kz 4 --R 120 --adapt-draws 1 --allow-factored-ablation 0 \
     --aniso 2.0 --antithetic 0 --batch 24 --beta-cal-w 0.1 --budget-f 1.0 --c-max 0.0 \
     --cd 0 --cd-draws 0 --clip 2.0 --comp-ce-w 0.0 --composition-stage 0 --cosine 0 \
-    --ctx-shrink 1.0 --draws 16 --elast-every 20 --elast-target -0.121 --elast-w 20.0 \
+    --ctx-shrink 1.0 --draws 16 --elast-every 20 --elast-target "$ELAST_TARGET" --elast-w 20.0 \
     --en-w 0.005 --ess-floor 0.3 --ess-floor-min 0.15 --eval-every 500 --eval-initial 1 \
-    --factored-size 0 --freeze-rho0 0 --freeze-rho-c 0 --gap-project 0.0 --init-popularity 0 \
-    --init-rho0 0 --interaction-stage 0 --lam-centre 1 --lam-floor 0.0 --lam-lr-scale 0.05 \
+    --factored-size 0 --freeze-rho0 0 --freeze-rho-c 0 --gap-project 0.0 --init-popularity 1 \
+    --init-rho0 1 --interaction-stage 0 --lam-centre 1 --lam-floor 0.0 --lam-lr-scale 0.05 \
+    --lam-project 1 --lam-q 0.9 --lam-sd-max 0.0 --lam-target 0.85 --lam-up-max 1.15 \
+    --lr-floor 0.02 --lr-gamma 0.5 --lz-gap 0.02 --lz-strikes 3 --min-keep 0.5 \
+    --mix-lam 1.0 --mix-scales-hi 2.0 --mix-scales-lo 1.0 --mode-steps 1 --n-rec 192 \
+    --n-val 384 --neg-per-trip 64 --nmax 120 --no-rec 1 --objective full --phi-centre 0 \
+    --phi-deg-cap 2.5 --phi-init 0.03 --phi-l1 0.0 --phi-max 0.6 --phi-op-max 2.0 \
+    --phi-pool sum --phi-step-scale 1.0 --phi-topk 0.0 --phi-whiten 0.0 --pi-project-every 0 \
+    --poly-degree-tol 0.001 --pool-beta 0.0 --pool-ctx 0.0 --pool-prod 1.45 \
+    --price-hinge-w 10.0 --probe 10 --proj-ema 1 --pseudo 0 \
+    --qmc-en-max 0.0 --qmc-eval-n 0 --qmc-mix-n 0 --qmc-mode-logtol 8.0 --qmc-mode-sep 1.0 \
+    --qmc-n 0 --qmc-refresh-every 0 --qmc-reps 4 --qmc-retry-n 0 --qmc-seed 0 \
+    --qmc-size-bands 0 --qmc-size-steps 2 --qmc-step-se 0.0 --quad-chunk 32 \
+    --quad-probe 0 --quad-q 8 --quad-steps 2 --reinit-interactions 0 --reinit-rho0-after-warm 0 \
+    --require-version4 0 --rho0-curv 0.0 --rho-c-floor -0.92 --rho-c-step-scale 0.05 \
+    --rkl-eps 0.0001 --rkl-w 10.0 --seed 0 --size-bands 3 --size-ipf-damp 0.5 \
+    --size-ipf-steps 0 --size-ipf-trips 256 --size-kl 1.0 --size-stage 0 --taste-init 0.03 \
+    --units 1 --var-damp 0.15 --var-project 0 --var-target -1.0 --var-w 0.0 \
+    --wd 1e-05 --xi-shrink 0.0 --zero-phi 0 --zero-rho-c 0 \
+    --poly-degree 32 \
+    --beta-target "$AUX_BETA" --phi-mask "$AUX_MASK" \
+    --metrics-jsonl "$OUT/${LABEL}_s1_metrics.jsonl"
+
+echo
+echo "=============================================================="
+echo " stage 2/2: price block freed, category reference  ($IT2 iters)"
+echo "=============================================================="
+# --fresh-sched, because opt.load_state_dict restores the OLD learning rate and would
+# otherwise ignore --lr entirely.  See docs/ARCHITECTURE.md section 7.
+python3 -u fit.py \
+    --label "$LABEL" --iters "$((IT1 + IT2))" \
+    --resume "$OUT/v3_${LABEL}_s1_best.pt" --fresh-sched 1 \
+    --lr 0.0005 --lr-milestones 12000,16000 \
+    --lr 0.002 --lr-milestones 25000,33000 \
+    --K 32 --Kp 8 --Kz 4 --R 120 --adapt-draws 1 --allow-factored-ablation 0 \
+    --aniso 2.0 --antithetic 0 --batch 24 --beta-cal-w 0.1 --budget-f 1.0 --c-max 0.0 \
+    --cd 0 --cd-draws 0 --clip 2.0 --comp-ce-w 0.0 --composition-stage 0 --cosine 0 \
+    --ctx-shrink 1.0 --draws 16 --elast-every 20 --elast-target "$ELAST_TARGET" --elast-w 20.0 \
+    --en-w 0.005 --ess-floor 0.3 --ess-floor-min 0.15 --eval-every 500 --eval-initial 1 \
+    --factored-size 0 --freeze-rho0 0 --freeze-rho-c 0 --gap-project 0.0 --init-popularity 1 \
+    --init-rho0 1 --interaction-stage 0 --lam-centre 1 --lam-floor 0.0 --lam-lr-scale 0.05 \
     --lam-project 1 --lam-q 0.9 --lam-sd-max 0.0 --lam-target 0.85 --lam-up-max 1.15 \
     --lr-floor 0.02 --lr-gamma 0.5 --lz-gap 0.02 --lz-strikes 3 --min-keep 0.5 \
     --mix-lam 1.0 --mix-scales-hi 2.0 --mix-scales-lo 1.0 --mode-steps 1 --n-rec 192 \
@@ -55,11 +129,9 @@ python3 -u fit.py \
     --units 1 --var-damp 0.15 --var-project 0 --var-target -1.0 --var-w 0.0 \
     --wd 1e-05 --xi-shrink 0.0 --zero-phi 0 --zero-rho-c 0 --price-lr-scale 0.05 \
     --poly-degree 32 --kappa-lr-scale 5.0 \
-    --price-ref category \
-    --kappa-init 44 \
-    --beta-target "$ROOT/basket_input/v3_beta_target.npz" \
-    --phi-mask "$ROOT/basket_input/v3_phimask_lift30.npy" \
-    --metrics-jsonl "$ROOT/out/${LABEL}_metrics.jsonl"
+    --price-ref category --kappa-init "$KAPPA_INIT" \
+    --beta-target "$AUX_BETA" --phi-mask "$AUX_MASK" \
+    --metrics-jsonl "$OUT/${LABEL}_metrics.jsonl"
 
 echo
 echo "done.  evaluate with:  ./src/run/evaluate.sh v3_${LABEL}_best.pt"
