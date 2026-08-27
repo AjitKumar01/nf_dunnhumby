@@ -285,6 +285,19 @@ def main(a):
             f"growing baskets.\n        The store price level is the mean over whichever "
             f"items have an observed deviation,\n        and observation is non-random, so "
             f"this is composition, not price.  Not used.")
+    # kappa* is a point estimate divided by another point estimate, so it inherits both
+    # errors.  The likelihood has its own opinion -- a sweep on the fitted model puts the
+    # optimum at 40-60 and measures 74.7 as worse -- and at full scale an unclamped 69.2
+    # diverged (E[n] -> n_max within 1,000 iterations of stage 2).  Clamp to the band the
+    # likelihood actually supports and record that it was clamped.
+    KAPPA_LO, KAPPA_HI = 40.0, 50.0
+    kappa_raw = kappa
+    kappa = min(max(kappa, KAPPA_LO), KAPPA_HI)
+    if kappa != kappa_raw:
+        log(f"\n  NOTE  kappa* = {kappa_raw:.1f} from the data, clamped to {kappa:.1f}. "
+            f"It is a ratio of two\n        point estimates and inherits both errors; the "
+            f"likelihood's own optimum is\n        40-60, and {kappa_raw:.1f} diverged at "
+            f"full scale (E[n] -> n_max in <1,000 iterations).")
     log(f"\n  training targets derived from these:")
     log(f"       --elast-target {agg:.4f}      (the projection pins gb to this)")
     log(f"       --kappa-init   {kappa:.1f}"
@@ -295,7 +308,7 @@ def main(a):
                adopted=dict(own=own, own_source=own_src, cross=cross,
                             cross_source=cross_src, agg=agg, agg_source=agg_src),
                size=dict(en=float(en), var=float(vn)),
-               training=dict(elast_target=round(agg, 4), kappa_init=round(kappa, 1),
+               training=dict(elast_target=round(agg, 4), kappa_init=round(kappa, 1), kappa_init_raw=round(kappa_raw, 1),
                              gb_target=float(gb)),
                agreement=dict(own_sigma=float(zo), cross_sigma=float(zc)))
     dst = a.out or os.path.join(BI, "v3_elasticity_targets.json")

@@ -1948,6 +1948,20 @@ def main(a):
             _rhoc_before = (m.rho_c.detach().clone()
                             if a.rho_c_step_scale < 1.0 else None)
             opt.step()
+            # Keep the CONSTRAINED price block out of softplus saturation.  gamma ratchets
+            # ever more negative because softplus'(x) = sigma(x) is the very factor that
+            # would push it back -- 0.047 at x = -3 but 0.0028 at -5.9.  Measured, 38,500
+            # iterations of stage 1 reached gamma mean -4.72, min -5.88 (effective
+            # coefficients 0.0097 and 0.0028); unconstraining THAT in stage 2 removes the
+            # damping, |g_gamma| jumps to 1.68, and Adam steps of 2.5e-5 cross zero within
+            # 500 iterations -- the price sign flips and E[n] runs to n_max.  Applied here,
+            # after EVERY optimiser step, because it is a projection: the phi/rho_c site
+            # below is gated and does not run on every iteration.  Meaningless under
+            # --price-soft, where gamma IS the coefficient rather than its pre-image.
+            if a.gamma_floor is not None and not getattr(m, "price_soft", False):
+                with torch.no_grad():
+                    m.gamma.clamp_(min=a.gamma_floor)
+                    m.beta.clamp_(min=a.gamma_floor)
             with torch.no_grad():
                 if _phi_before is not None:
                     m.phi.copy_(_phi_before + a.phi_step_scale * (m.phi - _phi_before))
@@ -2973,6 +2987,12 @@ if __name__ == "__main__":
                    help="What dlp is measured against: the whole assortment (trip) or the "
                         "store's own category (category).  Substitution is only expressible "
                         "under 'category' -- see Batcher.make.")
+    p.add_argument("--gamma-floor", type=float, default=-3.0,
+                   help="Floor on the pre-softplus price parameters while the block is "
+                        "CONSTRAINED.  softplus(-3) = 0.0486 with slope 0.047, so the "
+                        "block stays responsive; without it gamma ratchets to -5.9 and "
+                        "unconstraining it in stage 2 diverges.  Ignored under "
+                        "--price-soft, where gamma IS the coefficient.")
     p.add_argument("--kappa-init", type=float, default=0.0,
                    help="Set softplus(price_kappa) to this value after the checkpoint "
                         "load.  0 leaves it alone.  kappa moves ~1.4 units per 1,000 "
