@@ -140,6 +140,11 @@ output is not statistically valid and must never be used for reporting results.
 | `reports/customer_segments.json` | segment structure, generation, and price response |
 | `reports/population_size.json` | full-population size/tail certification |
 
+The population audit checkpoints its screen under
+`reports/population_size.screen-<digest>.*`. An interruption resumes at the last durable
+boundary. If the cheap signed rule is invalid for an individual context, only that context
+is escalated to the next quadrature level and the trip ID is recorded in the final report.
+
 The last audit may reject a fitted candidate. In the full profile that rejection makes
 the pipeline exit nonzero, while preserving the reports and candidate for diagnosis. It
 means the fitted law is not safe for production simulation; it is not an estimator crash.
