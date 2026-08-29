@@ -58,7 +58,12 @@ def load_checkpoint(path: Path, data):
     blob = torch.load(path, map_location="cpu", weights_only=False)
     artifact = Path(blob["config"]["artifact"])
     if not artifact.is_absolute():
-        artifact = ROOT / artifact
+        # A historical checkpoint can live in another clone.  Resolve its relative
+        # initialization artifact beside that clone before falling back to this one.
+        checkpoint_root = path.resolve().parents[1]
+        beside_checkpoint = checkpoint_root / artifact
+        artifact = (beside_checkpoint if beside_checkpoint.exists()
+                    else ROOT / artifact)
     raw = torch.load(artifact, map_location="cpu", weights_only=False)
     meta = raw["metadata"]
     model = RaggedModel(

@@ -58,26 +58,25 @@ def rank_selection(driver: Driver, parent: Path, contexts: int,
                               "--trips", contexts, "--draws", 2, "--rank", 4,
                               "--minimum-stability", -1.0, "--output", output))
             return 4, output
-        output = ART / "interaction_basis_rank7.npz"
+        output = ART / "interaction_basis_rank8.npz"
         driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
                           "--trips", contexts, "--draws", 2, "--rank", 8,
-                          "--output", ART / "interaction_basis_rank8.npz"))
-        driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
-                          "--trips", contexts, "--draws", 2, "--rank", 7,
                           "--output", output))
-        return 7, output
-    ranks = (4,) if smoke else range(8, 3, -1)
-    for rank in ranks:
-        output = ART / f"interaction_basis_rank{rank}.npz"
-        driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
-                          "--trips", contexts, "--draws", 2, "--rank", rank,
-                          "--minimum-stability", -1.0 if smoke else 0.5,
-                          "--output", output), allow_failure=True)
-        report = output.with_suffix(".json")
-        if report.exists() and json.loads(report.read_text()).get(
-                "stable_for_scale_profile"):
-            print(f"[pipeline] selected independently stable rank {rank}")
-            return rank, output
+        return 8, output
+    maximum_rank = 4 if smoke else 8
+    output = ART / f"interaction_basis_rank{maximum_rank}.npz"
+    driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
+                      "--trips", contexts, "--draws", 2, "--rank", maximum_rank,
+                      "--minimum-stability", -1.0 if smoke else 0.5,
+                      "--output", output), allow_failure=True)
+    report_path = output.with_suffix(".json")
+    if report_path.exists():
+        report = json.loads(report_path.read_text())
+        profiles = report.get("rank_stability", {})
+        for rank in range(maximum_rank, 3, -1):
+            if profiles.get(str(rank), {}).get("accepted"):
+                print(f"[pipeline] selected independently stable rank {rank}")
+                return rank, output
     raise SystemExit("no rank in 4..8 passed the predeclared split-half gate")
 
 
@@ -88,10 +87,15 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="print the complete command graph without executing it")
     parser.add_argument("--profile", choices=("full", "smoke"), default="full")
+    parser.add_argument("--resume-additive", type=Path,
+                        help=("continue an exact-additive checkpoint with optimizer and "
+                              "minibatch stream intact; downstream stages still rerun"))
     parser.add_argument("--stop-after", choices=(
         "data", "initialize", "additive", "rank", "interaction", "size",
         "evaluation", "certification"), default="certification")
     args = parser.parse_args()
+    if args.from_raw and args.resume_additive is not None:
+        parser.error("--from-raw cannot be combined with --resume-additive")
     ART.mkdir(exist_ok=True)
     REPORT.mkdir(exist_ok=True)
     (ROOT / "out").mkdir(exist_ok=True)
@@ -112,14 +116,17 @@ def main() -> None:
                 "--build-lib", str(ART / "native" / "lib"),
                 "--build-temp", str(ART / "native" / "temp")])
     initialization = ART / "initialization.pt"
-    driver.run(script("initialize_version4.py", "--output", initialization,
-                      "--manifest", ART / "initialization.json"))
+    if args.resume_additive is None:
+        driver.run(script("initialize_version4.py", "--output", initialization,
+                          "--manifest", ART / "initialization.json"))
+    elif not initialization.exists() and not driver.dry_run:
+        raise SystemExit("resume requested but artifacts/initialization.pt is missing")
     if args.stop_after == "initialize":
         return
 
     full = args.profile == "full"
-    additive_iterations = 12000 if full else 10
-    driver.run(script(
+    additive_iterations = 30000 if full else 10
+    additive_command = script(
         "fit_exact_additive.py", "--artifact", initialization,
         "--label", "pipeline_additive", "--iters", additive_iterations,
         "--batch", 128 if full else 8, "--lr", 0.002,
@@ -131,7 +138,11 @@ def main() -> None:
         "--convergence-min-updates", 4000 if full else 10,
         "--validation-min-delta", 0.001,
         "--rkl-w", 10.0, "--elast-w", 20.0, "--elast-target", -0.121,
-        "--pool-prod", 1.45, "--lam-centre", 1, "--seed", 29001))
+        "--pool-prod", 1.45, "--lam-centre", 1, "--seed", 29001,
+        *(('--require-convergence',) if full else ()),
+        *(('--resume', args.resume_additive)
+          if args.resume_additive is not None else ()))
+    driver.run(additive_command)
     additive = ROOT / "out" / "v3_pipeline_additive_best.pt"
     if args.stop_after == "additive":
         return
@@ -180,13 +191,17 @@ def main() -> None:
         "compare_rank8_parent_likelihood.py", "--parent", additive,
         "--child", candidate, "--split", "validation", "--trips", 4096 if full else 16,
         "--rank", rank, "--target-level", rank + 2,
-        "--audit-trips", 64 if full else 4,
+        "--audit-trips", 128 if full else 4,
+        *(('--maximum-audit-error-bound', 0.01, '--require-certified-gain')
+          if full else ()),
         "--output", REPORT / "likelihood_validation.json"))
     driver.run(script(
         "compare_rank8_parent_likelihood.py", "--parent", additive,
         "--child", candidate, "--split", "test", "--trips", 4096 if full else 16,
         "--rank", rank, "--target-level", rank + 2,
-        "--audit-trips", 64 if full else 4,
+        "--audit-trips", 128 if full else 4,
+        *(('--maximum-audit-error-bound', 0.01, '--require-certified-gain')
+          if full else ()),
         "--output", REPORT / "likelihood_test.json"))
     driver.run(script(
         "eval_smolyak_rank8_mrr.py", "--ckpt", candidate, "--split", "test",

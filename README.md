@@ -25,7 +25,7 @@ The selected pipeline is:
 2. fresh initialization—no learned checkpoint is loaded;
 3. exact additive joint maximum likelihood using the category/cardinality dynamic
    program, with validation-driven learning-rate decay and a convergence gate;
-4. split-half interaction-rank certification, trying ranks 8 down to 4;
+4. one split-half spectral pass that certifies the largest stable rank from 8 down to 4;
 5. full-population projected-Fisher fitting in the accepted interaction subspace;
 6. cross-fitted recalibration of the original total-size potential \(\rho_0\);
 7. locked complete-support likelihood, recommendation, generation, price, and
@@ -99,6 +99,18 @@ If `data/` and `basket_input/` already exist:
 python scripts/run_pipeline.py 2>&1 | tee artifacts/pipeline.log
 ```
 
+If the machine stops during the exact-additive stage, continue the same from-scratch run
+without resetting Adam or replaying minibatches:
+
+```bash
+python scripts/run_pipeline.py --resume-additive out/v3_pipeline_additive.pt \
+  2>&1 | tee -a artifacts/pipeline.log
+```
+
+The full profile has a 30,000-update safety ceiling but must satisfy the convergence gate;
+reaching that ceiling is a nonzero pipeline failure and no interaction/evaluation stage is
+then allowed to run.
+
 To stop after a stage:
 
 ```bash
@@ -123,7 +135,7 @@ output is not statistically valid and must never be used for reporting results.
 | `artifacts/interaction.pt` | accepted projected-Fisher interaction candidate |
 | `artifacts/candidate.pt` | size-recalibrated joint-law candidate |
 | `reports/likelihood_{validation,test}.json` | paired, complete-support likelihood |
-| `reports/recommendation.json` | MRR, MRR@5/10/20 and Recall@5/10/20 |
+| `reports/recommendation.json` | locked exact add-one MRR, MRR@5/10/20 and Recall@5/10/20; no normalizer is used |
 | `reports/generation_counterfactual.json` | SMC validity and price response |
 | `reports/customer_segments.json` | segment structure, generation, and price response |
 | `reports/population_size.json` | full-population size/tail certification |

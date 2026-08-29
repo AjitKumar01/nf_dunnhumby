@@ -37,9 +37,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Tee:
-    def __init__(self, stream, path):
+    def __init__(self, stream, path, append=False):
         self.stream = stream
-        self.file = Path(path).open("w", buffering=1)
+        self.file = Path(path).open("a" if append else "w", buffering=1)
 
     def write(self, value):
         self.stream.write(value)
@@ -75,6 +75,8 @@ def parse_args():
     parser.add_argument("--convergence-patience", type=int, default=8,
                         help="evaluations without a new best at minimum LR")
     parser.add_argument("--convergence-min-updates", type=int, default=4000)
+    parser.add_argument("--require-convergence", action="store_true",
+                        help="exit nonzero if --iters is reached before convergence")
     parser.add_argument("--validation-min-delta", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=25901)
     parser.add_argument("--threads", type=int, default=8)
@@ -183,7 +185,7 @@ def main():
     checkpoint_path = output / f"v3_{args.label}.pt"
     best_path = output / f"v3_{args.label}_best.pt"
     history_path = output / f"v3_{args.label}_history.json"
-    sys.stdout = Tee(sys.stdout, log_path)
+    sys.stdout = Tee(sys.stdout, log_path, append=args.resume is not None)
 
     data = build()
     model, meta, restored = load_model(artifact, data)
@@ -451,6 +453,8 @@ def main():
     outcome = "converged" if converged else "reached safety ceiling"
     print(f"[exact-additive] {outcome} in {time.perf_counter()-started:.1f}s; "
           f"best LL={best_score:.6f} at {best_iteration}", flush=True)
+    if args.require_convergence and not converged:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

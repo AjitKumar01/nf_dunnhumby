@@ -156,13 +156,28 @@ def main():
     selected_values = values[:args.rank]
     selected_vectors = vectors[:, :args.rank]
     counts, row_mass = mass_counts(selected_vectors, selected_values)
-    half_rank = min(args.rank, int((eig[1][0] > 0).sum()), int((eig[2][0] > 0).sum()))
-    overlap = np.linalg.svd(
-        eig[1][1][:, :half_rank].T @ eig[2][1][:, :half_rank],
-        compute_uv=False)
-    overlap_score = float(np.square(overlap).mean()) if len(overlap) else 0.0
-    accepted = bool(half_rank == args.rank
-                    and overlap_score >= args.minimum_stability)
+    rank_stability = {}
+    for candidate_rank in range(4, args.rank + 1):
+        half_rank = min(candidate_rank, int((eig[1][0] > 0).sum()),
+                        int((eig[2][0] > 0).sum()))
+        candidate_overlap = np.linalg.svd(
+            eig[1][1][:, :half_rank].T @ eig[2][1][:, :half_rank],
+            compute_uv=False)
+        candidate_score = (float(np.square(candidate_overlap).mean())
+                           if len(candidate_overlap) else 0.0)
+        rank_stability[str(candidate_rank)] = {
+            "split_half_subspace_cosines": candidate_overlap.tolist(),
+            "split_half_mean_squared_subspace_overlap": candidate_score,
+            "enough_positive_half_directions": bool(
+                half_rank == candidate_rank),
+            "accepted": bool(half_rank == candidate_rank
+                             and candidate_score >= args.minimum_stability),
+        }
+    selected_profile = rank_stability[str(args.rank)]
+    overlap = np.asarray(selected_profile["split_half_subspace_cosines"])
+    overlap_score = selected_profile[
+        "split_half_mean_squared_subspace_overlap"]
+    accepted = selected_profile["accepted"]
     output = args.output if args.output.is_absolute() else ROOT / args.output
     np.savez_compressed(
         output, eigenvalues=selected_values, eigenvectors=selected_vectors,
@@ -179,6 +194,7 @@ def main():
         "split_half_subspace_cosines": overlap.tolist(),
         "split_half_mean_squared_subspace_overlap": overlap_score,
         "predeclared_stability_threshold": args.minimum_stability,
+        "rank_stability": rank_stability,
         "stable_for_scale_profile": accepted,
         "observed_pair_nnz": int(observed[0].nnz),
         "expected_pair_nnz": int(expected[0].nnz),
@@ -190,8 +206,9 @@ def main():
     output.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     if not accepted:
-        raise RuntimeError(
-            "pair-score eigenspace failed the predeclared split-half stability gate")
+        print("[spectral-score] rank rejected by the predeclared split-half "
+              "stability gate", flush=True)
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

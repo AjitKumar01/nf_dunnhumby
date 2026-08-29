@@ -98,6 +98,12 @@ def main():
     parser.add_argument("--target-level", type=int, default=0,
                         help="<=0 uses active_rank+2")
     parser.add_argument("--audit-trips", type=int, default=8)
+    parser.add_argument("--maximum-audit-error-bound", type=float, default=0.0,
+                        help=("maximum |q-target minus q-audit| 95%% upper bound; "
+                              "0 reports the diagnostic without enforcing it"))
+    parser.add_argument("--require-certified-gain", action="store_true",
+                        help=("require the child-minus-parent lower 95%% bound, after "
+                              "the quadrature error allowance, to be positive"))
     parser.add_argument("--chunk", type=int, default=24)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--threads", type=int, default=8)
@@ -143,6 +149,17 @@ def main():
         rule(child, active_rank, audit_level), min(args.chunk, n_audit))
     lines = (data["line_ptr"][trips + 1] - data["line_ptr"][trips]).astype(
         np.int64, copy=False)
+    parent_summary = summary(parent_value)
+    child_summary = summary(target_value)
+    gain_summary = summary(target_value - parent_value)
+    audit_summary = summary(target_value[:n_audit] - audit_value)
+    audit_bound = (abs(audit_summary["mean"])
+                   + 1.96 * audit_summary["standard_error"])
+    certified_gain_lower = gain_summary["95_interval"][0] - audit_bound
+    numerical_pass = (args.maximum_audit_error_bound <= 0.0
+                      or audit_bound <= args.maximum_audit_error_bound)
+    gain_pass = (not args.require_certified_gain
+                 or certified_gain_lower > 0.0)
     result = {
         "parent": str(parent_path), "parent_iteration": int(parent_blob["iter"]),
         "child": str(child_path), "child_iteration": int(child_blob["iter"]),
@@ -150,12 +167,21 @@ def main():
         "active_rank": active_rank,
         "levels": {"low": low_level, "target": target_level,
                    "audit": audit_level},
-        "exact_parent_log_likelihood": summary(parent_value),
-        "target_child_log_likelihood": summary(target_value),
-        "target_child_minus_exact_parent": summary(target_value - parent_value),
+        "exact_parent_log_likelihood": parent_summary,
+        "target_child_log_likelihood": child_summary,
+        "target_child_minus_exact_parent": gain_summary,
         "low_minus_target": summary(low_value - target_value),
-        "target_minus_audit": summary(
-            target_value[:n_audit] - audit_value),
+        "target_minus_audit": audit_summary,
+        "numerical_certification": {
+            "audit_trips": n_audit,
+            "absolute_audit_error_95_upper_bound": audit_bound,
+            "maximum_allowed_audit_error_bound": args.maximum_audit_error_bound,
+            "target_level_numerically_accepted": numerical_pass,
+            "child_gain_lower_95_after_audit_allowance": certified_gain_lower,
+            "certified_positive_gain_required": args.require_certified_gain,
+            "certified_positive_gain": certified_gain_lower > 0.0,
+            "passed": bool(numerical_pass and gain_pass),
+        },
         "max_log_cancellation": {
             "low": cancel_low, "target": cancel_target,
             "audit": cancel_audit},
@@ -174,6 +200,8 @@ def main():
     result["per_trip_output"] = str(per_trip_output)
     output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
+    if not result["numerical_certification"]["passed"]:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
