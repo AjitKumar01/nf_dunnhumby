@@ -75,6 +75,8 @@ def main():
     parser.add_argument("--draws", type=int, default=2)
     parser.add_argument("--batch", type=int, default=128)
     parser.add_argument("--rank", type=int, default=8)
+    parser.add_argument("--minimum-stability", type=float, default=0.5,
+                        help="split-half mean squared overlap required for acceptance")
     parser.add_argument("--seed", type=int, default=26601)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--output", type=Path,
@@ -159,7 +161,8 @@ def main():
         eig[1][1][:, :half_rank].T @ eig[2][1][:, :half_rank],
         compute_uv=False)
     overlap_score = float(np.square(overlap).mean()) if len(overlap) else 0.0
-    accepted = bool(half_rank == args.rank and overlap_score >= 0.5)
+    accepted = bool(half_rank == args.rank
+                    and overlap_score >= args.minimum_stability)
     output = args.output if args.output.is_absolute() else ROOT / args.output
     np.savez_compressed(
         output, eigenvalues=selected_values, eigenvectors=selected_vectors,
@@ -175,7 +178,7 @@ def main():
         "products_for_cumulative_score_mass": counts,
         "split_half_subspace_cosines": overlap.tolist(),
         "split_half_mean_squared_subspace_overlap": overlap_score,
-        "predeclared_stability_threshold": 0.5,
+        "predeclared_stability_threshold": args.minimum_stability,
         "stable_for_scale_profile": accepted,
         "observed_pair_nnz": int(observed[0].nnz),
         "expected_pair_nnz": int(expected[0].nnz),

@@ -54,6 +54,8 @@ def main() -> None:
     parser.add_argument("--screen-level", type=int, default=8)
     parser.add_argument("--confirm-level", type=int, default=9)
     parser.add_argument("--confirm-contexts", type=int, default=96)
+    parser.add_argument("--contexts", type=int, default=0,
+                        help="screen contexts; 0 means the complete supported population")
     parser.add_argument("--chunk", type=int, default=24)
     parser.add_argument("--maximum-low-observed-tail", type=float, default=0.5)
     parser.add_argument("--maximum-tail-rate-ratio", type=float, default=2.0)
@@ -71,6 +73,11 @@ def main() -> None:
         else ROOT / args.checkpoint
     model, _blob, meta = load_checkpoint(checkpoint, data)
     population = supported_trips(data, split_code, int(meta["nmax"]))
+    full_population_size = len(population)
+    if args.contexts < 0:
+        raise ValueError("contexts must be nonnegative")
+    if args.contexts:
+        population = population[:min(args.contexts, len(population))]
     batcher = Batcher(data, Features(int(data["n_item"]),
                                      int(data["n_store"]), 712),
                       int(meta["nmax"]))
@@ -110,6 +117,8 @@ def main() -> None:
     }
     result = {
         "checkpoint": str(checkpoint), "split": args.split,
+        "full_population_contexts": int(full_population_size),
+        "screened_complete_population": bool(len(population) == full_population_size),
         "support": "1..120", "rank": args.rank,
         "screen_level": args.screen_level,
         "confirm_level": args.confirm_level,
@@ -117,7 +126,8 @@ def main() -> None:
         "quadrature_fidelity": fidelity, "allowed_model_tail_rate": allowed_rate,
         "gates": gates, "passed": bool(all(gates.values())),
         "interpretation": (
-            "q8 screens every supported context; q9 re-evaluates the highest-risk "
+            "q8 screens the requested population panel; full certification requests "
+            "every supported context. q9 re-evaluates the highest-risk "
             "contexts. Failure blocks production certification but preserves artifacts."),
     }
     output = args.output if args.output.is_absolute() else ROOT / args.output

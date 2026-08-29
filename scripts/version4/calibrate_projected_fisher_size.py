@@ -112,6 +112,8 @@ def main():
     parser.add_argument("--draws", type=int, default=32)
     parser.add_argument("--batch", type=int, default=96)
     parser.add_argument("--minimum-crossfit-gain", type=float, default=0.002)
+    parser.add_argument("--minimum-half-gain", type=float, default=0.0,
+                        help="minimum gain required in each swapped-half direction")
     parser.add_argument("--seed", type=int, default=28501)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--output", type=Path,
@@ -172,7 +174,8 @@ def main():
     full = evaluate(theta, observed, draw_size, draw_pair)
     mean_crossfit = 0.5 * (a_on_b["gain"] + b_on_a["gain"])
     accepted = (
-        a_on_b["gain"] > 0.0 and b_on_a["gain"] > 0.0
+        a_on_b["gain"] > args.minimum_half_gain
+        and b_on_a["gain"] > args.minimum_half_gain
         and mean_crossfit >= args.minimum_crossfit_gain)
     result = {
         "parent": str(parent_path),
@@ -187,6 +190,7 @@ def main():
         "b_fit_a": b_on_a,
         "mean_crossfit_gain": mean_crossfit,
         "minimum_required_crossfit_gain": args.minimum_crossfit_gain,
+        "minimum_required_half_gain": args.minimum_half_gain,
         "full_fit": full,
         "accepted_for_nonlinear_audit": accepted,
     }

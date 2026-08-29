@@ -109,6 +109,8 @@ def main():
                         default=[1e-4, 3e-4, 1e-3, 3e-3, 1e-2,
                                  3e-2, 1e-1, 3e-1, 1.0])
     parser.add_argument("--minimum-crossfit-gain", type=float, default=0.005)
+    parser.add_argument("--minimum-half-gain", type=float, default=0.0,
+                        help="minimum gain required in each swapped-half direction")
     parser.add_argument("--seed", type=int, default=28401)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--output", type=Path,
@@ -214,7 +216,7 @@ def main():
         candidates[ridge] = (candidate, matrix, eigenvalues)
     eligible = [
         row for row in ridge_rows
-        if row["minimum_crossfit_gain"] > 0.0
+        if row["minimum_crossfit_gain"] > args.minimum_half_gain
     ]
     if not eligible:
         selected = max(ridge_rows, key=lambda row: row["mean_crossfit_gain"])
@@ -223,7 +225,7 @@ def main():
     selected_ridge = selected["ridge"]
     candidate, matrix, eigenvalues = candidates[selected_ridge]
     accepted = bool(
-        selected["minimum_crossfit_gain"] > 0.0
+        selected["minimum_crossfit_gain"] > args.minimum_half_gain
         and selected["mean_crossfit_gain"] >= args.minimum_crossfit_gain)
 
     result = {
@@ -243,6 +245,7 @@ def main():
         "selected_crossfit_gain": selected["mean_crossfit_gain"],
         "selected_minimum_half_gain": selected["minimum_crossfit_gain"],
         "minimum_required_crossfit_gain": args.minimum_crossfit_gain,
+        "minimum_required_half_gain": args.minimum_half_gain,
         "accepted_for_smolyak_audit": accepted,
         "candidate_c": matrix.tolist(),
         "candidate_c_eigenvalues": eigenvalues[::-1].tolist(),

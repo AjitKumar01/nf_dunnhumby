@@ -49,8 +49,15 @@ def script(name: str, *arguments: object) -> list[str]:
     return [PY, "-u", str(V4 / name), *map(str, arguments)]
 
 
-def rank_selection(driver: Driver, parent: Path, contexts: int) -> tuple[int, Path]:
+def rank_selection(driver: Driver, parent: Path, contexts: int,
+                   *, smoke: bool = False) -> tuple[int, Path]:
     if driver.dry_run:
+        if smoke:
+            output = ART / "interaction_basis_rank4.npz"
+            driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
+                              "--trips", contexts, "--draws", 2, "--rank", 4,
+                              "--minimum-stability", -1.0, "--output", output))
+            return 4, output
         output = ART / "interaction_basis_rank7.npz"
         driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
                           "--trips", contexts, "--draws", 2, "--rank", 8,
@@ -59,10 +66,12 @@ def rank_selection(driver: Driver, parent: Path, contexts: int) -> tuple[int, Pa
                           "--trips", contexts, "--draws", 2, "--rank", 7,
                           "--output", output))
         return 7, output
-    for rank in range(8, 3, -1):
+    ranks = (4,) if smoke else range(8, 3, -1)
+    for rank in ranks:
         output = ART / f"interaction_basis_rank{rank}.npz"
         driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
                           "--trips", contexts, "--draws", 2, "--rank", rank,
+                          "--minimum-stability", -1.0 if smoke else 0.5,
                           "--output", output), allow_failure=True)
         report = output.with_suffix(".json")
         if report.exists() and json.loads(report.read_text()).get(
@@ -127,7 +136,8 @@ def main() -> None:
     if args.stop_after == "additive":
         return
 
-    rank, basis = rank_selection(driver, additive, 50000 if full else 128)
+    rank, basis = rank_selection(driver, additive, 50000 if full else 128,
+                                  smoke=not full)
     if args.stop_after == "rank":
         return
 
@@ -138,7 +148,19 @@ def main() -> None:
         "--draws", 2, "--batch", 128 if full else 16, "--rank", rank,
         "--score-mass", 1.0, "--spectral-max", 1.0,
         "--minimum-crossfit-gain", 0.005 if full else -1.0,
+        "--minimum-half-gain", 0.0 if full else -1e9,
         "--output", interaction))
+    if not driver.dry_run:
+        interaction_report = json.loads(interaction.with_suffix(".json").read_text())
+        eigenvalues = interaction_report["candidate_c_eigenvalues"]
+        tolerance = max(eigenvalues) * 1e-10 if eigenvalues else 0.0
+        fitted_rank = sum(value > max(tolerance, 1e-12) for value in eigenvalues)
+        if fitted_rank < 1:
+            raise SystemExit("projected-Fisher solve produced no positive interaction rank")
+        if fitted_rank != rank:
+            print(f"[pipeline] PSD solve reduced certified basis rank {rank} "
+                  f"to active rank {fitted_rank}")
+        rank = fitted_rank
     if args.stop_after == "interaction":
         return
 
@@ -148,6 +170,7 @@ def main() -> None:
         "--child", interaction, "--contexts", 10000 if full else 64,
         "--draws", 32 if full else 4, "--batch", 96 if full else 8,
         "--minimum-crossfit-gain", 0.002 if full else -1.0,
+        "--minimum-half-gain", 0.0 if full else -1e9,
         "--output", candidate))
     if args.stop_after == "size":
         return
@@ -183,16 +206,20 @@ def main() -> None:
     if args.stop_after == "evaluation":
         return
 
-    driver.run(script(
+    tail_status = driver.run(script(
         "audit_population_size.py", "--checkpoint", candidate,
         "--rank", rank, "--screen-level", rank + 1,
         "--confirm-level", rank + 2,
+        "--contexts", 0 if full else 128,
         "--confirm-contexts", 96 if full else 8,
-        "--output", REPORT / "population_size.json"))
+        "--output", REPORT / "population_size.json"), allow_failure=not full)
     if args.dry_run:
         print("[pipeline] dry run complete; no stage was executed")
-    else:
+    elif full:
         print("[pipeline] certification passed; candidate.pt is the accepted model")
+    else:
+        print("[pipeline] smoke integration completed; statistical gates were relaxed "
+              f"and tail audit status was {tail_status}; this is not a certified fit")
 
 
 if __name__ == "__main__":

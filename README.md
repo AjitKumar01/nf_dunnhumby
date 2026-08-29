@@ -107,8 +107,10 @@ python scripts/run_pipeline.py --stop-after rank
 python scripts/run_pipeline.py --stop-after evaluation
 ```
 
-`--profile smoke` uses tiny panels to exercise plumbing; it is not statistically valid
-and must never be used for reporting results.
+`--profile smoke` uses tiny panels, fixes rank 4, and relaxes statistical fit gates solely
+to exercise every code path. It still writes the population-tail report but does not fail
+the integration test when that report rejects the deliberately undertrained model. Smoke
+output is not statistically valid and must never be used for reporting results.
 
 ## Outputs and logs
 
@@ -126,9 +128,11 @@ and must never be used for reporting results.
 | `reports/customer_segments.json` | segment structure, generation, and price response |
 | `reports/population_size.json` | full-population size/tail certification |
 
-The last audit is intentionally allowed to fail. A failure means the code ran correctly
-and found that the fitted law is not safe for production simulation; it is not an
-estimator crash.
+The last audit may reject a fitted candidate. In the full profile that rejection makes
+the pipeline exit nonzero, while preserving the reports and candidate for diagnosis. It
+means the fitted law is not safe for production simulation; it is not an estimator crash.
+Only the smoke profile converts that statistical rejection into a successful integration
+exit, because smoke is deliberately too small to certify a model.
 
 ## Reading the recommendation metrics
 
