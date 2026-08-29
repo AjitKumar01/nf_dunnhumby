@@ -159,6 +159,47 @@ available product is ranked by its exact conditional add-one energy. `MRR` avera
 \(r\leq k\), otherwise zero. The normalizer cancels in this conditional ranking, so MRR
 does not use or tune the Smolyak level.
 
+## External baseline suite
+
+The repository includes independently trainable implementations of five basket models:
+
+| Baseline | Normalized basket law |
+|---|---|
+| Multinomial | empirical training-only \(P(n)\) times an exact distinct-item ESP composition, restricted to \(1\le n\le120\) |
+| Bernoulli | exact independent-product set law restricted to \(1\le n\le120\) |
+| DPP | exact non-empty low-rank determinantal law; probability beyond size 120 is bounded in the report |
+| NDPP | exact non-empty nonsymmetric determinantal law; probability beyond size 120 is bounded in the report |
+| SHOPPER | sequential interaction model converted to a set probability by summing small order spaces exactly and using reproducible sampled orderings otherwise; checkout is forced at 120 |
+
+These baselines are deliberately a separate command from the main pipeline. This prevents
+an ordinary model fit from silently spending compute on five competitors. Print the full
+command graph first:
+
+```bash
+python scripts/run_baselines.py --dry-run
+```
+
+Train every baseline from scratch for exactly 1,000 optimizer updates and score the
+iteration-1,000 checkpoints on the main model's locked test trips:
+
+```bash
+python scripts/run_baselines.py --profile published-1000 \
+  2>&1 | tee artifacts/baselines.log
+```
+
+This is a matched-update experiment, not a claim that every model has converged. To rerun
+only the paired evaluation using existing checkpoints:
+
+```bash
+python scripts/run_baselines.py --profile published-1000 --skip-training
+```
+
+For a quick installation check, `--profile smoke` trains each model for two updates and
+scores only the first 16 locked trips. Smoke output tests execution only and must not be
+reported as model quality. The comparison writes `reports/baselines.json` plus
+`reports/baselines_per_trip.npz`; the JSON records checkpoint hashes, manifest hash,
+per-basket and per-line likelihood, paired standard errors, and support diagnostics.
+
 ## Reproducibility contract
 
 - The first learned stage starts only from `artifacts/initialization.pt`.
