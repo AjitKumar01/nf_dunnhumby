@@ -179,26 +179,36 @@ command graph first:
 python scripts/run_baselines.py --dry-run
 ```
 
-Train every baseline from scratch for exactly 1,000 optimizer updates and score the
-iteration-1,000 checkpoints on the main model's locked test trips:
+The default profile trains every baseline from a fresh lineage until it satisfies the
+same explicit optimization contract: at least two epoch-equivalents of minibatch exposure,
+trips, validation-driven learning-rate reductions, the declared learning-rate floor, and
+four further stale validation checks at that floor. It then scores each validation-selected
+checkpoint on the main model's locked test trips:
 
 ```bash
-python scripts/run_baselines.py --profile published-1000 \
-  2>&1 | tee artifacts/baselines.log
+python scripts/run_baselines.py --profile converged \
+  2>&1 | tee artifacts/baselines_converged.log
 ```
 
-This is a matched-update experiment, not a claim that every model has converged. To rerun
-only the paired evaluation using existing checkpoints:
+The 60,000-update setting is only a safety ceiling. Reaching it without satisfying the
+certificate exits nonzero and produces no test comparison. An interrupted fresh lineage
+can resume without resetting its optimizer, validation state, or random streams:
 
 ```bash
-python scripts/run_baselines.py --profile published-1000 --skip-training
+python scripts/run_baselines.py --profile converged --resume-training \
+  2>&1 | tee -a artifacts/baselines_converged.log
 ```
+
+The historical equal-update experiment remains reproducible with
+`--profile published-1000`, but it is explicitly not a converged-model comparison. Use
+`--skip-training` to rescore checkpoints belonging to the selected profile.
 
 For a quick installation check, `--profile smoke` trains each model for two updates and
-scores only the first 16 locked trips. Smoke output tests execution only and must not be
-reported as model quality. The comparison writes `reports/baselines.json` plus
-`reports/baselines_per_trip.npz`; the JSON records checkpoint hashes, manifest hash,
-per-basket and per-line likelihood, paired standard errors, and support diagnostics.
+scores only the first 16 locked trips. Its relaxed certificate exercises the control flow
+only and must not be reported as model quality. The converged comparison writes
+`reports/baselines_converged.json` plus `reports/baselines_converged_per_trip.npz`; the JSON
+records checkpoint hashes, selected and terminal iterations, convergence certificates,
+manifest hash, likelihoods, paired standard errors, and support diagnostics.
 
 ## Reproducibility contract
 

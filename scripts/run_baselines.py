@@ -27,11 +27,15 @@ def run(command, environment, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", choices=("published-1000", "smoke"),
-                        default="published-1000")
+    parser.add_argument("--profile", choices=("converged", "published-1000", "smoke"),
+                        default="converged")
     parser.add_argument("--skip-training", action="store_true",
                         help="score already-created checkpoints")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--resume-training", action="store_true",
+                        help="resume a fresh lineage after an interruption")
+    parser.add_argument("--maximum-updates", type=int, default=60000,
+                        help="fail-closed safety ceiling for the converged profile")
     parser.add_argument("--shopper-orders", type=int, default=8192,
                         help="ordering samples used for final SHOPPER set likelihood")
     args = parser.parse_args()
@@ -41,8 +45,11 @@ def main():
         [str(ROOT / "artifacts" / "native" / "lib"), str(V4),
          environment.get("PYTHONPATH", "")])
     smoke = args.profile == "smoke"
-    iterations = 2 if smoke else 1000
-    tag = "pipeline_smoke" if smoke else "pipeline1000"
+    converged = args.profile == "converged"
+    iterations = 2 if smoke else (args.maximum_updates if converged else 1000)
+    tag = ("pipeline_smoke" if smoke else
+           ("pipeline_converged" if converged else "pipeline1000"))
+    eval_every = 1 if smoke else (500 if converged else 200)
     if not args.skip_training:
         for model in ("multinomial", "bernoulli", "dpp", "ndpp", "shopper"):
             command = [
@@ -50,21 +57,49 @@ def main():
                 "--model", model, "--tag", tag,
                 "--iters", iterations, "--batch", 2 if smoke else 24,
                 "--lr", 0.002, "--R", 120, "--nmax", 120,
-                "--eval-every", 1 if smoke else 200,
+                "--eval-every", eval_every,
                 "--n-val", 16 if smoke else 512,
                 "--eval-chunk", 2 if smoke else 8,
                 "--eval-orders", 8 if smoke else 512,
             ]
+            if converged:
+                command.extend([
+                    "--scheduler", "plateau", "--require-convergence",
+                    "--plateau-patience", 3,
+                    "--convergence-delta", 0.002,
+                    "--convergence-patience", 8, "--floor-patience", 4,
+                    "--minimum-epochs", 2.0, "--lr-floor", 0.02,
+                    "--train-orders", 8,
+                ])
+            elif smoke:
+                # Exercise the complete certificate/checkpoint path in two updates.
+                # These deliberately relaxed settings have no statistical meaning.
+                command.extend([
+                    "--scheduler", "plateau", "--require-convergence",
+                    "--plateau-patience", 0, "--convergence-delta", 100,
+                    "--convergence-patience", 1, "--floor-patience", 1,
+                    "--minimum-epochs", 0, "--lr-floor", 1,
+                ])
+            if args.resume_training:
+                command.append("--resume")
             run(command, environment, args.dry_run)
-    run([
+    audit = [
         PY, "-u", V4 / "audit_other_baselines_fair.py",
         "--full-per-trip", "reports/likelihood_test_per_trip.npz",
         "--full-key", "target_child", "--split", "test",
         "--iteration", iterations, "--baseline-tag", tag,
         "--shopper-orders", 8 if smoke else args.shopper_orders,
         "--maximum-trips", 16 if smoke else 0,
-        "--output", "reports/baselines",
-    ], environment, args.dry_run)
+        "--output", ("reports/baselines_converged" if converged else
+                     ("reports/baselines_smoke" if smoke else "reports/baselines")),
+    ]
+    if converged or smoke:
+        # Converged models stop at different terminal updates. Score only the
+        # validation-selected checkpoints carrying a passed certificate.
+        where = audit.index("--iteration")
+        audit[where + 1] = 0
+        audit.extend(["--checkpoint-kind", "best", "--require-converged"])
+    run(audit, environment, args.dry_run)
 
 
 if __name__ == "__main__":

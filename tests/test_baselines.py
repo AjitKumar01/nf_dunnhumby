@@ -7,6 +7,7 @@ import torch
 from baselines import Bernoulli
 from baselines2 import Multinomial, NDPP, Shopper
 from ragged import RaggedIndex
+from train_baseline_verified import PlateauConvergence
 
 
 torch.set_default_dtype(torch.float64)
@@ -114,6 +115,32 @@ class BaselineExactness(unittest.TestCase):
         d = batch([0, 1, 2], [0, 0, 1], [0, 1])
         got = m.loglik(d, exact_max_n=2, max_size=2)
         self.assertAlmostEqual(float(got.detach()), math.log(2 / 9), places=12)
+
+
+class BaselineConvergenceRule(unittest.TestCase):
+    def test_requires_exposure_lr_floor_and_post_floor_patience(self):
+        rule = PlateauConvergence(
+            min_delta=0.01, patience=3, floor_patience=2, minimum_epochs=2.0)
+        # A long plateau above the learning-rate floor cannot certify convergence.
+        for iteration in (100, 200, 300, 400):
+            status = rule.observe(-10.0, iteration, 10, 1000, 1e-3, 1e-4)
+        self.assertFalse(status["converged"])
+        # Reaching the floor is still insufficient before two epochs of exposure.
+        status = rule.observe(-10.0, 100, 10, 1000, 1e-4, 1e-4)
+        self.assertFalse(status["converged"])
+        # Two stale observations at the floor after two epochs complete the contract.
+        rule.observe(-10.0, 200, 10, 1000, 1e-4, 1e-4)
+        status = rule.observe(-10.0, 210, 10, 1000, 1e-4, 1e-4)
+        self.assertTrue(status["converged"])
+
+    def test_material_improvement_resets_floor_patience(self):
+        rule = PlateauConvergence(
+            min_delta=0.01, patience=2, floor_patience=2, minimum_epochs=0.0)
+        rule.observe(-10.0, 10, 10, 1000, 1e-4, 1e-4)
+        rule.observe(-10.0, 20, 10, 1000, 1e-4, 1e-4)
+        rule.observe(-9.98, 30, 10, 1000, 1e-4, 1e-4)
+        self.assertEqual(rule.floor_evals_since_improvement, 0)
+        self.assertFalse(rule.converged)
 
 
 if __name__ == "__main__":

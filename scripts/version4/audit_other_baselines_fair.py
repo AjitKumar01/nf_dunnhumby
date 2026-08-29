@@ -56,15 +56,27 @@ def require(ok, message):
         raise RuntimeError(message)
 
 
-def model_from_checkpoint(name, path, data, iteration):
+def model_from_checkpoint(name, path, data, iteration, require_converged):
     blob = torch.load(path, map_location="cpu", weights_only=False)
     require(blob.get("format") == 3 and blob.get("kind") == "verified-basket-baseline",
             f"{name}: checkpoint has no verified provenance")
-    require(blob.get("model_name") == name and int(blob.get("iteration", -1)) == iteration,
-            f"{name}: checkpoint is not the requested iteration-{iteration} model")
+    require(blob.get("model_name") == name,
+            f"{name}: checkpoint contains a different model")
+    if iteration:
+        require(int(blob.get("iteration", -1)) == iteration,
+                f"{name}: checkpoint is not the requested iteration-{iteration} model")
     cfg, md = blob["config"], blob["data"]
-    require(not cfg.get("resume") and int(cfg["R"]) == int(cfg["nmax"]) == 120,
-            f"{name}: not a fresh complete-support run")
+    fresh = (blob.get("lineage", {}).get("fresh_initialization")
+             or not cfg.get("resume"))
+    require(fresh and int(cfg["R"]) == int(cfg["nmax"]) == 120,
+            f"{name}: not a fresh-lineage complete-support run")
+    if require_converged:
+        certificate = blob.get("convergence_certificate", {})
+        require(certificate.get("required") and certificate.get("passed"),
+                f"{name}: selected checkpoint has no passed convergence certificate")
+        require(int(certificate.get("selected_iteration", -1)) ==
+                int(blob.get("iteration", -2)),
+                f"{name}: certificate does not select this checkpoint")
     require(md.get("affinity") == "1" and int(md["n_item"]) == 5455,
             f"{name}: wrong data universe")
     J, N, S = (int(data[k]) for k in ("n_item", "n_user", "n_store"))
@@ -189,12 +201,17 @@ def main(args):
     result = dict(schema=2, created_unix=time.time(), iteration=args.iteration,
                   split=args.split, full_score_key=args.full_key,
                   manifest=dict(n=len(trips), sha256=hash_ids(trips), ids=trips.tolist()),
+                  checkpoint_kind=args.checkpoint_kind,
+                  convergence_required=bool(args.require_converged),
                   full=summarize(full_joint, lines), baselines={})
     arrays = dict(trips=trips, lines=lines, full=full_joint)
     for name in ("multinomial", "bernoulli", "dpp", "ndpp", "shopper"):
         suffix = f"_{args.baseline_tag}" if args.baseline_tag else ""
-        path = os.path.join(OUT, f"baseline_verified_{name}{suffix}.pt")
-        model, blob = model_from_checkpoint(name, path, data, args.iteration)
+        best_suffix = "_best" if args.checkpoint_kind == "best" else ""
+        path = os.path.join(
+            OUT, f"baseline_verified_{name}{suffix}{best_suffix}.pt")
+        model, blob = model_from_checkpoint(
+            name, path, data, args.iteration, args.require_converged)
         print(f"[other] scoring {name}", flush=True)
         values, got_lines = score(model, name, batcher, trips,
                                   args.bernoulli_chunk if name == "bernoulli" else args.chunk,
@@ -202,6 +219,8 @@ def main(args):
         require(np.array_equal(lines, got_lines), f"{name}: line counts differ")
         record = checkpoint_record(path, blob)
         record["iteration"] = int(blob["iteration"])
+        if "convergence_certificate" in blob:
+            record["convergence_certificate"] = blob["convergence_certificate"]
         block = dict(score=summarize(values, lines),
                      paired_full_minus_baseline=paired(full_joint, values),
                      checkpoint=record, support={})
@@ -244,6 +263,8 @@ if __name__ == "__main__":
     p.add_argument("--full-key", default="target_child")
     p.add_argument("--split", choices=("validation", "test"), default="validation")
     p.add_argument("--iteration", type=int, default=400)
+    p.add_argument("--checkpoint-kind", choices=("last", "best"), default="last")
+    p.add_argument("--require-converged", action="store_true")
     p.add_argument("--baseline-tag", default="")
     p.add_argument("--shopper-orders", type=int, default=8192)
     p.add_argument("--seed", type=int, default=20260821)

@@ -1307,6 +1307,31 @@ and
 \tag{82}
 \]
 
+For the latter, every fitted external baseline uses a fresh lineage and the same fixed
+validation manifest. Let \(v_k\) be validation log likelihood at evaluation \(k\). A gain
+is material when
+
+\[
+v_k > \max_{j<k}v_j + \delta,
+\qquad \delta=0.002\ \text{nats/basket}.
+\tag{82a}
+\]
+
+Validation plateaus reduce the learning rate geometrically. Convergence is certified only
+after all of the following hold simultaneously:
+
+1. training exposure is at least two epoch-equivalents over the supported training trips;
+2. the learning rate has reached \(0.02\) times its initial value;
+3. no material validation improvement has occurred for eight evaluations; and
+4. at least four stale evaluations have occurred after reaching the learning-rate floor.
+
+The maximum update count is a fail-closed safety ceiling, not a stopping definition. If a
+baseline reaches it without this certificate, no test score or model-superiority claim is
+produced. The validation-selected checkpoint—not necessarily the terminal checkpoint—is
+then scored once on the common locked test manifest. SHOPPER uses a fixed ordering stream
+for validation and a higher-ordering audit for its final set likelihood, separating
+optimizer convergence from ordering Monte Carlo error.
+
 ---
 
 ## 22. Convergence contract
@@ -1472,4 +1497,3 @@ Please review and accept, reject or amend these points:
     identical-trip validation and test evaluation.
 
 Only after these decisions should the next run configuration be frozen.
-

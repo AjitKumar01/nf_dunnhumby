@@ -27,6 +27,63 @@ def hash_ids(ids):
     return hashlib.sha256(np.ascontiguousarray(ids, dtype=np.int64).tobytes()).hexdigest()
 
 
+class PlateauConvergence:
+    """Fail-closed optimizer stopping rule evaluated only on a fixed validation panel."""
+
+    def __init__(self, min_delta, patience, floor_patience, minimum_epochs):
+        self.min_delta = float(min_delta)
+        self.patience = int(patience)
+        self.floor_patience = int(floor_patience)
+        self.minimum_epochs = float(minimum_epochs)
+        self.significant_best = -float("inf")
+        self.evals_since_improvement = 0
+        self.floor_evals_since_improvement = 0
+        self.converged = False
+
+    def observe(self, score, iteration, batch, n_train, lr, minimum_lr):
+        improved = score > self.significant_best + self.min_delta
+        if improved:
+            self.significant_best = float(score)
+            self.evals_since_improvement = 0
+        else:
+            self.evals_since_improvement += 1
+        at_floor = lr <= minimum_lr * (1.0 + 1e-9) + 1e-15
+        if not at_floor or improved:
+            self.floor_evals_since_improvement = 0
+        else:
+            self.floor_evals_since_improvement += 1
+        epochs = iteration * batch / n_train
+        self.converged = bool(
+            epochs >= self.minimum_epochs
+            and at_floor
+            and self.evals_since_improvement >= self.patience
+            and self.floor_evals_since_improvement >= self.floor_patience)
+        return dict(improved=improved, at_floor=at_floor, epochs=epochs,
+                    converged=self.converged)
+
+    def state_dict(self):
+        return dict(min_delta=self.min_delta, patience=self.patience,
+                    floor_patience=self.floor_patience,
+                    minimum_epochs=self.minimum_epochs,
+                    significant_best=self.significant_best,
+                    evals_since_improvement=self.evals_since_improvement,
+                    floor_evals_since_improvement=self.floor_evals_since_improvement,
+                    converged=self.converged)
+
+    def load_state_dict(self, state):
+        expected = (self.min_delta, self.patience, self.floor_patience,
+                    self.minimum_epochs)
+        received = (float(state["min_delta"]), int(state["patience"]),
+                    int(state["floor_patience"]), float(state["minimum_epochs"]))
+        if received != expected:
+            raise RuntimeError("resume convergence settings differ from the checkpoint")
+        self.significant_best = float(state["significant_best"])
+        self.evals_since_improvement = int(state["evals_since_improvement"])
+        self.floor_evals_since_improvement = int(
+            state["floor_evals_since_improvement"])
+        self.converged = bool(state["converged"])
+
+
 def supported_training(D, nmax, R):
     ids = np.flatnonzero(D["trip_split"] == 0)
     lp, lc = D["line_ptr"], D["line_cat"]
@@ -117,7 +174,7 @@ def evaluate(model, name, batcher, trips, a, seed):
 
 
 def save(path, model, opt, sched, iteration, best, a, name, tr, va, te,
-         rng, order_gen):
+         rng, order_gen, convergence, lineage, history):
     blob = dict(format=3, kind="verified-basket-baseline", model_name=name,
                 model=model.state_dict(), optimizer=opt.state_dict(),
                 scheduler=sched.state_dict(), iteration=iteration, best=best,
@@ -127,6 +184,8 @@ def save(path, model, opt, sched, iteration, best, a, name, tr, va, te,
                                            train_n=len(tr), train_hash=hash_ids(tr),
                                            valid_n=len(va), valid_hash=hash_ids(va),
                                            test_n=len(te), test_hash=hash_ids(te)),
+                lineage=lineage, convergence_state=convergence.state_dict(),
+                history=history,
                 rng_np=rng.bit_generator.state, rng_torch=order_gen.get_state())
     tmp = path + ".tmp"
     torch.save(blob, tmp)
@@ -165,26 +224,45 @@ def main(a):
             model.idx.lam.copy_(absolute_popularity_logits(D, tr))
         log(f"{a.model}: initialized product intercept from training incidence/exposure")
     opt = torch.optim.Adam(model.parameters(), lr=a.lr, weight_decay=a.wd)
+    minimum_lr = a.lr * a.lr_floor
     milestones = [int(x) for x in a.lr_milestones.split(",") if x.strip()]
-    if milestones:
+    if a.scheduler == "milestone":
+        if not milestones:
+            raise ValueError("milestone scheduler requires --lr-milestones")
         sched = torch.optim.lr_scheduler.MultiStepLR(
             opt, milestones=milestones, gamma=a.lr_gamma)
-    else:
+    elif a.scheduler == "cosine":
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-            opt, T_max=a.iters, eta_min=a.lr * a.lr_floor)
+            opt, T_max=a.iters, eta_min=minimum_lr)
+    else:
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            opt, mode="max", factor=a.lr_gamma, patience=a.plateau_patience,
+            threshold=a.convergence_delta, threshold_mode="abs",
+            min_lr=minimum_lr)
+    convergence = PlateauConvergence(
+        a.convergence_delta, a.convergence_patience,
+        a.floor_patience, a.minimum_epochs)
     rng = np.random.default_rng(a.seed)
     order_gen = torch.Generator().manual_seed(a.seed)
     suffix = f"_{a.tag}" if a.tag else ""
     path = os.path.join(OUT, f"baseline_verified_{a.model}{suffix}.pt")
     best_path = os.path.join(OUT, f"baseline_verified_{a.model}{suffix}_best.pt")
     start, best = 0, dict(per_basket=-float("inf"), iteration=0)
+    history = []
+    lineage = dict(fresh_initialization=True, started_unix=time.time(),
+                   initial_seed=a.seed)
     if a.resume and os.path.exists(path):
         blob = torch.load(path, map_location="cpu", weights_only=False)
         if blob.get("format") != 3 or blob.get("model_name") != a.model:
             raise RuntimeError("resume checkpoint is not the requested verified baseline")
+        if not blob.get("lineage", {}).get("fresh_initialization"):
+            raise RuntimeError("resume checkpoint lacks a fresh-initialization lineage")
         model.load_state_dict(blob["model"], strict=True)
         opt.load_state_dict(blob["optimizer"]); sched.load_state_dict(blob["scheduler"])
         start, best = int(blob["iteration"]), blob["best"]
+        history = list(blob.get("history", []))
+        lineage = blob["lineage"]
+        convergence.load_state_dict(blob["convergence_state"])
         rng.bit_generator.state = blob["rng_np"]; order_gen.set_state(blob["rng_torch"])
         log(f"resumed iteration {start}, best {best['per_basket']:.4f}")
     if a.eval_initial:
@@ -201,32 +279,74 @@ def main(a):
             raise RuntimeError(f"non-finite loss at iteration {iteration}")
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), a.clip)
-        opt.step(); sched.step()
+        opt.step()
+        if a.scheduler != "plateau":
+            sched.step()
         if iteration % a.eval_every == 0 or iteration == a.iters:
             model.eval()
             val = evaluate(model, a.model, batcher, va, a, a.eval_seed)
             model.train()
             elapsed = time.time() - started
-            log(f"it {iteration:6d}/{a.iters} loss {float(loss.detach()):9.3f} "
+            if a.scheduler == "plateau":
+                sched.step(val["per_basket"])
+            status = convergence.observe(
+                val["per_basket"], iteration, a.batch, len(tr),
+                opt.param_groups[0]["lr"], minimum_lr)
+            log(f"it {iteration:6d}/{a.iters} ep {status['epochs']:5.2f} "
+                f"loss {float(loss.detach()):9.3f} "
                 f"valid {val['per_basket']:9.3f} +/- {val['se']:.3f} "
                 f"lr {opt.param_groups[0]['lr']:.2g} {elapsed/60:.1f} min "
+                f"stale {convergence.evals_since_improvement} "
+                f"floor-stale {convergence.floor_evals_since_improvement} "
                 f"ETA {(elapsed/max(iteration-start,1))*(a.iters-iteration)/3600:.2f} h")
+            history.append(dict(
+                iteration=iteration, epochs=status["epochs"],
+                train_loss=float(loss.detach()), validation=val,
+                learning_rate=float(opt.param_groups[0]["lr"]),
+                significant_improvement=bool(status["improved"]),
+                at_floor=bool(status["at_floor"]),
+                stale=convergence.evals_since_improvement,
+                floor_stale=convergence.floor_evals_since_improvement))
             if val["per_basket"] > best["per_basket"]:
                 best = dict(per_basket=val["per_basket"], iteration=iteration)
                 save(best_path, model, opt, sched, iteration, best, a, a.model,
-                     tr, va, te, rng, order_gen)
+                     tr, va, te, rng, order_gen, convergence, lineage, history)
             save(path, model, opt, sched, iteration, best, a, a.model,
-                 tr, va, te, rng, order_gen)
+                 tr, va, te, rng, order_gen, convergence, lineage, history)
+            if a.require_convergence and status["converged"]:
+                log(f"convergence certified at iteration {iteration}: "
+                    f"{status['epochs']:.2f} epochs, lr floor {minimum_lr:.3g}, "
+                    f"best iteration {best['iteration']}")
+                break
+    terminal_iteration = iteration if a.iters > start else start
+    certificate = dict(
+        required=bool(a.require_convergence), passed=bool(convergence.converged),
+        terminal_iteration=int(terminal_iteration), selected_iteration=int(best["iteration"]),
+        rule=convergence.state_dict(), scheduler=a.scheduler,
+        minimum_lr=minimum_lr, train_n=len(tr), batch=a.batch)
+    if a.require_convergence and not convergence.converged:
+        raise RuntimeError(
+            f"{a.model} reached the {a.iters}-update safety ceiling without satisfying "
+            "the convergence certificate; no test score was produced")
     best_blob = torch.load(best_path, map_location="cpu", weights_only=False)
+    best_blob["convergence_certificate"] = certificate
+    best_blob["history"] = history
+    tmp = best_path + ".tmp"
+    torch.save(best_blob, tmp)
+    os.replace(tmp, best_path)
     model.load_state_dict(best_blob["model"], strict=True); model.eval()
     valid = evaluate(model, a.model, batcher, va, a, a.eval_seed)
-    test = evaluate(model, a.model, batcher, te, a, a.eval_seed + 1009)
-    result = dict(model=a.model, best=best_blob["best"], valid=valid, test=test,
+    test = (evaluate(model, a.model, batcher, te, a, a.eval_seed + 1009)
+            if a.score_test else None)
+    result = dict(model=a.model, best=best_blob["best"], convergence=certificate,
+                  history=history,
+                  valid=valid, test=test,
                   checkpoint=os.path.basename(best_path), config=vars(a))
     with open(os.path.join(OUT, f"baseline_verified_{a.model}{suffix}.json"), "w") as stream:
         json.dump(result, stream, indent=2)
-    log(f"best iteration {best['iteration']}: valid {valid['per_basket']:.4f}, "
-        f"test {test['per_basket']:.4f}")
+    suffix = (f", test {test['per_basket']:.4f}" if test is not None
+              else "; test remains locked for the paired audit")
+    log(f"best iteration {best['iteration']}: valid {valid['per_basket']:.4f}{suffix}")
 
 
 if __name__ == "__main__":
@@ -237,8 +357,20 @@ if __name__ == "__main__":
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--lr-floor", type=float, default=0.02)
+    p.add_argument("--scheduler", choices=("milestone", "cosine", "plateau"),
+                   default="milestone")
     p.add_argument("--lr-milestones", default="20000,26000")
     p.add_argument("--lr-gamma", type=float, default=0.5)
+    p.add_argument("--plateau-patience", type=int, default=3,
+                   help="validation intervals before each plateau LR reduction")
+    p.add_argument("--convergence-delta", type=float, default=0.002,
+                   help="minimum deterministic validation gain in nats/basket")
+    p.add_argument("--convergence-patience", type=int, default=8,
+                   help="validation intervals without a material gain")
+    p.add_argument("--floor-patience", type=int, default=4,
+                   help="stale validation intervals required after reaching the LR floor")
+    p.add_argument("--minimum-epochs", type=float, default=2.0)
+    p.add_argument("--require-convergence", action="store_true")
     p.add_argument("--wd", type=float, default=1e-5)
     p.add_argument("--clip", type=float, default=5.0)
     p.add_argument("--eval-every", type=int, default=2000)
@@ -246,6 +378,8 @@ if __name__ == "__main__":
     p.add_argument("--eval-chunk", type=int, default=8)
     p.add_argument("--eval-initial", type=int, default=1,
                    help="score the raw/resumed checkpoint before any updates")
+    p.add_argument("--score-test", action="store_true",
+                   help="diagnostic only; normal pipeline keeps test locked for final audit")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--taste-init", type=float, default=0.03)
     p.add_argument("--interaction-init", type=float, default=0.03)
