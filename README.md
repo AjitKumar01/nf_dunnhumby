@@ -69,6 +69,9 @@ The exact-enumeration interaction recovery benchmark and its real-data diagnosis
 The conditional size failure, rank-one household reparameterization, constrained pilot,
 and unchanged sampling recursion are derived in
 [`paper/HOUSEHOLD_SIZE_AUDIT.md`](paper/HOUSEHOLD_SIZE_AUDIT.md).
+The finite-horizon, budget-constrained three-segment promotion environment and its
+limitations are documented in
+[`paper/SEGMENT_PROMOTION_MDP.md`](paper/SEGMENT_PROMOTION_MDP.md).
 
 ## Current empirical status
 
@@ -197,6 +200,7 @@ output is not statistically valid and must never be used for reporting results.
 | `reports/generation_counterfactual.json` | SMC validity and price response |
 | `reports/customer_segments.json` | segment structure, generation, and price response |
 | `reports/population_size.json` | full-population size/tail certification |
+| `reports/segment_promotion_mdp.json` | three-segment finite-horizon promotion policy and action-response audit |
 
 The population audit checkpoints its screen under
 `reports/population_size.screen-<digest>.*`. An interruption resumes at the last durable
