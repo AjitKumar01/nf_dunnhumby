@@ -111,7 +111,8 @@ def load_model(artifact, data):
         int(data["n_item"]), int(data["n_user"]), int(data["n_cat"]),
         K=int(meta["K"]), Kz=int(meta["Kz"]), nmax=int(meta["nmax"]),
         R=int(meta["R"]), seed=int(meta["seed"]), S=int(data["n_store"]),
-        Kp=int(meta["Kp"]), phi_init=0.0)
+        Kp=int(meta["Kp"]), phi_init=0.0,
+        household_size_rank1=bool(meta.get("household_size_rank1", False)))
     restored = load_sparse_initialization_artifact(artifact, model)
     with torch.no_grad():
         model.phi.zero_()
@@ -251,6 +252,9 @@ def main():
           f"lr={args.lr:g}", flush=True)
     print("[exact-additive] exact native category/cardinality DP; no quadrature, particles, "
           "ESS, retry, skip, or fallback", flush=True)
+    if model.household_size_rank1:
+        print("[exact-additive] taste rank split: K-1 catalogue-centred composition "
+              "directions plus one household-common size direction", flush=True)
     if args.rho_c_max_category_reward > 0:
         initial_category_safety = project_category_reward_(
             model, rho_c_capacities, args.rho_c_max_category_reward,
@@ -405,6 +409,12 @@ def main():
             "elasticity": float(elasticity.detach()),
             "elasticity_penalty": float(elasticity_penalty.detach()),
             "lam_sd": float(model.lam.std().detach()),
+            "house_size_sd": (
+                float(model.theta_c()[:, -1].std().detach())
+                if model.household_size_rank1 else float("nan")),
+            "house_size_abs_max": (
+                float(model.theta_c()[:, -1].abs().max().detach())
+                if model.household_size_rank1 else float("nan")),
             "maximum_category_reward": (
                 category_safety["maximum_reward_after"]
                 if category_safety is not None else float("nan")),
@@ -420,6 +430,9 @@ def main():
                   f"{np.mean([x['train_loglik'] for x in window]):.5f} "
                   f"grad={np.mean([x['grad_norm'] for x in window]):.3f} "
                   f"lam.sd={row['lam_sd']:.3f} "
+                  + (f"kappa.sd={row['house_size_sd']:.3f} "
+                     f"kappa.max={row['house_size_abs_max']:.3f} "
+                     if model.household_size_rank1 else "")
                   + (f"cat.max={row['maximum_category_reward']:.3f} "
                      if category_safety is not None else "")
                   + (f"elast={row['elasticity']:+.3f} "

@@ -1188,11 +1188,23 @@ class RaggedModel(torch.nn.Module):
 
     def __init__(self, J, N, C, K=8, Kz=3, nmax=24, R=4, seed=0,
                  S=1, Kp=8, Kt=8, Ks=4, n_week=53, phi_init=0.03,
-                 taste_init=0.3):
+                 taste_init=0.3, household_size_rank1=False):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         self.J, self.N, self.C, self.S = J, N, C, S
         self.K, self.Kz, self.nmax, self.R = K, Kz, nmax, R
+        if household_size_rank1 and K < 2:
+            raise ValueError("household-size rank-one decomposition requires K >= 2")
+        # This is a constrained coordinate system for the existing theta_h'alpha_j term,
+        # not an added energy term.  The last taste coordinate is kappa_h * 1_j and the
+        # remaining product loadings are catalogue-centred:
+        #
+        #   theta_h'alpha_j = kappa_h + theta_tilde_h'alpha_tilde_j.
+        #
+        # Hence kappa is rank one across the household-by-product utility surface and adds
+        # n*kappa_h to a basket of size n.  It is exactly a household-specific linear
+        # direction inside the original rho_0/utility gauge.
+        self.household_size_rank1 = bool(household_size_rank1)
         self.lam = torch.nn.Parameter(torch.zeros(J))
         self.alpha = torch.nn.Parameter(torch.randn(J, K, generator=g) * taste_init)
         self.theta = torch.nn.Parameter(torch.randn(N, K, generator=g) * taste_init)
@@ -1311,7 +1323,16 @@ class RaggedModel(torch.nn.Module):
         value except through here.
         """
         hh = self.house[trip]
-        b = self.lam[it] + (self.theta_c()[hh] * self.alpha[it]).sum(-1)
+        theta = self.theta_c()
+        if self.household_size_rank1:
+            # Centring alpha_tilde makes every composition coordinate have zero catalogue
+            # mean, so it cannot silently act as another household size intercept.
+            alpha = self.alpha[:, :-1]
+            alpha = alpha - alpha.mean(0, keepdim=True).detach()
+            b = (self.lam[it] + theta[hh, -1]
+                 + (theta[hh, :-1] * alpha[it]).sum(-1))
+        else:
+            b = self.lam[it] + (theta[hh] * self.alpha[it]).sum(-1)
         if c is None:
             return b
         # Price sensitivity is held non-negative.
@@ -1418,6 +1439,12 @@ class RaggedModel(torch.nn.Module):
         self.theta.sub_(self.theta.mean(0, keepdim=True))
         self.delta.sub_(self.delta.mean(0, keepdim=True))
         self.xi.sub_(self.xi.mean(0, keepdim=True))
+        if self.household_size_rank1:
+            # These changes are already made in the forward gauge above and therefore do
+            # not change any utility.  Keeping the stored tensors in that gauge prevents
+            # optimizer drift and makes theta[:, -1] directly auditable as kappa_h.
+            self.alpha[:, :-1].sub_(self.alpha[:, :-1].mean(0, keepdim=True))
+            self.alpha[:, -1].fill_(1.0)
 
     def b_flat(self, ix):
         """b at every assortment slot, [T] -- the normaliser's view."""

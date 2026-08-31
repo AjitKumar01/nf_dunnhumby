@@ -55,12 +55,13 @@ This ordering prevents a small likelihood gain from buying a pathological simula
 |---|---|---|---|
 | End-to-end RQMC joint SGD | randomized Gaussian integral on every update | high latency, retries/aborts, and no completed convincing convergence path | reject as default |
 | Long joint Smolyak SGD from an arbitrary checkpoint | q8 large-batch score plus q9 correction and q10 audit | stable quadrature and positive likelihood gain, but poor initialization wastes updates and rare size phases remain | reject as a standalone pipeline |
-| Post-fit scalar/context size corrections | tilt existing \(\rho_0\) or household-common direction | changes are cheap, but measured gains are marginal and the full-population extreme tail worsens | reject |
-| Exact additive + rank score + constrained natural-parameter MCLE | exact parent draws define one deterministic likelihood-ratio objective in \(C\) and a correction inside the original \(\rho_0\) | full-catalogue rank learning, monotone optimization, cross-fit selection, and no quadrature inside training | **selected corrected pipeline** |
+| Unconstrained post-fit scalar/context size corrections | tilt existing \(\rho_0\) or a household-common direction without a conditional-tail gate | changes are cheap, but the unconstrained versions can move extreme mass to the wrong contexts | reject |
+| Exact additive + rank score + constrained natural-parameter MCLE + identified household size block | exact parent draws fit \(C\) and a correction inside \(\rho_0\); a one-dimensional, ridge-regularized household block is then solved with a deterministic conditional-tail cap | full-catalogue rank learning, monotone block solves, cross-fit selection, no extra latent variable, and direct control of localized size phases | **experimental branch selected for full validation** |
 
-No evaluated pipeline has yet passed the new full-population extreme-tail gate. Therefore
-the selected pipeline is the best **research and certification pipeline**, not a declaration
-that the current fitted parameters are production-ready.
+The completed parent pipeline did not pass the full-population extreme-tail gate. The
+rank-one revision has passed a frozen-law pilot and integration tests, but has not yet
+completed a fresh converged fit. It is therefore an evidence-backed experimental pipeline,
+not a declaration that its current parameters are production-ready.
 
 ## 5. Selected pipeline
 
@@ -162,7 +163,31 @@ The correction is not a new size factor or a change to the Version-4 joint law. 
 two-direction update of the already-defined unrestricted size potential. There is no
 initialization search: concavity supplies one global sampled optimum.
 
-### Stage E — certification
+### Stage E — identified household-size block
+
+Reserve one existing household-taste coordinate for the fixed all-product loading. Then
+
+\[
+b_{jh}=\widetilde b_{jh}+\kappa_h,
+\qquad \sum_{j=1}^{J}\widetilde\alpha_j=0.
+\]
+
+For a basket of size \(n\), the new coordinate contributes \(n\kappa_h\). Equivalently,
+it is the household-specific linear direction
+
+\[
+\rho_{0h}(n)=\rho_0(n)-n\kappa_h
+\]
+
+inside the original Version-4 energy. It does not introduce a conditional-size model.
+For fixed other parameters, each \(\kappa_h\) is fitted by a one-dimensional strictly
+concave penalized size likelihood. Ridge is selected on alternating chronological trips
+within household, and the result is projected onto an upper bound obtained from the
+complete-population low-rule tail screen. This is an exact block update of the same joint
+likelihood; the penalty stabilizes sparse households, while the cap prevents a localized
+large-basket phase.
+
+### Stage F — certification
 
 The candidate must pass:
 
@@ -191,6 +216,10 @@ affinity groups, \(n_{\max}=120\), accepted rank \(r\), and Smolyak node count \
 - Projected Fisher accumulation:
   \(O(TD[r^2+r^4])\) for \(T\) contexts and \(D\) draws, with only
   \(r(r+1)/2\) fitted coordinates.
+- Household-size solve after size laws are cached:
+  \(O(Tn_{\max}\log(1/\epsilon))\) time for one-dimensional bisections and
+  \(O(Tn_{\max})\) storage; it adds no H--S dimension and no
+  product-by-household tensor.
 - Smolyak likelihood audit:
   \(O(T M_q(r)[J_x n_{\max}+C_x n_{\max}^2])\).
 - Recommendation: \(O(J_x r)\) add-one scoring; \(\log Z\) cancels, so no Smolyak cost.
@@ -202,13 +231,12 @@ rank-5 fit therefore uses q6/q7/q8; the rank-relative accuracy contract is uncha
 
 ## 7. What “best” means now
 
-The selected pipeline is best because it is the simplest one that preserves the complete
-theory, learns full-catalogue interactions, completes reproducibly, and exposes the known
-failure rather than hiding it behind a favorable checkpoint. If the population-tail gate
-fails, the next scientific task is parameter/regularization work within this pipeline;
-it is not another estimator lottery or a comparison of numbered runs.
+The selected branch is the smallest revision targeted by the failure audit: the completed
+parent already learns full-catalogue interactions, while the new coordinate addresses the
+household-local size bias without changing fixed-size composition or increasing quadrature
+rank. Its status depends on a fresh end-to-end result, not on a favorable checkpoint.
 
-## 8. Corrected full-run outcome
+## 8. Parent corrected full-run outcome
 
 The selected pipeline was executed from fresh initialization on the corrected cohort on
 2026-08-31. It completed preprocessing, exact additive convergence, rank selection,
@@ -241,3 +269,7 @@ The detailed empirical record is
 [CORRECTED_PIPELINE_RESULTS.md](CORRECTED_PIPELINE_RESULTS.md). The complete console log
 is artifacts/pipeline_corrected_full.log; the exact-additive trace is
 out/v3_pipeline_additive.log.
+
+The diagnosis and frozen-law evidence motivating Stage E are reported separately in
+[HOUSEHOLD_SIZE_AUDIT.md](HOUSEHOLD_SIZE_AUDIT.md); they are not presented as a completed
+branch outcome.

@@ -269,12 +269,30 @@ def initialize_taste_moments(model, D, trips, strength=1.0, prior=100.0,
         minlength=N).clip(min=1e-30)
     common = np.log(num / den)
 
-    # Balance the constant factor's raw scale for weight decay; only its product matters.
-    const_scale = max(float((np.square(common).sum() / J) ** 0.25), 1e-4)
     theta = np.zeros((N, model.K), dtype=theta_cond.dtype)
     alpha = np.zeros((J, model.K), dtype=alpha_cond.dtype)
-    theta[:, :conditional_rank], alpha[:, :conditional_rank] = theta_cond, alpha_cond
-    theta[:, -1], alpha[:, -1] = -common / const_scale, const_scale
+    if model.household_size_rank1:
+        # Fix the final product loading to one.  The remaining item loadings are centred,
+        # and their removed household-common value is transferred into kappa.  This is an
+        # exact reparameterization of fitted_cond-common:
+        #
+        # theta_cond alpha_cond' - common
+        #   = theta_cond (alpha_cond-alpha_bar)' +
+        #     (theta_cond alpha_bar-common) 1'.
+        alpha_bar = alpha_cond.mean(0)
+        alpha_comp = alpha_cond - alpha_bar[None, :]
+        theta[:, :conditional_rank], alpha[:, :conditional_rank] = (
+            theta_cond, alpha_comp)
+        theta[:, -1] = theta_cond @ alpha_bar - common
+        alpha[:, -1] = 1.0
+        const_scale = 1.0
+    else:
+        # Balance the constant factor's raw scale for weight decay; only its product
+        # matters in the unconstrained factorization.
+        const_scale = max(float((np.square(common).sum() / J) ** 0.25), 1e-4)
+        theta[:, :conditional_rank], alpha[:, :conditional_rank] = (
+            theta_cond, alpha_cond)
+        theta[:, -1], alpha[:, -1] = -common / const_scale, const_scale
 
     # theta_c() removes the raw unweighted mean.  Transfer that exact product-specific
     # offset to lam so the initialized utility is unchanged by the gauge convention.

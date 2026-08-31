@@ -120,7 +120,8 @@ def main() -> None:
     initialization = ART / "initialization.pt"
     if args.resume_additive is None:
         driver.run(script("initialize_version4.py", "--output", initialization,
-                          "--manifest", ART / "initialization.json"))
+                          "--manifest", ART / "initialization.json",
+                          "--household-size-rank1"))
     elif not initialization.exists() and not driver.dry_run:
         raise SystemExit("resume requested but artifacts/initialization.pt is missing")
     if args.stop_after == "initialize":
@@ -155,7 +156,7 @@ def main() -> None:
     if args.stop_after == "rank":
         return
 
-    candidate = ART / "candidate.pt"
+    interaction_candidate = ART / "candidate.pt"
     driver.run(script(
         "fit_convex_natural_interactions.py", "--parent", additive,
         "--spectral", basis, "--contexts", 12000 if full else 64,
@@ -165,9 +166,10 @@ def main() -> None:
         "--minimum-half-gain", 0.0 if full else -1e9,
         "--minimum-ess-fraction", 0.20 if full else 0.0,
         "--minimum-ess-p01", 2.0 if full else 0.0,
-        "--output", candidate))
+        "--output", interaction_candidate))
     if not driver.dry_run:
-        interaction_report = json.loads(candidate.with_suffix(".json").read_text())
+        interaction_report = json.loads(
+            interaction_candidate.with_suffix(".json").read_text())
         eigenvalues = interaction_report["candidate_c_eigenvalues"]
         tolerance = max(eigenvalues) * 1e-10 if eigenvalues else 0.0
         fitted_rank = sum(value > max(tolerance, 1e-12) for value in eigenvalues)
@@ -177,6 +179,18 @@ def main() -> None:
             print(f"[pipeline] convex solve reduced certified basis rank {rank} "
                   f"to active rank {fitted_rank}")
         rank = fitted_rank
+    candidate = ART / "candidate_rank1.pt"
+    driver.run(script(
+        "fit_household_size_rank1.py",
+        "--checkpoint", interaction_candidate,
+        "--rank", rank, "--screen-level", rank + 1,
+        "--contexts", 0 if full else 128,
+        "--screen-tail-cap", 0.35,
+        "--minimum-crossfit-gain", 0.0 if full else -1e9,
+        "--chunk", 48 if full else 8,
+        "--output", candidate,
+        "--report", ART / "candidate_rank1.json",
+        "--population-output", REPORT / "population_size.json"))
     if args.stop_after == "interaction":
         return
 
@@ -220,14 +234,14 @@ def main() -> None:
         "--rank", rank, "--screen-level", rank + 1,
         "--confirm-level", rank + 2,
         "--contexts", 0 if full else 128,
-        "--confirm-contexts", 384 if full else 8,
+        "--confirm-contexts", 2048 if full else 8,
         "--calibration-contexts", 2048 if full else 16,
         "--chunk", 48 if full else 8,
         "--output", REPORT / "population_size.json"), allow_failure=not full)
     if args.dry_run:
         print("[pipeline] dry run complete; no stage was executed")
     elif full:
-        print("[pipeline] certification passed; candidate.pt is the accepted model")
+        print("[pipeline] certification passed; candidate_rank1.pt is the accepted model")
     else:
         print("[pipeline] smoke integration completed; statistical gates were relaxed "
               f"and tail audit status was {tail_status}; this is not a certified fit")

@@ -70,7 +70,8 @@ def load_checkpoint(path: Path, data):
         int(data["n_item"]), int(data["n_user"]), int(data["n_cat"]),
         K=int(meta["K"]), Kz=int(meta["Kz"]), nmax=int(meta["nmax"]),
         R=int(meta["R"]), seed=int(meta["seed"]), S=int(data["n_store"]),
-        Kp=int(meta["Kp"]), phi_init=0.0)
+        Kp=int(meta["Kp"]), phi_init=0.0,
+        household_size_rank1=bool(meta.get("household_size_rank1", False)))
     load_sparse_initialization_artifact(artifact, model)
     model.load_state_dict(blob["model"], strict=True)
     model._poly_degree_native = True

@@ -30,7 +30,10 @@ The selected pipeline is:
 5. one cross-fitted constrained Monte Carlo likelihood solve for the PSD interaction
    kernel and the original total-size potential correction, using fixed exact draws from
    the additive law;
-6. locked complete-support likelihood, recommendation, generation, price, and
+6. one strictly concave household-size block update in an identified catalogue-common
+   direction of the existing household/product utility, selected by within-household
+   cross-fit and capped by the population tail screen;
+7. locked complete-support likelihood, recommendation, generation, price, and
    population-tail audits.
 
 This is the corrected end-to-end pipeline. It never searches over \(\rho_0\)
@@ -43,7 +46,7 @@ every accepted step monotone. Cross-fit gain and proposal effective sample size 
 checked before the independent Smolyak audit. Certification remains fail-closed: if the
 optimizer does not converge, numerical fidelity fails, or the model
 puts excessive mass on anomalously large baskets, the last stage exits nonzero and keeps
-`artifacts/candidate.pt` as a research candidate rather than calling it production-ready.
+the candidate artifacts for diagnosis rather than calling them production-ready.
 
 The category bound is
 
@@ -63,10 +66,13 @@ The completed corrected-data fit and its fail-closed production decision are rep
 [`paper/CORRECTED_PIPELINE_RESULTS.md`](paper/CORRECTED_PIPELINE_RESULTS.md).
 The exact-enumeration interaction recovery benchmark and its real-data diagnosis are in
 [`paper/SYNTHETIC_INTERACTION_AUDIT.md`](paper/SYNTHETIC_INTERACTION_AUDIT.md).
+The conditional size failure, rank-one household reparameterization, constrained pilot,
+and unchanged sampling recursion are derived in
+[`paper/HOUSEHOLD_SIZE_AUDIT.md`](paper/HOUSEHOLD_SIZE_AUDIT.md).
 
 ## Current empirical status
 
-The corrected full pipeline has completed. On locked 4,096-trip panels, the rank-5 model
+The parent corrected pipeline has completed. On locked 4,096-trip panels, the rank-5 model
 improves over its matched exact additive parent by \(0.02163\pm0.00158\) nats/basket on
 validation and \(0.02391\pm0.00165\) on test; both gains remain positive after the
 higher-level numerical audit. Total test recommendation MRR is \(0.09514\pm0.00608\), but
@@ -77,6 +83,11 @@ the high-accuracy audit finds localized contexts with majority probability on ex
 baskets. The candidate is therefore suitable for research diagnosis, not production
 generation or retailer policy simulation. Historical baseline numbers from the old
 preprocessing are not treated as corrected-data comparisons.
+
+This branch adds the audited rank-one household-size correction. Its frozen-law pilot
+removes all 12 confirmed majority-tail contexts while improving cross-fitted size
+likelihood, but those pilot numbers are not substituted for a fresh converged end-to-end
+result. The full branch pipeline must pass the same locked gates before certification.
 
 ## Requirements
 
@@ -179,7 +190,8 @@ output is not statistically valid and must never be used for reporting results.
 | `out/v3_pipeline_additive.log` | exact additive optimizer log |
 | `out/v3_pipeline_additive_best.pt` | best additive parent |
 | `artifacts/interaction_basis_rank*.{npz,json}` | rank audits; rejected ranks remain auditable |
-| `artifacts/candidate.{pt,json}` | constrained natural-parameter candidate and its cross-fit/ESS audit |
+| `artifacts/candidate.{pt,json}` | interaction candidate before the household-size block update |
+| `artifacts/candidate_rank1.{pt,json}` | final rank-one household-size candidate and cross-fit/safety audit |
 | `reports/likelihood_{validation,test}.json` | paired, complete-support likelihood |
 | `reports/recommendation.json` | locked exact add-one MRR, MRR@5/10/20 and Recall@5/10/20; no normalizer is used |
 | `reports/generation_counterfactual.json` | SMC validity and price response |

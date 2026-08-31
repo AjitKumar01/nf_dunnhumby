@@ -50,6 +50,10 @@ def main() -> None:
     parser.add_argument("--ipf-steps", type=int, default=0,
                         help="optional initialization-only size IPF; the default leaves "
                              "all size learning to exact additive maximum likelihood")
+    parser.add_argument(
+        "--household-size-rank1", action="store_true",
+        help=("reserve one existing taste coordinate for a catalogue-common household "
+              "utility shift; this is a rank-one reparameterization of theta'alpha"))
     args = parser.parse_args()
 
     torch.set_num_threads(args.threads)
@@ -72,7 +76,8 @@ def main() -> None:
     training = np.flatnonzero(data["trip_split"] == 0)
     model = RaggedModel(products, households, categories, K=args.K, Kz=args.Kz,
                         nmax=args.nmax, R=args.R, seed=args.seed, S=stores,
-                        Kp=args.Kp, phi_init=0.0, taste_init=0.03)
+                        Kp=args.Kp, phi_init=0.0, taste_init=0.03,
+                        household_size_rank1=args.household_size_rank1)
     category = torch.zeros(products, dtype=torch.long)
     category[torch.as_tensor(data["line_item"], dtype=torch.long)] = \
         torch.as_tensor(data["line_cat"], dtype=torch.long)
@@ -99,6 +104,7 @@ def main() -> None:
         "nmax": args.nmax, "R": args.R, "seed": args.seed,
         "active_rank": args.active_rank, "affinity_partition": True,
         "initialization_only": True, "no_rec": True,
+        "household_size_rank1": bool(args.household_size_rank1),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     summary = save_sparse_initialization_artifact(
