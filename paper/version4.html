@@ -70,9 +70,17 @@ hr{border:0;border-top:1px solid var(--rule);margin:2.5rem 0}
 answers price counterfactuals, and serves as the environment for coupon and markdown
 policies. This document specifies the model exactly and records what has been measured
 about it &mdash; including the claims that did not survive.</p>
-<div class="meta">branch version-4 &nbsp;&middot;&nbsp; reference checkpoint v3_run97_best.pt (5.3 epochs)
+<div class="meta"><strong>HISTORICAL PRE-AUDIT EXPERIMENT</strong> &nbsp;&middot;&nbsp;
+branch version-4 &nbsp;&middot;&nbsp; reference checkpoint v3_run97_best.pt (5.3 epochs)
 &nbsp;&middot;&nbsp; 157,464 train / 16,937 valid / 24,294 test trips
 &nbsp;&middot;&nbsp; 5,455 products, 2,066 households, 102 weeks</div>
+
+<div class="note"><strong>Empirical provenance.</strong> This page preserves the
+Version-4 model statement and the historical run-97 record. Its cohort counts and scores
+predate the corrected raw-data audit and must not be compared with current results. See
+<a href="PREPROCESSING_AUDIT.md">PREPROCESSING_AUDIT.md</a> for the corrected data
+contract and <a href="CORRECTED_PIPELINE_RESULTS.md">CORRECTED_PIPELINE_RESULTS.md</a>
+for the completed current evaluation. The foundational basket law was not changed.</div>
 
 <nav>
 <a href="#model">1 &middot; The model</a><a href="#params">2 &middot; Parameters</a>

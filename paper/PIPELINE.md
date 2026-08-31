@@ -166,13 +166,13 @@ initialization search: concavity supplies one global sampled optimum.
 
 The candidate must pass:
 
-- q9 paired validation and test likelihood, with q10 numerical audit;
+- paired validation and test likelihood at \(q=r+2\), with a \(q=r+3\) numerical audit;
 - exact conditional add-one MRR and recall on a fixed test manifest;
 - SMC validity: no duplicates or unavailable products and adequate ESS;
 - monotone uniform-price counterfactual response;
 - segment-specific generation and price-response diagnostics;
-- q8 screening over every supported training context and q9 confirmation of the
-  highest-risk size laws.
+- \(q=r+1\) screening over every supported training context and \(q=r+2\)
+  confirmation of the highest-risk size laws.
 
 The population gate rejects a candidate when its mean tail probability is incompatible
 with observed \(N\geq60\) frequency or when a context with observed size below 40 assigns
@@ -195,9 +195,10 @@ affinity groups, \(n_{\max}=120\), accepted rank \(r\), and Smolyak node count \
   \(O(T M_q(r)[J_x n_{\max}+C_x n_{\max}^2])\).
 - Recommendation: \(O(J_x r)\) add-one scoring; \(\log Z\) cancels, so no Smolyak cost.
 
-For rank 7, q8/q9/q10 use 15/127/785 nodes. This is why q8 is used for a population
-screen, q9 for reported likelihood, and q10 only for a small numerical certification
-panel.
+For rank 7, q8/q9/q10 use 15/127/785 nodes. In general the selected pipeline uses
+\(q=r+1\) for the population screen, \(q=r+2\) for reported likelihood and high-risk
+confirmation, and \(q=r+3\) only for a small numerical certification panel. The corrected
+rank-5 fit therefore uses q6/q7/q8; the rank-relative accuracy contract is unchanged.
 
 ## 7. What “best” means now
 
@@ -206,3 +207,37 @@ theory, learns full-catalogue interactions, completes reproducibly, and exposes 
 failure rather than hiding it behind a favorable checkpoint. If the population-tail gate
 fails, the next scientific task is parameter/regularization work within this pipeline;
 it is not another estimator lottery or a comparison of numbered runs.
+
+## 8. Corrected full-run outcome
+
+The selected pipeline was executed from fresh initialization on the corrected cohort on
+2026-08-31. It completed preprocessing, exact additive convergence, rank selection,
+natural-parameter interaction fitting, locked validation/test likelihood, recommendation,
+generation, segmentation and the full-population audit. The final nonzero process status
+was produced deliberately by Stage E after the safety gate rejected the candidate; it was
+not an optimizer or estimator abort.
+
+| Gate | Measured outcome | Decision |
+|---|---|---|
+| Exact additive convergence | best fixed-panel validation LL \(-44.748944\) at update 13,500; convergence at 14,700 | pass |
+| Rank stability | rank 5 overlap \(0.549018\); ranks 6--8 below \(0.5\) | rank 5 |
+| Interaction cross-fit | mean gain \(0.024326\); minimum half gain \(0.023863\); median ESS fraction \(0.9981\) | pass |
+| Validation likelihood | paired gain \(0.021630\pm0.001581\) nats | pass |
+| Test likelihood | paired gain \(0.023908\pm0.001647\) nats | pass |
+| Numerical audit | error upper bounds \(0.000510\) validation, \(0.000720\) test | pass |
+| Recommendation interaction effect | MRR gain \(0.000247\pm0.000372\) | not established |
+| Generator mechanics | no unavailable products or duplicates; minimum normalized ESS \(0.99945\) | pass |
+| Price response | incidence and expected size decrease monotonically as price rises | pass |
+| Aggregate \(N\ge60\) calibration | calibrated upper \(0.002745 < 0.004250\) allowed | pass |
+| Local extreme-tail safety | 12 confirmed contexts with \(P(N\ge60)\ge0.5\); maximum \(0.73837\) for observed \(N<40\) | **fail** |
+
+The \(C\) solution has all five eigenvalues at the declared spectral cap. This is useful
+diagnostic evidence but not permission to enlarge the cap: the same candidate already
+fails a local tail gate. A subsequent pipeline revision must tie any increase in
+interaction capacity to a provable or directly enforced conditional-tail constraint,
+then repeat a fresh end-to-end fit.
+
+The detailed empirical record is
+[CORRECTED_PIPELINE_RESULTS.md](CORRECTED_PIPELINE_RESULTS.md). The complete console log
+is artifacts/pipeline_corrected_full.log; the exact-additive trace is
+out/v3_pipeline_additive.log.

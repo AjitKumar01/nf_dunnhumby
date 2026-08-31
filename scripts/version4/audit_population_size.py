@@ -176,7 +176,13 @@ def main() -> None:
     parser.add_argument("--maximum-low-observed-tail", type=float, default=0.5)
     parser.add_argument("--maximum-tail-rate-ratio", type=float, default=2.0)
     parser.add_argument("--tail-rate-slack", type=float, default=5e-4)
-    parser.add_argument("--maximum-q9-q8-mean-gap", type=float, default=1.0)
+    parser.add_argument("--maximum-screen-confirm-mean-gap",
+                        "--maximum-q9-q8-mean-gap",
+                        dest="maximum_screen_confirm_mean_gap",
+                        type=float, default=1.0,
+                        help=("diagnostic maximum expected-size difference between the "
+                              "screen and confirmation rules; the old q9-q8 spelling is "
+                              "retained as a command-line alias"))
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--output", type=Path,
                         default=Path("reports/population_size.json"))
@@ -244,9 +250,11 @@ def main() -> None:
         np.max(q8_tail[omitted_low]) + positive_tail_error
         if np.any(omitted_low) else 0.0)
     adaptive_confirmation = {
-        "policy": ("q8 ranks every context; q9 confirms the highest-risk panel; the "
-                   "largest positive q9-q8 error on that panel is added to the largest "
-                   "unconfirmed q8 value as a conservative empirical envelope"),
+        "policy": (
+            f"q{args.screen_level} ranks every context; q{args.confirm_level} confirms "
+            "the highest-risk panel; the largest positive confirm-minus-screen error "
+            "on that panel is added to the largest unconfirmed screen-rule value as a "
+            "conservative empirical envelope"),
         "positive_expected_size_error_envelope": positive_mean_error,
         "positive_tail_probability_error_envelope": positive_tail_error,
         "unconfirmed_expected_size_upper_envelope": omitted_mean_upper,
@@ -320,24 +328,26 @@ def main() -> None:
         "high_risk_per_trip_output": str(confirm_output),
         "quadrature_fidelity": {
             **fidelity,
-            "legacy_one_item_gate": (
+            "screen_confirm_one_item_fidelity_gate": (
                 fidelity["maximum_absolute_expected_size_gap"]
-                <= args.maximum_q9_q8_mean_gap),
+                <= args.maximum_screen_confirm_mean_gap),
             "interpretation": ("reported as estimator fidelity; model safety is decided "
-                               "by q9 confirmation and conservative coverage envelopes"),
+                               f"by q{args.confirm_level} confirmation and conservative "
+                               "coverage envelopes"),
         },
         "adaptive_high_risk_confirmation": adaptive_confirmation,
-        "random_q9_tail_calibration": tail_calibration,
+        "random_confirm_tail_calibration": tail_calibration,
         "allowed_model_tail_rate": allowed_rate,
         "gates": gates, "passed": bool(all(gates.values())),
         "interpretation": (
             "The low rule screens the requested population panel. A context whose "
             "signed size masses are invalid is evaluated by the next positive rule "
             "rather than treated as a model probability. The confirm rule re-evaluates "
-            "the highest-risk contexts. A random q9 panel corrects aggregate q8 tail "
-            "bias. The q8/q9 mean gap remains a diagnostic; safety uses confirmed q9 "
-            "tails and an explicit error envelope. Failure blocks production "
-            "certification but preserves resumable state."),
+            f"the highest-risk contexts. A random q{args.confirm_level} panel corrects "
+            f"aggregate q{args.screen_level} tail bias. The screen/confirm mean gap "
+            f"remains a diagnostic; safety uses confirmed q{args.confirm_level} tails "
+            "and an explicit error envelope. Failure blocks production certification "
+            "but preserves resumable state."),
     }
     output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

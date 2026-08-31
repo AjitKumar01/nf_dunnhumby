@@ -107,6 +107,17 @@ Journey — including where the model is beaten.</p>
 <p>Every equation states what <code>scripts/v3/</code> computes. Where the code and this
 document have disagreed, the disagreement produced a bug; §22 lists the ones found so far.</p>
 
+<div class="note">
+<p class="label">Historical empirical record</p>
+<p>The mathematical derivations below remain foundational. Counts, checkpoints and fitted
+scores embedded in this HTML predate the 2026-08-31 raw-data audit and are retained only as
+provenance; they are not comparable with the corrected cohort. The current empirical
+contract is in <a href="PREPROCESSING_AUDIT.md">PREPROCESSING_AUDIT.md</a>, and the
+completed corrected result is in
+<a href="CORRECTED_PIPELINE_RESULTS.md">CORRECTED_PIPELINE_RESULTS.md</a>. The audit
+changed data construction and empirical results, not Eq. 1 or its consequences.</p>
+</div>
+
 <div class="part"><div class="pn">Part I</div><div class="pt">The model</div></div>
 
 <div class="note">
@@ -114,7 +125,7 @@ document have disagreed, the disagreement produced a bug; §22 lists the ones fo
 <p>The energy of Eq. 1 is unchanged. What changed is the partition it is applied to
 (§2.3), two parameter directions that were unbounded and are now bounded by measured
 values (§3, §2.3), how those bounds are enforced (§14.5), one theoretical claim about
-where the stability condition bites (§12), and the numerics (§16). The current fit reaches
+where the stability condition bites (§12), and the numerics (§16). That historical fit reached
 <b>−34.8 per basket held out at λ<sub>max</sub> = 0.13</b> with 𝔼[n] agreeing at 16 and 128
 draws, against SHOPPER's −38.86 on identical-support trips. It has run a fifth of an epoch.
 §21 lists what is still not established, and complementarity in generation heads that list.</p>

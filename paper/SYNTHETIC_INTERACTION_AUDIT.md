@@ -2,14 +2,18 @@
 
 ## Question
 
-The corrected real-data model scores only (0.1107\pm0.1506) nats/basket above the
-current multinomial checkpoint on 512 identical validation trips. Does that mean the
-Version-4 interaction mechanism or its fitting code cannot create useful held-out gains?
+This audit originally asked whether the Version-4 interaction mechanism or its fitting
+code can create useful held-out gains when an old 512-trip external-baseline comparison
+was underpowered. That external comparison predates the corrected preprocessing and is
+retained below only as historical provenance.
 
 The answer from the controlled audit is **no**. The interaction code recovers likelihood,
 recommendation accuracy, and the true pair kernel when the data contain detectable
-low-rank interactions. The real-data multinomial comparison is currently underpowered
-and does not isolate the interaction block.
+low-rank interactions. The completed corrected-data pipeline now supplies the relevant
+isolated real-data comparison: rank-5 interactions improve over the matched exact additive
+parent by \(0.021630\pm0.001581\) nats/basket on validation and
+\(0.023908\pm0.001647\) on test. Both gains are numerically certified. See
+[CORRECTED_PIPELINE_RESULTS.md](CORRECTED_PIPELINE_RESULTS.md).
 
 ## Exact synthetic law
 
@@ -99,8 +103,8 @@ trips the corrected child gives
 nats/basket. Its 95% interval is positive. Thus the learned interactions already have a
 real held-out effect under the matched comparison.
 
-The external multinomial changes more than interactions: it uses empirical (P(n)), has
-no (ho_0) joint size block, and has no category-pair block. Its comparison with
+The external multinomial changes more than interactions: it uses empirical \(P(n)\), has
+no \(\rho_0\) joint size block, and has no category-pair block. Its comparison with
 Version-4 therefore mixes interaction value with size-law and structural calibration.
 
 On the common 512-trip panel,
@@ -119,15 +123,18 @@ paired trips are needed merely for a zero-excluding 95% interval if the current 
 stable. Roughly 7,400 are needed for 80% power in a two-sided 5% test. The 512-trip panel
 cannot resolve that effect.
 
-## Main real-data defect
+## Historical real-data defect
+
+The following diagnosis refers to the earlier projected checkpoint, not to the current
+fresh corrected-data fit.
 
 The population-safe checkpoint is not the solution of the constrained training problem.
 It was created by projecting an already trained unsafe checkpoint:
 
 - 138 learned category coefficients were changed;
 - maximum implied category attraction fell from 576.5 to 1.5 nats;
-- only the global (ho_0(n)) block was subsequently reprofiled;
-- utilities, household effects, price coefficients, category coefficients, and (Phi)
+- only the global \(\rho_0(n)\) block was subsequently reprofiled;
+- utilities, household effects, price coefficients, category coefficients, and \(\Phi\)
   were not jointly allowed to compensate.
 
 The resulting parameter vector need not satisfy the first-order conditions of the safe

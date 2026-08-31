@@ -59,8 +59,24 @@ unobserved large-basket clique phase. Narrow two-item groups retain the original
 The evidence and decision rule are in [`paper/PIPELINE.md`](paper/PIPELINE.md). The full
 model derivation is in [`paper/THEORY.md`](paper/THEORY.md), and estimator details are in
 [`paper/ESTIMATOR.md`](paper/ESTIMATOR.md).
+The completed corrected-data fit and its fail-closed production decision are reported in
+[`paper/CORRECTED_PIPELINE_RESULTS.md`](paper/CORRECTED_PIPELINE_RESULTS.md).
 The exact-enumeration interaction recovery benchmark and its real-data diagnosis are in
 [`paper/SYNTHETIC_INTERACTION_AUDIT.md`](paper/SYNTHETIC_INTERACTION_AUDIT.md).
+
+## Current empirical status
+
+The corrected full pipeline has completed. On locked 4,096-trip panels, the rank-5 model
+improves over its matched exact additive parent by \(0.02163\pm0.00158\) nats/basket on
+validation and \(0.02391\pm0.00165\) on test; both gains remain positive after the
+higher-level numerical audit. Total test recommendation MRR is \(0.09514\pm0.00608\), but
+the interaction-only MRR gain is not significant.
+
+Production certification is **rejected**: although the aggregate \(N\ge60\) rate passes,
+the high-accuracy audit finds localized contexts with majority probability on extreme
+baskets. The candidate is therefore suitable for research diagnosis, not production
+generation or retailer policy simulation. Historical baseline numbers from the old
+preprocessing are not treated as corrected-data comparisons.
 
 ## Requirements
 

@@ -1,8 +1,10 @@
 # Smolyak and alternative normaliser estimators for the unchanged version-4 model
 
-Status: theoretical analysis only. This document does not authorize a training run. It
-does not change the version-4 basket law, its support, interaction energy, size response,
-incidence formula, or counterfactual interpretation.
+Status: **current estimator theory and measured implementation**. This document does not
+change the Version-4 basket law, its support, interaction energy, size response, incidence
+formula, or counterfactual interpretation. Earlier sections compare possible outer
+Gaussian estimators; Section 11 records the estimator actually used by the corrected
+pipeline.
 
 ## 1. The exact numerical problem
 
@@ -652,6 +654,167 @@ If these bounds predict thousands of full-catalogue nodes, Smolyak must be rejec
 spending training compute. The next comparison should then be between a rigorously gated
 weak-interaction expansion and tempered SMC, not another QMC node-count tweak.
 
+## 11. Implemented resolution in the corrected pipeline
+
+The corrected pipeline does not put a noisy Gaussian-integral estimate inside every
+stochastic-gradient update. It exploits a simpler decomposition that is exact at the
+parent and low-dimensional in the interaction stage.
+
+### 11.1 Exact parent, exact draws
+
+Set \(\Phi=0\) and fit the entire additive Version-4 parent with the exact
+category/cardinality dynamic program. Let this fitted law be \(p_0(S\mid x)\). The same
+recursion supports exact ancestral draws \(S_{md}\sim p_0(\cdot\mid x_m)\) over all 5,455
+products and sizes \(1,\ldots,120\); there is no Markov chain and no signed quadrature in
+these training draws.
+
+The locally informative interaction object is the pair-statistic score at \(K=0\),
+
+\[
+R=
+\mathbb E_{\rm data}\!\left[P(S)\right]
+-
+\mathbb E_{p_0}\!\left[P(S)\right],
+\tag{26}
+\]
+
+where \(P(S)\) is the symmetric item-pair incidence matrix. Positive eigenvectors of \(R\)
+are ascent directions in the PSD Gram kernel \(K=\Phi\Phi^\top\). Independent training
+halves select a reproducible basis \(U\) before interaction magnitude is fitted.
+
+### 11.2 Deterministic sampled likelihood ratio
+
+In the selected basis write \(K=UCU^\top\), and combine the Gram change with two directions
+inside the already-defined total-size potential:
+
+\[
+h_\eta(S)
+=
+\operatorname{tr}\{C F_U(S)\}
+-a\frac{|S|}{10}
+-c\left(\frac{|S|}{10}\right)^2,
+\qquad
+\eta=(C,a,c).
+\tag{27}
+\]
+
+Because
+
+\[
+\frac{p_\eta(S\mid x)}{p_0(S\mid x)}
+=
+\frac{\exp h_\eta(S)}
+{\mathbb E_{p_0(\cdot\mid x)}[\exp h_\eta(S)]},
+\tag{28}
+\]
+
+fixed common draws give the objective
+
+\[
+\widehat G(\eta)
+=
+\frac1M\sum_{m=1}^M
+\left[
+h_\eta(S_m^{\rm obs})
+-
+\log\left\{
+\frac1D\sum_{d=1}^D
+\exp h_\eta(S_{md})
+\right\}
+\right].
+\tag{29}
+\]
+
+For fixed draws, Eq. (29) is deterministic and concave in the natural coordinates:
+a linear observed term minus log-sum-exp. Its score is
+
+\[
+\nabla_\eta\widehat G
+=
+\frac1M\sum_m
+\left[
+T(S_m^{\rm obs})
+-
+\sum_d\widetilde w_{md}T(S_{md})
+\right],
+\qquad
+\widetilde w_{md}
+=
+\frac{e^{h_\eta(S_{md})}}
+{\sum_{d'}e^{h_\eta(S_{md'})}}.
+\tag{30}
+\]
+
+Thus the training variance is frozen into one declared Monte Carlo panel rather than
+changing at every update. Effective sample size
+
+\[
+\operatorname{ESS}_m
+=
+\frac{1}{\sum_d\widetilde w_{md}^2}
+\tag{31}
+\]
+
+directly detects when the child leaves the support region represented by its exact-parent
+draws. Swapped context halves test out-of-sample gain, and the final quadrature likelihood
+audit is independent of this sampled objective.
+
+### Proposition 4: the sampled solve has no optimization-induced local minima
+
+On the feasible set
+
+\[
+0\preceq C\preceq\sigma_{\max}^2I,
+\qquad
+c\ge0,
+\qquad
+a+(n_{\max}/10)c\ge0,
+\tag{32}
+\]
+
+\(\widehat G(C,a,c)\) is concave.
+
+**Proof.** Equation (27) is affine in \((C,a,c)\). For each context, the observed term is
+affine and the log-sum-exp of affine functions is convex. Its negative is concave. Sums
+preserve concavity. The PSD interval and two half-space size constraints form a convex
+feasible set. Therefore every constrained local maximum is global for the fixed-draw
+objective. \(\square\)
+
+This proposition concerns optimization of the approximation. It does not assert that a
+finite draw panel equals the exact likelihood, which is why cross-fit ESS and independent
+quadrature certification remain mandatory.
+
+### 11.3 Measured error and convergence
+
+The corrected execution used 12,000 contexts, 64 exact parent draws per context and rank
+5. Median ESS was \(63.878/64=0.9981\); the first percentile was \(59.446\). The full
+fixed-draw gain was \(0.024517\pm0.001085\) nats/basket.
+
+The locked child likelihood used the positive Smolyak target rule at level 7 and a level-8
+audit on identical trips. The audit bounds were
+
+\[
+\epsilon_{\rm val}\le0.000510,
+\qquad
+\epsilon_{\rm test}\le0.000720
+\quad\text{nats/basket}.
+\tag{33}
+\]
+
+The paired child gains were \(0.021630\pm0.001581\) on validation and
+\(0.023908\pm0.001647\) on test. Their lower confidence limits remain positive after
+subtracting Eq. (33), so numerical error cannot explain the measured interaction gain.
+
+For the population safety audit, level 6 is only a screen. Level 7 confirms the highest
+risk contexts and a random 2,048-context panel estimates aggregate level bias. This
+distinction matters: in the high-risk panel the mean absolute expected-size difference
+between levels was \(1.95\), with maximum \(9.27\). The higher rule, not the cheap screen,
+therefore controls the safety decision.
+
+The estimator succeeds at likelihood fitting and certification, but the fitted law fails
+the local extreme-tail gate. That is a model-parameter safety failure, not evidence that
+Eq. (29) aborted or that the locked likelihood comparison is numerically unjustified.
+
 ## References
 
 - P. Chen, “Sparse quadrature for high-dimensional integration with Gaussian measure,”
@@ -671,4 +834,3 @@ weak-interaction expansion and tempered SMC, not another QMC node-count tweak.
   adaptive quadrature in Bayesian inference,” *Journal of the American Statistical
   Association* 118 (2023), 243--261.
   <https://doi.org/10.1080/01621459.2021.1967164>
-

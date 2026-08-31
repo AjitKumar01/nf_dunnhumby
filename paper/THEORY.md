@@ -1,12 +1,13 @@
 # Version-4 basket model: end-to-end theory for review
 
-Status: **review draft — no training is authorized by this document**  
-Date: 2026-08-28
+Status: **current theory and empirical contract**
+Date: 2026-08-31
 
-The immutable sources are [model.html](model.html) and
-[version4.html](version4.html). This document reorganizes their theory into one logical
-flow and makes the estimator and optimization qualifications explicit. It does not propose
-a replacement basket law.
+The foundational basket law is the one stated in [model.html](model.html) and
+[version4.html](version4.html). The HTML files also contain historical empirical material,
+which is not a description of the corrected cohort. This document reorganizes the theory
+into one logical flow and states the current empirical contract. It does not propose a
+replacement basket law.
 
 ---
 
@@ -93,6 +94,40 @@ support, not the energy law.
 The context \(x\) contains the household, prices, promotions, calendar, store and any
 declared history features. During simulation, every context variable must be externally
 provided or be a deterministic function of simulated history.
+
+### 2.1 Corrected empirical construction
+
+The current experiment fixes all cohort decisions with training weeks 9--82:
+
+1. rank products by training purchase-line frequency, breaking ties by product ID, and
+   retain exactly 5,455;
+2. retain households with 20--300 distinct training shopping days;
+3. use weeks 83--90 only for validation and weeks 91--101 only for test; and
+4. discard weeks outside 9--101 because the causal/promotion source does not cover them.
+
+This gives 1,920 households and the following immutable split counts:
+
+| Split | Weeks | Baskets | Purchase lines |
+|---|---:|---:|---:|
+| Training | 9--82 | 160,007 | 1,223,933 |
+| Validation | 83--90 | 17,351 | 129,731 |
+| Test | 91--101 | 23,340 | 181,342 |
+
+No held-out outcome is used to select the catalogue or households, and no held-out line is
+deleted after selection. Modal chain-week and store-week prices are computed from observed
+transactions, with the training distribution supplying centering constants. The source
+contains no inventory feed, so non-purchase is not evidence of unavailability; this is why
+the declared support is the complete catalogue rather than a store-sales proxy.
+
+The category index in the current implementation is a training-only affinity partition,
+not the raw merchandising taxonomy. The unchanged deterministic construction produces 300
+groups; 1,724 products form the residual group and the largest non-residual group contains
+128 products. These values affect the empirical feature map \(c(j)\), but they do not alter
+the category term in the energy.
+
+The preprocessing manifest locks raw-file hashes, cohort membership, prices, promotion
+coverage, split counts and full support. Details and independently reconstructed checks are
+in [PREPROCESSING_AUDIT.md](PREPROCESSING_AUDIT.md).
 
 ---
 
@@ -246,18 +281,18 @@ Equivalently, for (m_c\ge2),
 \tag{11c}
 \]
 
-This is an optimization-domain constraint on the coefficient already present in (8). It
+This is an optimization-domain constraint on the coefficient already present in Eq. (8). It
 does not modify the energy, joint law, support, incidence formula, or normalizer theorem.
-A two-item group retains the old lower bound (-1.5), whereas a 120-item group has lower
-bound (-1.5/{120\choose2}). Strong attraction therefore remains available for a small
+A two-item group retains the old lower bound \(-1.5\), whereas a 120-item group has lower
+bound \(-1.5/{120\choose2}\). Strong attraction therefore remains available for a small
 specific bundle, but cannot be extrapolated as a complete clique across a broad group.
 
-**Proposition 1 (category support bound).** Under (11b), category (c)'s attractive
-contribution to every supported basket is at most (B).
+**Proposition 1 (category support bound).** Under Eq. (11b), category \(c\)'s attractive
+contribution to every supported basket is at most \(B\).
 
-**Proof.** For every supported (S), (0\le n_c(S)\le m_c), and
-({n\choose2}) is nondecreasing for integer (n\ge0). If (ho_c\ge0), the term
-(-\rho_c{n_c(S)\choose2}\le0) is not attractive. If (ho_c<0), then
+**Proof.** For every supported \(S\), \(0\le n_c(S)\le m_c\), and
+\({n\choose2}\) is nondecreasing for integer \(n\ge0\). If \(\rho_c\ge0\), the term
+\(-\rho_c{n_c(S)\choose2}\le0\) is not attractive. If \(\rho_c<0\), then
 
 \[
 -\rho_c{n_c(S)\choose2}
@@ -1598,67 +1633,78 @@ Executable enumeration tests establish that:
 - revealed-set conditioning is the conditional of the same joint law; and
 - conditional generation matches enumerable laws within Monte Carlo error.
 
-At the recent rank-7 checkpoint, paired audits measured approximately
+The corrected end-to-end execution additionally establishes the following empirical facts.
+The exact additive parent converged from \(-49.622960\) to \(-44.748944\) nats/basket on
+its fixed validation panel. A split-half score audit selected rank five, with mean squared
+subspace overlap \(0.549018\). The constrained fixed-draw natural-parameter solve then
+found a cross-fitted gain of approximately \(0.0243\) nats/basket with median effective
+sample fraction \(0.9981\).
+
+On locked 4,096-trip panels, the interaction child improves over its matched exact
+additive parent by
 
 \[
-\begin{aligned}
-q8\rightarrow q9:
-&\quad
-1.7\%\ \text{global score error},\\
-&\quad
-2.3\%\ \Phi\text{-score error},
-\end{aligned}
+\widehat\Delta_{\mathrm{val}}
+=0.021630\pm0.001581
+\quad\text{and}\quad
+\widehat\Delta_{\mathrm{test}}
+=0.023908\pm0.001647
+\quad\text{nats/basket}.
 \tag{87}
 \]
 
+The higher-rule numerical error bounds are \(0.000510\) and \(0.000720\) nats,
+respectively, so both paired gains remain positive after numerical allowance. This is the
+first corrected-data result that statistically establishes a Gram-interaction likelihood
+gain over the exact additive parent.
+
+Recommendation is also evaluated from the same law. Total MRR is
+
 \[
-\begin{aligned}
-q9\rightarrow q10:
-&\quad
-0.36\%\ \text{global score error},\\
-&\quad
-0.43\%\ \Phi\text{-score error}.
-\end{aligned}
+0.095144\pm0.006083,
 \tag{88}
 \]
 
-These measurements justify level 8 as a coarse rule and level 9 as the present target in
-the audited region. They do not prove uniform accuracy over an unrestricted future
-trajectory.
-
-The best recent joint probe improved its fixed 96-trip level-9 panel by about
+but the interaction increment over additive MRR is only
 
 \[
-0.025\ \text{nat per basket}
+0.000247\pm0.000372,
+\qquad
+95\%\ \mathrm{CI}=[-0.000481,0.000976].
 \tag{89}
 \]
 
-over the joint-stage start and then plateaued. This is too small, and the panel too small,
-to claim superiority over baselines. The checkpoint also lies on the numerical spectral
-boundary (57), so it is not an unconstrained global version-4 MLE.
+Therefore an interaction recommendation gain is not established. This does not contradict
+Eq. (87): log likelihood is a proper score for the whole basket distribution, whereas MRR
+is a discontinuous one-hidden-item ranking functional.
 
-No run is currently active.
+Generation has no invalid-assortment or duplicate-item baskets and price counterfactuals
+move in the theoretically required direction. Production certification nevertheless
+fails. The aggregate \(N\ge60\) rate passes its calibrated bound, but the high-accuracy
+audit finds 12 high-risk contexts with \(P(N\ge60)\ge0.5\), including a maximum of
+\(0.73837\) when observed size is below 40. Hence the current fitted parameters are a
+research candidate, not a safe retailer simulator.
+
+All exact numbers, panels and artifact paths are in
+[CORRECTED_PIPELINE_RESULTS.md](CORRECTED_PIPELINE_RESULTS.md).
 
 ---
 
-## 25. Decisions required before proceeding
+## 25. Current decision
 
-Please review and accept, reject or amend these points:
+The model law remains fixed by Eqs. (8)--(10), with all 5,455 products and sizes
+\(1,\ldots,120\) in support. The corrected pipeline is now empirically validated as a
+reproducible fitting and certification procedure. Its fail-closed terminal decision must
+also be respected:
 
-1. Equations (8)--(10) are the only basket law to be fitted.
-2. All products and sizes \(1,\ldots,120\) remain in support.
-3. Additive fitting and rank identification are initializers, not substitutes for joint
-   MLE.
-4. Rank seven is the current largest split-stable interaction rank.
-5. Level 8 may accelerate coarse training, but final convergence must target an unbiased
-   level-9 score.
-6. Level 10 remains an independent audit unless level 9 fails.
-7. The spectral envelope must either be explicitly approved as an experimental model
-   restriction or removed by developing a more accurate estimator.
-8. Signed Smolyak weights are not used for generation.
-9. Recommendation is derived from incidence under the joint law and is not trained
-   separately.
-10. No likelihood, MRR, generation, counterfactual or baseline claim is accepted without
-    identical-trip validation and test evaluation.
+1. the likelihood interaction claim over the matched additive parent is accepted;
+2. the interaction MRR claim is not accepted;
+3. historical baseline results are not comparable until those baselines converge on the
+   corrected cohort and identical manifests;
+4. the current candidate is not authorized for production generation or policy
+   simulation; and
+5. the next fit must address the localized extreme-size phase within the existing
+   \(\rho_0,\rho_c,\Phi\) theory and then rerun every locked gate.
 
-Only after these decisions should the next run configuration be frozen.
+No numerical averaging over contexts may replace the local tail gate, and no post-hoc
+checkpoint choice may replace a fresh end-to-end execution.
