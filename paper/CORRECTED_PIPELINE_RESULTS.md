@@ -1,13 +1,18 @@
 # Corrected end-to-end pipeline: measured results
 
-Status: **completed research fit; production certification rejected**
+Status: **historical parent fit; production certification rejected for this checkpoint**
 Date: 2026-08-31
 
-This is the canonical empirical report for the corrected Version-4 pipeline. It reports
-one fresh execution of the pipeline defined in [PIPELINE.md](PIPELINE.md), after the raw
+This is the immutable empirical report for the first corrected Version-4 parent fit. It
+reports one fresh execution of the pipeline defined in [PIPELINE.md](PIPELINE.md), after the raw
 data and preprocessing audit described in
 [PREPROCESSING_AUDIT.md](PREPROCESSING_AUDIT.md). The basket law in
 [THEORY.md](THEORY.md) was not changed.
+
+This checkpoint's rejection is retained because it motivated the identified household-size
+correction. It is not the current pipeline decision. The successor subsequently completed
+from fresh initialization and passed the declared population gates; its canonical result
+is [RANK1_PIPELINE_RESULTS.md](RANK1_PIPELINE_RESULTS.md).
 
 The execution reached every stage. Its final nonzero exit was an intentional fail-closed
 decision by the population safety gate, not a process abort and not a quadrature error.

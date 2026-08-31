@@ -1473,6 +1473,50 @@ Before policy optimization, the environment needs:
 
 A predictive basket model is not automatically a causal digital twin.
 
+### 20.1 Implemented finite-budget promotion environment
+
+The implemented first policy problem deliberately uses a smaller state than (77). A
+promotion lasts \(T=28\) days and the retailer supplies a fixed expected markdown budget
+\(B\). Its planning state is
+
+\[
+s_t=(\tau_t,B_t),
+\tag{80a}
+\]
+
+where \(\tau_t\) is the remaining duration. An action is no promotion or one
+segment-specific five-SKU bundle at a 10% or 20% discount. Candidate bundles are formed
+from training data only. For a factual SMC particle \(S^{(m)}\), an action is evaluated by
+the exact energy ratio
+
+\[
+w_m(a)\propto
+\exp\!\left(E_{p'}(S^{(m)},x)-E_p(S^{(m)},x)\right).
+\tag{80b}
+\]
+
+Thus all actions reuse common particles, producing paired counterfactual estimates. An
+action is admissible only when its minimum normalized reweighting ESS is at least 0.2 and
+its audited contexts avoid majority probability on \(N\ge60\).
+
+If \(C_a\) is expected markdown spend and \(L_a\) is the 95% lower confidence bound on
+incremental list-price basket value, the finite-horizon recursion is
+
+\[
+V_\tau(b)=
+\max_{a:\widetilde C_a\le b}
+\left\{L_a+V_{\tau-1}(b-\widetilde C_a)\right\}.
+\tag{80c}
+\]
+
+Upward cost rounding and a tightened terminal grid guarantee at least 95% planned budget
+utilization without overspending the supplied budget. The result is a conservative
+budget-allocation policy among modeled arriving trips. Because the basket law is
+conditional on a nonempty trip and represents incidence rather than units, the reward is
+not causal profit: it omits visit response, unit quantities, wholesale cost, inventory and
+competitor reactions. The mathematical contract, measured action responses and executable
+entry point are in [SEGMENT_PROMOTION_MDP.md](SEGMENT_PROMOTION_MDP.md).
+
 ---
 
 ## 21. Fair baseline comparisons

@@ -64,6 +64,9 @@ model derivation is in [`paper/THEORY.md`](paper/THEORY.md), and estimator detai
 [`paper/ESTIMATOR.md`](paper/ESTIMATOR.md).
 The completed corrected-data fit and its fail-closed production decision are reported in
 [`paper/CORRECTED_PIPELINE_RESULTS.md`](paper/CORRECTED_PIPELINE_RESULTS.md).
+The completed rank-one successor, including its locked likelihood, recommendation,
+generation and population-certification results, is reported in
+[`paper/RANK1_PIPELINE_RESULTS.md`](paper/RANK1_PIPELINE_RESULTS.md).
 The exact-enumeration interaction recovery benchmark and its real-data diagnosis are in
 [`paper/SYNTHETIC_INTERACTION_AUDIT.md`](paper/SYNTHETIC_INTERACTION_AUDIT.md).
 The conditional size failure, rank-one household reparameterization, constrained pilot,
@@ -75,22 +78,27 @@ limitations are documented in
 
 ## Current empirical status
 
-The parent corrected pipeline has completed. On locked 4,096-trip panels, the rank-5 model
-improves over its matched exact additive parent by \(0.02163\pm0.00158\) nats/basket on
-validation and \(0.02391\pm0.00165\) on test; both gains remain positive after the
-higher-level numerical audit. Total test recommendation MRR is \(0.09514\pm0.00608\), but
-the interaction-only MRR gain is not significant.
+The rank-one pipeline has completed from fresh initialization. It selected rank 5 and, on
+locked 4,096-trip panels, improves over its matched exact additive parent by
+\(0.02671\pm0.00211\) nats/basket on validation and \(0.03275\pm0.00239\) on test. The
+q8 numerical-error upper bounds are \(0.000318\) and \(0.000468\) nats respectively, so
+the positive likelihood gains are not quadrature artifacts. Locked test MRR is
+\(0.09525\pm0.00607\). The interaction-only MRR gain is positive but its 95% interval
+still crosses zero.
 
-Production certification is **rejected**: although the aggregate \(N\ge60\) rate passes,
-the high-accuracy audit finds localized contexts with majority probability on extreme
-baskets. The candidate is therefore suitable for research diagnosis, not production
-generation or retailer policy simulation. Historical baseline numbers from the old
-preprocessing are not treated as corrected-data comparisons.
+The former parent pipeline's localized extreme-basket failure is resolved: the complete
+160,007-context q6 screen and 2,048-context q7 confirmation find no context with majority
+probability on \(N\ge60\), and the calibrated population tail upper bound is
+\(0.002013\), below the allowed \(0.004250\). Every declared technical certification gate
+passes.
 
-This branch adds the audited rank-one household-size correction. Its frozen-law pilot
-removes all 12 confirmed majority-tail contexts while improving cross-fitted size
-likelihood, but those pilot numbers are not substituted for a fresh converged end-to-end
-result. The full branch pipeline must pass the same locked gates before certification.
+That pass is not a claim that the model is already a commercial digital twin. On the
+64-context-per-segment generation panel, generated baskets remain too small and
+under-dispersed (mean \(7.34\), variance \(63.83\)) relative to the selected observed
+baskets (mean \(10.03\), variance \(136.28\)). The promotion MDP is therefore restricted
+to campaign shortlisting and A/B-test design until visit probability, quantities, costs,
+inventory and causal intervention evidence are added. Historical baseline numbers from
+the old preprocessing are not treated as corrected-data comparisons.
 
 ## Requirements
 

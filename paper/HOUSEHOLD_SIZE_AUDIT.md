@@ -1,6 +1,6 @@
 # Conditional basket-size audit and rank-one household correction
 
-Status: **theory checked; constrained pilot passed; fresh converged fit not yet run**
+Status: **theory checked; fresh converged fit and population certification passed**
 
 ## 1. Question
 
@@ -228,7 +228,7 @@ There is no stochastic penalty weight, retry loop or non-convex search in Eq. (7
 The screen threshold \(0.35\) leaves room for the measured q7-minus-q6 tail envelope
 \(0.11645\), keeping the confirmed value below \(0.5\).
 
-## 8. Pilot result on the frozen candidate
+## 8. Pre-fit pilot on the frozen parent candidate
 
 Alternating trips within each household produced a two-fold cross-fit. Ridge values were
 selected only by held-out size likelihood; the optimum was \(\lambda=4800\).
@@ -256,9 +256,9 @@ For genuinely observed 60+ baskets, average model tail probability rises from \(
 to \(0.11462\). The correction therefore does not obtain safety by uniformly deleting
 the real tail.
 
-This is a frozen-law pilot, not evidence from a fresh converged rank-one model. The branch
-must still run the complete pipeline and repeat likelihood, recommendation, generation,
-counterfactual and population gates.
+This pilot was used only to decide whether the identified direction merited a fresh run.
+It was not substituted for the final result. Section 11 reports the subsequent complete
+pipeline execution.
 
 ## 9. Sampling and computational cost
 
@@ -302,4 +302,48 @@ Eq. (1):
 
 Unit tests establish the rank-one common shift, gauge-preserving projection and the
 exponential size-tilt/sampling identity. A ten-update full-catalogue integration smoke
-test completed successfully. No full converged run has been started from this branch.
+test completed successfully before the full execution.
+
+## 11. Fresh end-to-end result
+
+The branch subsequently ran the complete pipeline from `artifacts/initialization.pt`; it
+did not resume a learned parent. The exact additive stage converged at update 14,300 and
+the split-half audit selected interaction rank 5. The natural-parameter interaction solve
+passed cross-fit with mean gain \(0.024333\) nats/basket and minimum half gain
+\(0.023898\).
+
+The household block again selected \(\lambda=4800\), now within the fresh lineage. Its
+cross-fitted size-likelihood gain was
+
+\[
+0.00320684\pm0.00022071,
+\qquad
+\operatorname{LCB}_{95}=0.00277425,
+\]
+
+and the full training-panel gain was \(0.01026735\) nats/basket. Five of 1,920 household
+coordinates reached the deterministic safety cap. The complete q6 screen had model mean
+size \(7.5904\) versus observed \(7.6492\), model tail rate \(0.001660\), and no context
+with \(P(N\ge60)\ge0.5\).
+
+The independent q7 audit confirmed the safety result:
+
+| Diagnostic | Fresh rank-one result |
+|---|---:|
+| Confirmed high-risk contexts | 2,048 |
+| Contexts with \(P(N\ge60)\ge0.5\) | 0 |
+| Maximum confirmed \(P(N\ge60)\) | 0.402682 |
+| Contexts with \(E[N]\ge60\) | 0 |
+| Random-panel calibrated tail upper bound | 0.002013 |
+| Allowed population tail rate | 0.004250 |
+
+Locked q7 likelihood also improved over the exact additive parent by
+\(0.026714\pm0.002107\) nats/basket on validation and
+\(0.032750\pm0.002393\) on test. The q8 error upper bounds were only \(0.000318\) and
+\(0.000468\), so the result cannot be explained by the q7 approximation.
+
+The correction therefore resolves the specific localized tail failure without changing
+the Version-4 law or its sampler. A narrower generation panel still underpredicts the
+selected contexts' basket-size mean and variance; that remaining empirical limitation is
+documented in [RANK1_PIPELINE_RESULTS.md](RANK1_PIPELINE_RESULTS.md), rather than being
+hidden by the population certification.

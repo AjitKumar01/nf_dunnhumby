@@ -56,12 +56,13 @@ This ordering prevents a small likelihood gain from buying a pathological simula
 | End-to-end RQMC joint SGD | randomized Gaussian integral on every update | high latency, retries/aborts, and no completed convincing convergence path | reject as default |
 | Long joint Smolyak SGD from an arbitrary checkpoint | q8 large-batch score plus q9 correction and q10 audit | stable quadrature and positive likelihood gain, but poor initialization wastes updates and rare size phases remain | reject as a standalone pipeline |
 | Unconstrained post-fit scalar/context size corrections | tilt existing \(\rho_0\) or a household-common direction without a conditional-tail gate | changes are cheap, but the unconstrained versions can move extreme mass to the wrong contexts | reject |
-| Exact additive + rank score + constrained natural-parameter MCLE + identified household size block | exact parent draws fit \(C\) and a correction inside \(\rho_0\); a one-dimensional, ridge-regularized household block is then solved with a deterministic conditional-tail cap | full-catalogue rank learning, monotone block solves, cross-fit selection, no extra latent variable, and direct control of localized size phases | **experimental branch selected for full validation** |
+| Exact additive + rank score + constrained natural-parameter MCLE + identified household size block | exact parent draws fit \(C\) and a correction inside \(\rho_0\); a one-dimensional, ridge-regularized household block is then solved with a deterministic conditional-tail cap | full-catalogue rank learning, monotone block solves, cross-fit selection, no extra latent variable, and direct control of localized size phases | **selected; full validation passed** |
 
 The completed parent pipeline did not pass the full-population extreme-tail gate. The
-rank-one revision has passed a frozen-law pilot and integration tests, but has not yet
-completed a fresh converged fit. It is therefore an evidence-backed experimental pipeline,
-not a declaration that its current parameters are production-ready.
+rank-one revision subsequently completed a fresh fit from initialization and passed every
+declared likelihood, numerical and population-tail gate. This is a technical pipeline
+certification, not a causal or commercial deployment certificate; the remaining
+generation-panel and retailer-simulation limitations are stated below.
 
 ## 5. Selected pipeline
 
@@ -231,10 +232,11 @@ rank-5 fit therefore uses q6/q7/q8; the rank-relative accuracy contract is uncha
 
 ## 7. What “best” means now
 
-The selected branch is the smallest revision targeted by the failure audit: the completed
-parent already learns full-catalogue interactions, while the new coordinate addresses the
-household-local size bias without changing fixed-size composition or increasing quadrature
-rank. Its status depends on a fresh end-to-end result, not on a favorable checkpoint.
+The selected pipeline is the smallest revision targeted by the failure audit: the
+interaction block still learns full-catalogue interactions, while the identified
+household coordinate addresses local size bias without changing fixed-size composition or
+increasing quadrature rank. It is selected because a fresh end-to-end execution passed the
+predeclared gates—not because one numbered run or checkpoint happened to look favorable.
 
 ## 8. Parent corrected full-run outcome
 
@@ -271,5 +273,38 @@ is artifacts/pipeline_corrected_full.log; the exact-additive trace is
 out/v3_pipeline_additive.log.
 
 The diagnosis and frozen-law evidence motivating Stage E are reported separately in
-[HOUSEHOLD_SIZE_AUDIT.md](HOUSEHOLD_SIZE_AUDIT.md); they are not presented as a completed
-branch outcome.
+[HOUSEHOLD_SIZE_AUDIT.md](HOUSEHOLD_SIZE_AUDIT.md). This section is retained as the
+historical parent result; the successor result follows.
+
+## 9. Rank-one successor full-run outcome
+
+The selected pipeline then ran from fresh initialization on the same corrected cohort.
+It converged at additive update 14,300, selected rank 5, fitted the interaction and
+household-size blocks using training data, and evaluated the final checkpoint once on the
+locked validation/test manifests.
+
+| Gate | Measured outcome | Decision |
+|---|---|---|
+| Exact additive convergence | best fixed-panel validation LL \(-44.736334\) at update 13,100; convergence at 14,300 | pass |
+| Rank stability | rank 5 overlap \(0.516813\); ranks 6--8 below the stability threshold | rank 5 |
+| Interaction cross-fit | gain \(0.024333\); minimum half gain \(0.023898\); median ESS fraction \(0.99821\) | pass |
+| Household-size cross-fit | selected ridge 4,800; gain \(0.003207\pm0.000221\); 95% lower bound \(0.002774\) | pass |
+| Validation likelihood | child \(-43.687816\); paired gain \(0.026714\pm0.002107\) nats | pass |
+| Test likelihood | child \(-46.064895\); paired gain \(0.032750\pm0.002393\) nats | pass |
+| Numerical audit | q8 error upper bounds \(0.000318\) validation, \(0.000468\) test | pass |
+| Recommendation | MRR \(0.095246\pm0.006075\); interaction gain \(0.001165\pm0.000627\) | total pass; interaction effect inconclusive |
+| Complete-population tail | calibrated q7 upper \(0.002013 < 0.004250\) allowed | pass |
+| Local extreme-tail safety | no majority-tail context in q6 screen or q7 confirmation; confirmed maximum \(0.402682\) | pass |
+| Generator mechanics | no unavailable products or duplicates; minimum normalized SMC ESS \(0.99938\) | pass |
+| Small generation panel | generated mean/variance \(7.34/63.83\) versus observed \(10.03/136.28\) | calibration caveat |
+
+The final accepted artifact is `artifacts/candidate_rank1.pt`; the complete log is
+`artifacts/pipeline_household_rank1_full.log`. The immutable result record is
+[RANK1_PIPELINE_RESULTS.md](RANK1_PIPELINE_RESULTS.md).
+
+Passing the technical gates means the implementation is numerically usable for declared
+full-support likelihood and constrained model rollouts. It does not establish causal
+promotion effects, profit calibration, quantities, inventory transitions or visit
+response. The finite-horizon promotion environment in
+[SEGMENT_PROMOTION_MDP.md](SEGMENT_PROMOTION_MDP.md) is therefore an experiment-design
+tool, not an autonomous pricing system.
