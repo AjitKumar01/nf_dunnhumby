@@ -99,8 +99,8 @@ maps to exactly one household, store, day, and week. The old Stage-1 text claimi
 one-to-one household-day mapping was corrected: 18,469 retained household-days contain
 multiple checkout baskets.
 
-Product quantities are summed inside a checkout and clipped at 12 units. This affects 730
-basket-product rows and removes 0.211% of units, protecting against bulk/random-weight
+Product quantities are summed inside a checkout and clipped at 12 units. This affects 731
+basket-product rows and removes 0.214% of units, protecting against bulk/random-weight
 coding while retaining genuine large baskets. The largest retained basket contains 120
 distinct products; large baskets were not deleted merely because they are computationally
 difficult.
