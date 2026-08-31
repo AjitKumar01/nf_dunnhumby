@@ -15,8 +15,9 @@ demand.  The file records, per PRODUCT_ID x STORE_ID x WEEK_NO:
 
 ONE STRUCTURAL FACT decides how it is encoded.  Every row of causal_data has display != 0
 OR mailer != 0 -- measured, not assumed: 100.0% of the 6,522,942 rows on our products.
-The file records only promoted cells, so ABSENCE MEANS NOT PROMOTED and the natural
-encoding is a dense binary panel with zeros everywhere the file is silent.
+Within the file's observed week range, absence means not promoted.  The raw file has no
+coverage in weeks 1--8 or 102, so absence there is *missing*, not zero.  Stage 22 excludes
+those weeks and this stage records and verifies the coverage boundary.
 
 This stage does NOT rebuild basket_input.  Re-running 22 would renumber items, stores and
 splits and invalidate every fitted model, so the promo panel is written alongside as
@@ -46,6 +47,9 @@ def log(m):
 
 
 def main(a):
+    global IN
+    if a.indir:
+        IN = os.path.abspath(a.indir)
     meta = json.load(open(os.path.join(IN, "meta.json")))
     n_stores = int(meta["n_stores"])
     items = pd.read_parquet(os.path.join(IN, "items.parquet"))
@@ -65,17 +69,24 @@ def main(a):
         log("  WARNING: store map is incomplete; unmapped stores contribute no promo")
 
     keep = set(items.PRODUCT_ID.astype(np.int64))
-    rows, n_raw = [], 0
+    rows, n_raw, coverage_min, coverage_max = [], 0, None, None
     for ch in pd.read_csv(RAW + "causal_data.csv",
                           usecols=["PRODUCT_ID", "STORE_ID", "WEEK_NO", "display", "mailer"],
                           dtype={"PRODUCT_ID": np.int64, "STORE_ID": np.int64,
                                  "WEEK_NO": np.int16, "display": str, "mailer": str},
                           chunksize=a.chunk):
         n_raw += len(ch)
+        lo, hi = int(ch.WEEK_NO.min()), int(ch.WEEK_NO.max())
+        coverage_min = lo if coverage_min is None else min(coverage_min, lo)
+        coverage_max = hi if coverage_max is None else max(coverage_max, hi)
         rows.append(ch[ch.PRODUCT_ID.isin(keep)])
     c = pd.concat(rows, ignore_index=True)
     del rows
     log(f"causal_data: {n_raw:,} rows, {len(c):,} on our {len(keep):,} products")
+    required = meta.get("promotion_coverage_required")
+    if required != [coverage_min, coverage_max]:
+        raise SystemExit(f"basket window requires promotion weeks {required}, but raw "
+                         f"causal coverage is {[coverage_min, coverage_max]}")
 
     c["item"] = c.PRODUCT_ID.map(iid)
     c["store"] = c.STORE_ID.map(smap)
@@ -100,7 +111,9 @@ def main(a):
     np.savez_compressed(os.path.join(IN, "promo.npz"),
                         keys=g.key.to_numpy()[o].astype(np.int64),
                         disp=g.disp.to_numpy()[o].astype(np.int8),
-                        mail=g.mail.to_numpy()[o].astype(np.int8))
+                        mail=g.mail.to_numpy()[o].astype(np.int8),
+                        coverage_min_week=np.int16(coverage_min),
+                        coverage_max_week=np.int16(coverage_max))
     log(f"wrote basket_input/promo.npz: {len(g):,} (item, store, week) cells")
     log(f"  on display {100 * g.disp.mean():.1f}%, on mailer {100 * g.mail.mean():.1f}% "
         f"of recorded cells")
@@ -109,4 +122,6 @@ def main(a):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--chunk", type=int, default=4_000_000)
+    p.add_argument("--indir", default=None,
+                   help="basket_input directory (default: repository basket_input)")
     main(p.parse_args())

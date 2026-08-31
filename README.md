@@ -24,25 +24,43 @@ The selected pipeline is:
 1. deterministic data preparation and a training-only affinity partition;
 2. fresh initialization—no learned checkpoint is loaded;
 3. exact additive joint maximum likelihood using the category/cardinality dynamic
-   program, with validation-driven learning-rate decay and a convergence gate;
+   program, with validation-driven learning-rate decay, a convergence gate, and a
+   complete-support bound on the existing category coefficient;
 4. one split-half spectral pass that certifies the largest stable rank from 8 down to 4;
-5. full-population projected-Fisher fitting in the accepted interaction subspace;
-6. cross-fitted recalibration of the original total-size potential \(\rho_0\);
-7. locked complete-support likelihood, recommendation, generation, price, and
+5. one cross-fitted constrained Monte Carlo likelihood solve for the PSD interaction
+   kernel and the original total-size potential correction, using fixed exact draws from
+   the additive law;
+6. locked complete-support likelihood, recommendation, generation, price, and
    population-tail audits.
 
-This is the best current pipeline-level trade-off. End-to-end QMC training was slower and
-did not produce a completed, stable convergence path. Long joint Smolyak SGD was
-numerically stable but added latency and did not solve the rare basket-size phase. Post-fit
-scalar size tilts gave only marginal likelihood changes and worsened the extreme tail.
-The selected staged estimator gets the useful interaction direction without thousands of
-expensive quadrature-gradient updates. Certification remains fail-closed: if the model
+This is the corrected end-to-end pipeline. It never searches over \(\rho_0\)
+initializations and does not run stochastic Smolyak gradients. In the certified product
+basis it writes \(K=UCU^\top\), optimizes \(C\) directly under
+\(0\preceq C\preceq I\), and jointly solves a linear/quadratic correction inside the
+original \(\rho_0(n)\). Fixed common draws make the sampled likelihood deterministic and
+concave in these natural parameters. PSD/tail projection and Armijo backtracking make
+every accepted step monotone. Cross-fit gain and proposal effective sample size are
+checked before the independent Smolyak audit. Certification remains fail-closed: if the
+optimizer does not converge, numerical fidelity fails, or the model
 puts excessive mass on anomalously large baskets, the last stage exits nonzero and keeps
 `artifacts/candidate.pt` as a research candidate rather than calling it production-ready.
+
+The category bound is
+
+\[
+(-\rho_c)_+{m_c\choose2}\le1.5,
+\]
+
+where (m_c) is the largest supported offered count in category (c). It preserves the
+Version-4 energy exactly while preventing a broad learned affinity group from creating an
+unobserved large-basket clique phase. Narrow two-item groups retain the original
+(-1.5) coefficient range.
 
 The evidence and decision rule are in [`paper/PIPELINE.md`](paper/PIPELINE.md). The full
 model derivation is in [`paper/THEORY.md`](paper/THEORY.md), and estimator details are in
 [`paper/ESTIMATOR.md`](paper/ESTIMATOR.md).
+The exact-enumeration interaction recovery benchmark and its real-data diagnosis are in
+[`paper/SYNTHETIC_INTERACTION_AUDIT.md`](paper/SYNTHETIC_INTERACTION_AUDIT.md).
 
 ## Requirements
 
@@ -72,6 +90,19 @@ export NF_RAW_DIR="/absolute/path/to/dunnhumby_The-Complete-Journey CSV/"
 
 Derived files under `data/` and `basket_input/` are deliberately ignored by Git because
 the source-data license does not permit redistribution.
+
+The cohort is defined using training weeks 9--82 only: the top 5,455 products by training
+line frequency, followed by households with 20--300 training shopping days. Validation is
+weeks 83--90 and test is weeks 91--101. Weeks outside 9--101 are excluded because the
+promotion file does not cover them. No held-out purchase line is removed after cohort
+definition; in the absence of a stock feed, every modeled store uses the complete declared
+5,455-product chain catalogue.
+
+Every pipeline invocation runs `scripts/data/audit_preprocessing.py` before fitting. It
+checks the locked raw-file digests, independently reconstructs cohort membership and every
+basket-product outcome, verifies modal chain/store prices and promotion coverage, and
+writes `basket_input/preprocessing_manifest.json`. See
+[`paper/PREPROCESSING_AUDIT.md`](paper/PREPROCESSING_AUDIT.md).
 
 ## Check before spending compute
 
@@ -132,8 +163,7 @@ output is not statistically valid and must never be used for reporting results.
 | `out/v3_pipeline_additive.log` | exact additive optimizer log |
 | `out/v3_pipeline_additive_best.pt` | best additive parent |
 | `artifacts/interaction_basis_rank*.{npz,json}` | rank audits; rejected ranks remain auditable |
-| `artifacts/interaction.pt` | accepted projected-Fisher interaction candidate |
-| `artifacts/candidate.pt` | size-recalibrated joint-law candidate |
+| `artifacts/candidate.{pt,json}` | constrained natural-parameter candidate and its cross-fit/ESS audit |
 | `reports/likelihood_{validation,test}.json` | paired, complete-support likelihood |
 | `reports/recommendation.json` | locked exact add-one MRR, MRR@5/10/20 and Recall@5/10/20; no normalizer is used |
 | `reports/generation_counterfactual.json` | SMC validity and price response |

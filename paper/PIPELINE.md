@@ -54,9 +54,9 @@ This ordering prevents a small likelihood gain from buying a pathological simula
 | Pipeline family | Normalizer/training idea | What the evidence establishes | Decision |
 |---|---|---|---|
 | End-to-end RQMC joint SGD | randomized Gaussian integral on every update | high latency, retries/aborts, and no completed convincing convergence path | reject as default |
-| Long joint Smolyak SGD | q8 large-batch score plus q9 correction and q10 audit | stable quadrature and positive likelihood gain, but roughly 1.1 s/update and rare size phases remain | optional research refinement |
+| Long joint Smolyak SGD from an arbitrary checkpoint | q8 large-batch score plus q9 correction and q10 audit | stable quadrature and positive likelihood gain, but poor initialization wastes updates and rare size phases remain | reject as a standalone pipeline |
 | Post-fit scalar/context size corrections | tilt existing \(\rho_0\) or household-common direction | changes are cheap, but measured gains are marginal and the full-population extreme tail worsens | reject |
-| Exact additive + rank score + projected Fisher + original \(\rho_0\) solve | exact dynamic program first; deterministic Smolyak only for final interaction law | fresh completion, full-catalogue rank learning, positive likelihood direction, valid recommendation/generation path, much less expensive interaction optimization | **selected** |
+| Exact additive + rank score + constrained natural-parameter MCLE | exact parent draws define one deterministic likelihood-ratio objective in \(C\) and a correction inside the original \(\rho_0\) | full-catalogue rank learning, monotone optimization, cross-fit selection, and no quadrature inside training | **selected corrected pipeline** |
 
 No evaluated pipeline has yet passed the new full-population extreme-tail gate. Therefore
 the selected pipeline is the best **research and certification pipeline**, not a declaration
@@ -66,18 +66,34 @@ that the current fitted parameters are production-ready.
 
 ### Stage A — data and support
 
-Raw transactions are converted to trips, item/day prices, store price deviations,
-promotions, recency state, and a training-only affinity partition. Availability is
-store-specific by category and chain-wide within category. An observed training basket
-outside this support is a hard error.
+Raw transactions are converted to checkout baskets, modal item/week prices, modal store
+price deviations, promotions, recency state, and a training-only affinity partition. The
+product and household cohorts are defined using training weeks only. Because the source
+has no stock feed, likelihood support is the complete declared 5,455-product chain
+catalogue at each of the 115 modeled stores. An observed basket in *any* split outside this
+support is a hard error; outcomes are never deleted to fit the support. Promotion-missing
+weeks outside 9--101 are excluded. A raw/derived digest manifest and an independent
+outcome/price reconstruction audit must pass before initialization.
 
 ### Stage B — exact additive maximum likelihood
 
 Set \(\Phi=0\). The H--S integral disappears and the category/cardinality dynamic program
 computes \(Z(x)\) and its gradients exactly for all products and sizes 1 through 120. This
 stage fits all original non-Gram incidence parameters. It is the fast convergence phase.
-The 12,000-update setting is only a safety ceiling: validation plateaus lower the learning
+The 30,000-update setting is only a safety ceiling: validation plateaus lower the learning
 rate, and convergence is declared only after the minimum rate stops producing new bests.
+
+The original category parameter is fitted subject to the complete-support admissibility
+constraint
+
+\[
+(-\rho_c)_+{m_c\choose2}\le1.5,
+\]
+
+where (m_c) is the largest available count of category (c) on support 1 through 120.
+This prevents a broad affinity group from being extrapolated as a 120-product attractive
+clique. It changes neither the Version-4 energy nor the exact dynamic program and costs
+(O(C)) per update.
 
 ### Stage C — rank identification
 
@@ -93,7 +109,7 @@ directions. Ranks 8 down to 4 are tested on independent training halves. The lar
 whose mean squared subspace overlap is at least 0.5 is accepted. Rank is capacity; it is
 not quadrature accuracy.
 
-### Stage D — projected Fisher interaction fit
+### Stage D — constrained interaction and size MCLE
 
 In the accepted basis \(U\), write
 
@@ -101,26 +117,52 @@ In the accepted basis \(U\), write
 K=\Phi\Phi^\top=UCU^\top,\qquad C\succeq0.
 \]
 
-Only \(r(r+1)/2\) coordinates are fitted. The score and Fisher covariance are accumulated
-over the full supported training population. Ridge values are selected by swapped-half
-predicted likelihood gain, and a candidate is rejected unless both directions improve.
-This replaces thousands of expensive noisy updates with one statistically meaningful
-second-order solve.
+Let \(S_{md}\) be fixed exact draws from the fitted additive law for context \(m\),
+and let
 
-### Stage E — original size-potential recalibration
+\[
+h_{C,a,c}(S)=\operatorname{tr}\{C F_U(S)\}
+-a\frac{|S|}{10}-c\left(\frac{|S|}{10}\right)^2.
+\]
 
-Positive interactions alter basket-size moments. Holding other parameters fixed, the
-pipeline fits a low-dimensional correction inside the existing \(\rho_0(n)\):
+The sampled log-likelihood gain over the additive parent is
+
+\[
+\widehat G(C,a,c)=\frac1M\sum_{m=1}^M\left[
+h(S_m^{\rm obs})-log\left\{\frac1D\sum_{d=1}^D
+e^{h(S_{md})}\right\}\right].
+\]
+
+This is concave because a linear term minus log-sum-exp is concave. The feasible set
+
+\[
+0\preceq C\preceq \sigma_{\max}^2I,\qquad
+c\ge0,\qquad a+(n_{\max}/10)c\ge0
+\]
+
+is convex. The last two inequalities prevent the correction from creating an attractive
+large-size tail while permitting the negative linear coefficient needed to preserve the
+mean. A diagonal conditional-Fisher preconditioner removes the scale mismatch between
+size and pair statistics; projection and Armijo backtracking still decide acceptance, so
+the recorded objective is monotone.
+
+Ridge is selected by swapped context halves. Both held-out directions must improve and
+importance effective sample size must pass its declared floor. The full solve then
+recovers \(\Phi=U C^{1/2}\). This trains an interaction vector for every one of the 5,455
+products without optimizing 5,455 by \(r\) unidentified factor coordinates.
+
+Positive interactions alter basket-size moments, so the same solve fits a low-dimensional
+correction inside the existing \(\rho_0(n)\):
 
 \[
 \Delta\rho_0(n)=a n+c n^2.
 \]
 
-The solve uses 32 within-context draws because the objective contains a nonlinear log
-average. It must pass swapped-half likelihood gates. This is parameter estimation inside
-the original model, not a new factorization or theorem.
+The correction is not a new size factor or a change to the Version-4 joint law. It is a
+two-direction update of the already-defined unrestricted size potential. There is no
+initialization search: concavity supplies one global sampled optimum.
 
-### Stage F — certification
+### Stage E — certification
 
 The candidate must pass:
 

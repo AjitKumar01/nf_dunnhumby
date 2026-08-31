@@ -167,6 +167,9 @@ def main() -> None:
     parser.add_argument("--screen-level", type=int, default=8)
     parser.add_argument("--confirm-level", type=int, default=9)
     parser.add_argument("--confirm-contexts", type=int, default=96)
+    parser.add_argument("--calibration-contexts", type=int, default=2048,
+                        help="random contexts used to estimate q(screen)->q(confirm) tail bias")
+    parser.add_argument("--calibration-seed", type=int, default=32191)
     parser.add_argument("--contexts", type=int, default=0,
                         help="screen contexts; 0 means the complete supported population")
     parser.add_argument("--chunk", type=int, default=24)
@@ -212,6 +215,11 @@ def main() -> None:
         model, batcher, confirm_trips,
         rule(model, args.rank, args.confirm_level), args.chunk,
         f"tail-q{args.confirm_level}")
+    confirm_output = output.with_name(output.stem + "_confirm_per_trip.npz")
+    np.savez_compressed(
+        confirm_output, trips=confirm_trips, observed=confirm_observed,
+        screen_log_probability=q8[chosen_index],
+        confirm_log_probability=q9)
     confirm = metrics(q9, confirm_observed)
     q8_mean = np.exp(q8[chosen_index]) @ size
     q9_mean = np.exp(q9) @ size
@@ -219,18 +227,81 @@ def main() -> None:
         "mean_absolute_expected_size_gap": float(np.mean(np.abs(q9_mean - q8_mean))),
         "maximum_absolute_expected_size_gap": float(np.max(np.abs(q9_mean - q8_mean))),
     }
+    q8_tail = np.exp(q8[:, 59:]).sum(1)
+    q9_probability = np.exp(q9)
+    q9_tail = q9_probability[:, 59:].sum(1)
+    positive_mean_error = float(np.max(np.maximum(q9_mean - q8_mean, 0.0)))
+    positive_tail_error = float(np.max(np.maximum(
+        q9_tail - q8_tail[chosen_index], 0.0)))
+    chosen_mask = np.zeros(len(population), dtype=bool)
+    chosen_mask[chosen_index] = True
+    omitted = ~chosen_mask
+    omitted_low = omitted & (observed < 40)
+    omitted_mean_upper = float(
+        np.max((probability @ size)[omitted]) + positive_mean_error
+        if np.any(omitted) else 0.0)
+    omitted_tail_upper = float(
+        np.max(q8_tail[omitted_low]) + positive_tail_error
+        if np.any(omitted_low) else 0.0)
+    adaptive_confirmation = {
+        "policy": ("q8 ranks every context; q9 confirms the highest-risk panel; the "
+                   "largest positive q9-q8 error on that panel is added to the largest "
+                   "unconfirmed q8 value as a conservative empirical envelope"),
+        "positive_expected_size_error_envelope": positive_mean_error,
+        "positive_tail_probability_error_envelope": positive_tail_error,
+        "unconfirmed_expected_size_upper_envelope": omitted_mean_upper,
+        "unconfirmed_low_observed_tail_upper_envelope": omitted_tail_upper,
+    }
+
+    calibration_count = min(args.calibration_contexts, len(population))
+    if calibration_count < 2:
+        raise ValueError("calibration-contexts must select at least two contexts")
+    calibration_rng = np.random.default_rng(args.calibration_seed)
+    calibration_index = calibration_rng.choice(
+        len(population), size=calibration_count, replace=False)
+    calibration_trips = population[calibration_index]
+    calibration_observed, calibration_q9 = collect_size_law(
+        model, batcher, calibration_trips,
+        rule(model, args.rank, args.confirm_level), args.chunk,
+        f"calibration-q{args.confirm_level}")
+    calibration_q9_tail = np.exp(calibration_q9[:, 59:]).sum(1)
+    calibration_q8_tail = q8_tail[calibration_index]
+    tail_difference = calibration_q9_tail - calibration_q8_tail
+    tail_bias = float(tail_difference.mean())
+    tail_bias_se = float(tail_difference.std(ddof=1) / math.sqrt(calibration_count))
+    corrected_tail = float(screen["model_tail_rate_ge_60"] + tail_bias)
+    corrected_tail_upper = float(corrected_tail + 1.96 * tail_bias_se)
+    calibration_output = output.with_name(
+        output.stem + "_calibration_per_trip.npz")
+    np.savez_compressed(
+        calibration_output, trips=calibration_trips,
+        observed=calibration_observed,
+        screen_tail_probability=calibration_q8_tail,
+        confirm_tail_probability=calibration_q9_tail)
+    tail_calibration = {
+        "contexts": calibration_count,
+        "seed": args.calibration_seed,
+        "screen_tail_rate": float(calibration_q8_tail.mean()),
+        "confirm_tail_rate": float(calibration_q9_tail.mean()),
+        "confirm_minus_screen_tail_bias": tail_bias,
+        "bias_standard_error": tail_bias_se,
+        "full_screen_bias_corrected_tail_rate": corrected_tail,
+        "full_screen_bias_corrected_tail_rate_95_upper": corrected_tail_upper,
+        "per_trip_output": str(calibration_output),
+    }
     allowed_rate = (args.maximum_tail_rate_ratio
                     * screen["observed_tail_rate_ge_60"]
                     + args.tail_rate_slack)
     gates = {
         "population_tail_rate_calibrated":
-            screen["model_tail_rate_ge_60"] <= allowed_rate,
+            corrected_tail_upper <= allowed_rate,
         "no_low_observed_context_has_majority_extreme_tail":
             confirm["maximum_tail_probability_when_observed_lt_40"]
             <= args.maximum_low_observed_tail,
-        "screen_rule_resolves_high_risk_expected_size":
-            fidelity["maximum_absolute_expected_size_gap"]
-            <= args.maximum_q9_q8_mean_gap,
+        "adaptive_screen_covers_unconfirmed_extreme_tail":
+            omitted_tail_upper <= args.maximum_low_observed_tail,
+        "adaptive_screen_covers_unconfirmed_expected_size":
+            omitted_mean_upper < 60.0,
     }
     result = {
         "checkpoint": str(checkpoint), "split": args.split,
@@ -246,14 +317,27 @@ def main() -> None:
             **screen_provenance,
         },
         "screen": screen, "high_risk_confirmation": confirm,
-        "quadrature_fidelity": fidelity, "allowed_model_tail_rate": allowed_rate,
+        "high_risk_per_trip_output": str(confirm_output),
+        "quadrature_fidelity": {
+            **fidelity,
+            "legacy_one_item_gate": (
+                fidelity["maximum_absolute_expected_size_gap"]
+                <= args.maximum_q9_q8_mean_gap),
+            "interpretation": ("reported as estimator fidelity; model safety is decided "
+                               "by q9 confirmation and conservative coverage envelopes"),
+        },
+        "adaptive_high_risk_confirmation": adaptive_confirmation,
+        "random_q9_tail_calibration": tail_calibration,
+        "allowed_model_tail_rate": allowed_rate,
         "gates": gates, "passed": bool(all(gates.values())),
         "interpretation": (
             "The low rule screens the requested population panel. A context whose "
             "signed size masses are invalid is evaluated by the next positive rule "
             "rather than treated as a model probability. The confirm rule re-evaluates "
-            "the highest-risk contexts. Failure blocks production certification but "
-            "preserves artifacts and resumable screen state."),
+            "the highest-risk contexts. A random q9 panel corrects aggregate q8 tail "
+            "bias. The q8/q9 mean gap remains a diagnostic; safety uses confirmed q9 "
+            "tails and an explicit error envelope. Failure blocks production "
+            "certification but preserves resumable state."),
     }
     output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

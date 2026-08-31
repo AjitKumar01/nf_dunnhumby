@@ -30,6 +30,7 @@ is missing the persistence terms that version 2 measures as its largest single a
 is not comparable to one that has them.
 """
 import os
+import json
 
 import math
 
@@ -77,11 +78,20 @@ class Features:
             f"sub-commodities; median gap {float(self.sub_gap.median()):.1f} days")
 
         pr = np.load(os.path.join(BI, "promo.npz"))
+        self.promo_week_min = int(pr["coverage_min_week"])
+        self.promo_week_max = int(pr["coverage_max_week"])
+        meta = json.load(open(os.path.join(BI, "meta.json")))
+        required = meta.get("promotion_coverage_required")
+        if required != [self.promo_week_min, self.promo_week_max]:
+            raise RuntimeError(f"promotion coverage {self.promo_week_min}-"
+                               f"{self.promo_week_max} does not match basket window "
+                               f"{required}")
         o = np.argsort(pr["keys"])
         self.pk = torch.from_numpy(pr["keys"][o])
         self.pd_ = torch.from_numpy(pr["disp"][o].astype(np.float32))
         self.pm = torch.from_numpy(pr["mail"][o].astype(np.float32))
-        log(f"promotion cells: {len(self.pk):,}; "
+        log(f"promotion cells: {len(self.pk):,}, coverage weeks "
+            f"{self.promo_week_min}-{self.promo_week_max}; "
             f"display rate {float(self.pd_.mean()):.3f}, mailer {float(self.pm.mean()):.3f}")
 
     def recency(self, item, user, day):

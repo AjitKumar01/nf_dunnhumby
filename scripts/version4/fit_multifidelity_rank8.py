@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Fit a fixed-rank Gram residual with an unbiased two-level Smolyak score.
+"""Fit a fixed-rank Gram residual with an unbiased multilevel Smolyak score.
 
 For rank r, the level-(r+1) rule supplies a large-context control variate.  On a
 uniform sub-batch the level-(r+2) minus level-(r+1) normalizer gradient is added
 back.  Consequently the expected gradient is the level-(r+2) joint-likelihood
-gradient.  A still finer level-(r+3) rule is used only as a validation-time fidelity
-guard; it never supplies a training gradient.
+gradient.  Optionally, the centre rule and two telescoping corrections provide the same
+level-(r+2) target with less node-context work.  A still finer level-(r+3) rule is used
+only as a validation-time fidelity guard; it never supplies a training gradient.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import numpy as np
 import torch
 
 from audit_particle_counterfactual_generation import ROOT, load_checkpoint
+from category_safety import category_capacities, project_category_reward_
 from data import build
 from features import Features
 from fit import (Batcher, build_observed_basic_scores,
@@ -63,6 +65,18 @@ def spectral_scale_gradient(phi_gradient, basis, rank):
     return (phi_gradient[:, :rank] * basis[:, :rank]).sum(0)
 
 
+def spectral_transform_gradient(phi_gradient, basis, rank):
+    """Chain rule for ``Phi[:, :r] = basis[:, :r] @ transform``."""
+    return basis[:, :rank].T @ phi_gradient[:, :rank]
+
+
+@torch.no_grad()
+def install_spectral_transform(phi, basis, transform, rank):
+    """Reconstruct the catalogue interaction factor from r-by-r coordinates."""
+    phi.zero_()
+    phi[:, :rank].copy_(basis[:, :rank] @ transform)
+
+
 @torch.no_grad()
 def project_active_spectral_ball(phi, rank, radius):
     """Euclidean projection of active Phi onto ||Phi||_2 <= radius.
@@ -77,6 +91,15 @@ def project_active_spectral_ball(phi, rank, radius):
     if changed:
         active.copy_((left * clipped.unsqueeze(0)) @ right)
     return float(singular[0]), float(clipped[0]), changed
+
+
+def decay_learning_rates(optimizer, factor, minimum):
+    """Decay each parameter group independently without erasing LR separation."""
+    old = [float(group["lr"]) for group in optimizer.param_groups]
+    new = [max(float(minimum), value * float(factor)) for value in old]
+    for group, value in zip(optimizer.param_groups, new):
+        group["lr"] = value
+    return old, new
 
 
 def joint_values(model, ix, li, lt, lc, line_ctx):
@@ -299,6 +322,10 @@ def main():
     parser.add_argument("--iters", type=int, default=200)
     parser.add_argument("--batch", type=int, default=24)
     parser.add_argument("--correction-batch", type=int, default=4)
+    parser.add_argument(
+        "--middle-correction-batch", type=int, default=0,
+        help=("if positive, use q_r on the full batch, this many contexts for "
+              "q_(r+1)-q_r, and --correction-batch for q_(r+2)-q_(r+1)"))
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--interaction-lr", type=float, default=0.0,
                         help="Phi/spectral LR; <=0 uses --lr")
@@ -313,6 +340,9 @@ def main():
     parser.add_argument("--convergence-patience", type=int, default=12)
     parser.add_argument("--convergence-min-updates", type=int, default=500)
     parser.add_argument("--validation-min-delta", type=float, default=1e-5)
+    parser.add_argument(
+        "--require-convergence", action="store_true",
+        help="exit nonzero if the joint optimizer reaches a stop without convergence")
     parser.add_argument("--weight-decay", type=float, default=1e-6)
     parser.add_argument("--clip", type=float, default=10.0)
     parser.add_argument("--validation-trips", type=int, default=384)
@@ -325,6 +355,10 @@ def main():
                         help="certified operator-norm radius; <=0 uses initial norm")
     parser.add_argument("--spectral-scales-only", action="store_true",
                         help="hold audited spectral directions fixed; fit r amplitudes")
+    parser.add_argument(
+        "--spectral-subspace-matrix", action="store_true",
+        help=("fit an r-by-r transform inside the audited product subspace; "
+              "all catalogue rows remain active"))
     parser.add_argument("--recalibrate-basic", action="store_true",
                         help="jointly fit lam and rho_0 after inserting interactions")
     parser.add_argument("--recalibrate-lam", action="store_true")
@@ -339,6 +373,10 @@ def main():
                         help="additive checkpoint defining the rho_c trust-region centre")
     parser.add_argument("--rho-c-trust-radius", type=float, default=0.0,
                         help="L2 radius around --rho-c-anchor; <=0 disables projection")
+    parser.add_argument(
+        "--rho-c-max-category-reward", type=float, default=0.0,
+        help=("cap (-rho_c)+ choose(m_c,2) over complete support; "
+              "<=0 disables the support-aware projection"))
     parser.add_argument("--optimizer-parent", type=Path,
                         help="restore mature additive Adam moments by parameter name")
     parser.add_argument("--joint-optimizer-parent", type=Path,
@@ -358,14 +396,25 @@ def main():
                     or args.recalibrate_rho0)
     if not 0 <= args.correction_batch <= args.batch:
         raise ValueError("correction batch must lie in [0,batch]")
+    if not 0 <= args.middle_correction_batch <= args.batch:
+        raise ValueError("middle correction batch must lie in [0,batch]")
+    if args.middle_correction_batch > 0 and args.correction_batch == 0:
+        raise ValueError("three-level training requires a final correction batch")
     if args.category_size_orthogonal and not args.joint_all_incidence:
         raise ValueError("--category-size-orthogonal requires --joint-all-incidence")
     if args.category_reference_prior < 0:
         raise ValueError("--category-reference-prior must be nonnegative")
+    if args.spectral_scales_only and args.spectral_subspace_matrix:
+        raise ValueError("choose spectral scales or a subspace matrix, not both")
     if (args.rho_c_anchor is None) != (args.rho_c_trust_radius <= 0):
         raise ValueError("provide both --rho-c-anchor and a positive --rho-c-trust-radius")
     if args.rho_c_anchor is not None and not args.joint_all_incidence:
         raise ValueError("rho_c trust projection requires --joint-all-incidence")
+    if args.rho_c_max_category_reward < 0:
+        raise ValueError("--rho-c-max-category-reward must be nonnegative")
+    if args.rho_c_max_category_reward > 0 and not args.joint_all_incidence:
+        raise ValueError(
+            "category reward projection requires --joint-all-incidence")
     if args.lr_patience < 0 or not 0 < args.lr_factor < 1 or args.min_lr <= 0:
         raise ValueError("invalid convergence scheduler")
     torch.set_num_threads(args.threads)
@@ -402,15 +451,24 @@ def main():
             model.rho_0_free.requires_grad_(True)
     spectral_basis = model.phi.detach().clone()
     spectral_scale = None
+    spectral_transform = None
     if args.spectral_scales_only:
         # The eigenspace audit validates these columns, not arbitrary movement of every
         # product row.  Phi = U diag(s) retains the accepted directions and reduces the
         # residual fit from interaction_products * rank parameters to exactly rank.
         spectral_scale = torch.nn.Parameter(torch.ones(
             args.rank, dtype=model.phi.dtype, device=model.phi.device))
-    low_level, high_level, audit_level = (args.rank + 1, args.rank + 2,
-                                           args.rank + 3)
+    elif args.spectral_subspace_matrix:
+        # Phi0 has full column rank. Phi=Phi0 A spans every rank-r PSD kernel in the
+        # split-half-certified product subspace while avoiding J*r row-wise Adam states.
+        spectral_transform = torch.nn.Parameter(torch.eye(
+            args.rank, dtype=model.phi.dtype, device=model.phi.device))
+    three_level = args.middle_correction_batch > 0
+    low_level = args.rank if three_level else args.rank + 1
+    middle_level = args.rank + 1 if three_level else None
+    high_level, audit_level = args.rank + 2, args.rank + 3
     qlow = rule(model, args.rank, low_level)
+    qmiddle = rule(model, args.rank, middle_level) if three_level else None
     qhigh = rule(model, args.rank, high_level)
     qaudit = rule(model, args.rank, audit_level)
     initial_spectral_norm = float(singular[0])
@@ -428,6 +486,8 @@ def main():
         args.category_reference_prior).to(
             dtype=model.rho_0_free.dtype, device=model.rho_0_free.device)
                           if args.category_size_orthogonal else None)
+    rho_c_capacities = category_capacities(
+        data, int(data["n_cat"]), int(meta["nmax"]))
     rho_c_anchor = None
     if args.rho_c_anchor is not None:
         anchor_path = (args.rho_c_anchor if args.rho_c_anchor.is_absolute()
@@ -441,7 +501,9 @@ def main():
     observed_basic = (build_observed_basic_scores(
         data, train, int(data["n_item"]), int(meta["nmax"]))
                       if (fit_lam or fit_rho0) else None)
-    optimized = [spectral_scale] if args.spectral_scales_only else [model.phi]
+    optimized = ([spectral_scale] if args.spectral_scales_only else
+                 [spectral_transform] if args.spectral_subspace_matrix else
+                 [model.phi])
     if args.joint_all_incidence:
         optimized.extend(getattr(model, name) for name in INCIDENCE_PARAMETER_NAMES
                          if name != "phi")
@@ -475,7 +537,8 @@ def main():
         optimizer_parent_iteration, restored_optimizer_names = restore_named_adam_state(
             optimizer, model, optimizer_parent_path, ADDITIVE_PARAMETER_NAMES)
     if args.joint_optimizer_parent is not None:
-        if not args.joint_all_incidence or args.spectral_scales_only:
+        if (not args.joint_all_incidence or args.spectral_scales_only
+                or args.spectral_subspace_matrix):
             raise ValueError("--joint-optimizer-parent requires free-Phi joint fitting")
         joint_parent_path = (
             args.joint_optimizer_parent if args.joint_optimizer_parent.is_absolute()
@@ -497,6 +560,9 @@ def main():
         if bool(resumed.get("spectral_scales_only", False)) != bool(
                 args.spectral_scales_only):
             raise RuntimeError("resume checkpoint has a different interaction parameterization")
+        if bool(resumed.get("spectral_subspace_matrix", False)) != bool(
+                args.spectral_subspace_matrix):
+            raise RuntimeError("resume checkpoint has a different spectral subspace")
         resumed_lam = bool(resumed.get(
             "recalibrate_lam", resumed.get("recalibrate_basic", False)))
         resumed_rho0 = bool(resumed.get(
@@ -507,9 +573,14 @@ def main():
                 args.joint_all_incidence):
             raise RuntimeError("resume checkpoint has a different joint parameterization")
         prior = resumed["config"]
-        for key in ("batch", "correction_batch", "seed"):
+        for key in ("batch", "correction_batch", "middle_correction_batch", "seed"):
             if int(prior[key]) != int(getattr(args, key)):
                 raise RuntimeError(f"--{key} must remain {prior[key]} when resuming")
+        prior_reward = float(prior.get("rho_c_max_category_reward", 0.0))
+        if prior_reward != float(args.rho_c_max_category_reward):
+            raise RuntimeError(
+                "--rho-c-max-category-reward must remain "
+                f"{prior_reward:g} when resuming")
         model.load_state_dict(resumed["model"])
         optimizer.load_state_dict(resumed["optimizer"])
         optimizer_parent_iteration = resumed.get("optimizer_parent_iteration")
@@ -519,12 +590,17 @@ def main():
                 group["lr"] = args.resume_lr
         if spectral_scale is not None:
             spectral_scale.data.copy_(resumed["spectral_scale"])
+        if spectral_transform is not None:
+            spectral_transform.data.copy_(resumed["spectral_transform"])
         start_iteration = int(resumed["iter"])
         if args.iters <= start_iteration:
             raise RuntimeError("--iters must exceed the resumed iteration")
         # Each completed update makes these two NumPy draws and no other training RNG draw.
         for _ in range(start_iteration):
             rng.choice(len(train), size=args.batch, replace=False)
+            if args.middle_correction_batch:
+                rng.choice(args.batch, size=args.middle_correction_batch,
+                           replace=False)
             if args.correction_batch:
                 rng.choice(args.batch, size=args.correction_batch, replace=False)
     sys.stdout = Tee(sys.stdout, log_path, append=args.resume is not None)
@@ -532,7 +608,20 @@ def main():
     print(f"{prefix} initial={initial_path}", flush=True)
     print(f"{prefix} {int(active_rows.sum())}/{model.J} interaction products; "
           f"rank={args.rank}; version-4 probability law unchanged", flush=True)
-    if args.correction_batch:
+    if three_level:
+        node_work = (args.batch * len(qlow[1])
+                     + args.middle_correction_batch
+                     * (len(qmiddle[1]) + len(qlow[1]))
+                     + args.correction_batch
+                     * (len(qhigh[1]) + len(qmiddle[1])))
+        print(f"{prefix} unbiased telescoping target q{high_level}: q{low_level} "
+              f"nodes={len(qlow[1])} on B={args.batch}; "
+              f"q{middle_level}-q{low_level} nodes="
+              f"{len(qmiddle[1])}+{len(qlow[1])} on m="
+              f"{args.middle_correction_batch}; q{high_level}-q{middle_level} "
+              f"nodes={len(qhigh[1])}+{len(qmiddle[1])} on m="
+              f"{args.correction_batch}; node-context work={node_work}", flush=True)
+    elif args.correction_batch:
         print(f"{prefix} q{low_level} nodes={len(qlow[1])} on B={args.batch}; unbiased "
               f"q{high_level}-q{low_level} correction nodes="
               f"{len(qhigh[1])}+{len(qlow[1])} on m="
@@ -548,7 +637,7 @@ def main():
           f"{args.fidelity_audit_trips} trips; {fidelity_contract}; "
           f"spectral radius={spectral_max:.6f}", flush=True)
     print(f"{prefix} interaction optimization="
-          f"{'fixed spectral directions, '+str(args.rank)+' amplitudes' if args.spectral_scales_only else 'free active rows'}",
+          f"{'fixed spectral directions, '+str(args.rank)+' amplitudes' if args.spectral_scales_only else 'audited product subspace, '+str(args.rank*args.rank)+' transform coordinates' if args.spectral_subspace_matrix else 'free active rows'}",
           flush=True)
     print(f"{prefix} joint basic recalibration="
           f"lam={'on' if fit_lam else 'off'}, rho_0={'on' if fit_rho0 else 'off'}; "
@@ -563,6 +652,14 @@ def main():
     if rho_c_anchor is not None:
         print(f"{prefix} rho_c L2 trust radius={args.rho_c_trust_radius:.6f} "
               f"around {anchor_path}", flush=True)
+    if args.rho_c_max_category_reward > 0:
+        initial_category_safety = project_category_reward_(
+            model, rho_c_capacities, args.rho_c_max_category_reward,
+            optimizer=optimizer)
+        print(f"{prefix} complete-support category constraint: max attractive "
+              f"reward={args.rho_c_max_category_reward:g} nats; initial max="
+              f"{initial_category_safety['maximum_reward_after']:.6f}",
+              flush=True)
     if args.joint_all_incidence:
         print(f"{prefix} learning rates: interaction={interaction_lr:g}, "
               f"mature incidence={mature_lr:g}", flush=True)
@@ -639,9 +736,12 @@ def main():
         return {
             "format": 3,
             "estimator": ((f"rank{args.rank}_smolyak_q{high_level}_"
+                           f"telescoping_q{low_level}_q{middle_level}_score")
+                          if three_level else
+                          ((f"rank{args.rank}_smolyak_q{high_level}_"
                            "multifidelity_score") if args.correction_batch else
                           (f"rank{args.rank}_smolyak_q{low_level}_"
-                           f"certified_against_q{high_level}")),
+                           f"certified_against_q{high_level}"))),
             "iter": iteration, "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "config": {**vars(args),
@@ -649,6 +749,7 @@ def main():
             "initial": str(initial_path), "active_rank": args.rank,
             "interaction_products": int(active_rows.sum()),
             "spectral_scales_only": bool(args.spectral_scales_only),
+            "spectral_subspace_matrix": bool(args.spectral_subspace_matrix),
             "recalibrate_basic": bool(args.recalibrate_basic),
             "recalibrate_lam": fit_lam,
             "recalibrate_rho0": fit_rho0,
@@ -657,6 +758,8 @@ def main():
             "restored_optimizer_names": restored_optimizer_names,
             "spectral_scale": (spectral_scale.detach().clone()
                                if spectral_scale is not None else None),
+            "spectral_transform": (spectral_transform.detach().clone()
+                                   if spectral_transform is not None else None),
             "best_validation": best_score, "best_iteration": best_iteration,
             "scheduler": {
                 "plateau_evaluations": plateau_evaluations,
@@ -664,6 +767,8 @@ def main():
                 "consecutive_regressions": consecutive_regressions,
                 "plateau_anchor_score": plateau_anchor_score,
                 "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                "learning_rates": [float(group["lr"])
+                                   for group in optimizer.param_groups],
             },
             "evaluations": evaluations, "records": records,
         }
@@ -681,6 +786,10 @@ def main():
             with torch.no_grad():
                 model.phi.copy_(spectral_basis)
                 model.phi[:, :args.rank].mul_(spectral_scale.unsqueeze(0))
+            model.phi.grad = None
+        elif args.spectral_subspace_matrix:
+            install_spectral_transform(
+                model.phi, spectral_basis, spectral_transform, args.rank)
             model.phi.grad = None
         trips = train[rng.choice(len(train), size=args.batch, replace=False)]
         ix, ctx, line_ctx, house, li, lt, lc, _ = batcher.make(trips)
@@ -702,6 +811,28 @@ def main():
             model.rho_0_free.grad.add_(
                 batch_basic["rho_0_free"] - observed_basic["rho_0_free"])
 
+        middle_correction = torch.zeros_like(model.phi)
+        if three_level:
+            middle_select = rng.choice(
+                args.batch, size=args.middle_correction_batch, replace=False)
+            middle_trips = trips[middle_select]
+            mix, mctx, mline_ctx, mhouse, *_ = batcher.make(middle_trips)
+            model.house, model.ctx = mhouse, mctx
+            correction_parameters = [model.phi]
+            if args.joint_all_incidence:
+                correction_parameters.extend(
+                    getattr(model, name) for name in INCIDENCE_PARAMETER_NAMES
+                    if name != "phi")
+            else:
+                if fit_lam:
+                    correction_parameters.append(model.lam)
+                if fit_rho0:
+                    correction_parameters.append(model.rho_0_free)
+            _middle_logz, _base_logz, middle_corrections = (
+                add_normalizer_rule_correction(
+                    model, mix, correction_parameters, qmiddle, qlow))
+            middle_correction = middle_corrections[0]
+
         if args.correction_batch:
             select = rng.choice(args.batch, size=args.correction_batch, replace=False)
             correction_trips = trips[select]
@@ -717,8 +848,9 @@ def main():
                     correction_parameters.append(model.lam)
                 if fit_rho0:
                     correction_parameters.append(model.rho_0_free)
+            correction_low_rule = qmiddle if three_level else qlow
             logz_high, logz_low, corrections = add_normalizer_rule_correction(
-                model, cix, correction_parameters, qhigh, qlow)
+                model, cix, correction_parameters, qhigh, correction_low_rule)
             correction = corrections[0]
         else:
             logz_high = torch.zeros((), dtype=low_score.dtype)
@@ -736,6 +868,14 @@ def main():
                 parameter for parameter in optimized if parameter is not spectral_scale]
             grad_norm = float(torch.nn.utils.clip_grad_norm_(
                 clip_parameters, args.clip))
+        elif args.spectral_subspace_matrix:
+            spectral_transform.grad = spectral_transform_gradient(
+                model.phi.grad, spectral_basis, args.rank)
+            clip_parameters = [spectral_transform] + [
+                parameter for parameter in optimized
+                if parameter is not spectral_transform]
+            grad_norm = float(torch.nn.utils.clip_grad_norm_(
+                clip_parameters, args.clip))
         else:
             clip_parameters = optimized
             grad_norm = float(torch.nn.utils.clip_grad_norm_(
@@ -748,6 +888,9 @@ def main():
                 spectral_scale.clamp_(min=0.0)
                 model.phi.copy_(spectral_basis)
                 model.phi[:, :args.rank].mul_(spectral_scale.unsqueeze(0))
+            elif args.spectral_subspace_matrix:
+                install_spectral_transform(
+                    model.phi, spectral_basis, spectral_transform, args.rank)
             model.phi[~active_rows] = 0.0
             model.phi[:, args.rank:] = 0.0
             current_norm = float(torch.linalg.svdvals(
@@ -756,6 +899,13 @@ def main():
                 if spectral_scale is None:
                     _before, current_norm, _changed = project_active_spectral_ball(
                         model.phi, args.rank, spectral_max)
+                    if spectral_transform is not None:
+                        # The projection retains the current column space, so it has
+                        # exact r-by-r coordinates in the audited basis.
+                        basis_active = spectral_basis[:, :args.rank]
+                        gram = basis_active.T @ basis_active
+                        spectral_transform.copy_(torch.linalg.solve(
+                            gram, basis_active.T @ model.phi[:, :args.rank]))
                 else:
                     ratio = spectral_max / current_norm
                     model.phi[:, :args.rank].mul_(ratio)
@@ -775,6 +925,11 @@ def main():
                 if rho_c_anchor is not None:
                     rho_c_trust_norm, rho_c_projected = project_rho_c_trust_region(
                         model, rho_c_anchor, args.rho_c_trust_radius, optimizer)
+                category_safety = None
+                if args.rho_c_max_category_reward > 0:
+                    category_safety = project_category_reward_(
+                        model, rho_c_capacities,
+                        args.rho_c_max_category_reward, optimizer=optimizer)
                 if category_reference is not None:
                     # Holding the centred size coordinate fixed means
                     # delta rho_0(n) = -sum_c delta rho_c a_c(n). This makes the update
@@ -784,20 +939,31 @@ def main():
                         (model.rho_c - rho_c_before) @ category_reference)
             else:
                 rho_c_trust_norm, rho_c_projected = 0.0, False
+                category_safety = None
         if not all(bool(torch.isfinite(parameter).all()) for parameter in optimized):
             raise FloatingPointError("non-finite jointly optimized parameter")
         row = {
             "iter": iteration, "low_train_loglik": float(low_score.detach()),
             "high_minus_low_logz": float((logz_high - logz_low).detach()),
+            "middle_correction_grad_norm": float(middle_correction.norm()),
             "correction_grad_norm": float(correction.norm()),
             "grad_norm": grad_norm,
             "spectral_scale": (spectral_scale.detach().cpu().tolist()
                                if spectral_scale is not None else None),
+            "spectral_transform_norm": (
+                float(spectral_transform.detach().norm())
+                if spectral_transform is not None else float("nan")),
             "lam_sd": float(model.lam.std().detach()),
             "spectral_norm": float(torch.linalg.svdvals(
                 model.phi[:, :args.rank])[0]),
             "rho_c_trust_norm": rho_c_trust_norm,
             "rho_c_projected": rho_c_projected,
+            "maximum_category_reward": (
+                category_safety["maximum_reward_after"]
+                if category_safety is not None else float("nan")),
+            "projected_category_coefficients": (
+                category_safety["projected_coefficients"]
+                if category_safety is not None else 0),
             "seconds": time.perf_counter() - tick,
         }
         records.append(row)
@@ -805,8 +971,10 @@ def main():
             window = records[-min(args.log_every, len(records)):]
             print(f"{prefix} step {iteration:4d} q{low_level}LL="
                   f"{np.mean([x['low_train_loglik'] for x in window]):.5f} "
+                  f"mid|g|={np.mean([x['middle_correction_grad_norm'] for x in window]):.4f} "
                   f"corr|g|={np.mean([x['correction_grad_norm'] for x in window]):.4f} "
                   f"op={row['spectral_norm']:.4f} "
+                  f"cat.max={row['maximum_category_reward']:.3f} "
                   f"{np.mean([x['seconds'] for x in window]):.3f}s/it", flush=True)
         if iteration % args.eval_every == 0 or iteration == args.iters:
             current = validation(model, batcher, valid, qlow, qhigh, qaudit,
@@ -857,13 +1025,14 @@ def main():
                 print(f"{prefix} new numerical best at {iteration}", flush=True)
             if (args.lr_patience > 0
                     and plateau_evaluations >= args.lr_patience):
-                old_lr = float(optimizer.param_groups[0]["lr"])
-                new_lr = max(args.min_lr, old_lr * args.lr_factor)
-                if new_lr < old_lr:
-                    for group in optimizer.param_groups:
-                        group["lr"] = new_lr
-                    print(f"{prefix} validation plateau: lr "
-                          f"{old_lr:.3g} -> {new_lr:.3g}", flush=True)
+                old_lrs, new_lrs = decay_learning_rates(
+                    optimizer, args.lr_factor, args.min_lr)
+                if new_lrs != old_lrs:
+                    transitions = ", ".join(
+                        f"{old:.3g}->{new:.3g}"
+                        for old, new in zip(old_lrs, new_lrs))
+                    print(f"{prefix} validation plateau: group LRs "
+                          f"{transitions}", flush=True)
                 plateau_evaluations = 0
             atomic_save(checkpoint_path, payload(iteration))
             history_path.write_text(json.dumps({
@@ -873,11 +1042,12 @@ def main():
                 "wall_seconds": time.perf_counter() - started}, indent=2) + "\n")
             if (args.lr_patience > 0
                     and iteration >= args.convergence_min_updates
-                    and float(optimizer.param_groups[0]["lr"]) <= args.min_lr
+                    and max(float(group["lr"])
+                            for group in optimizer.param_groups) <= args.min_lr
                     and evaluations_since_best >= args.convergence_patience):
                 converged = True
-                print(f"{prefix} convergence declared at {iteration}: lr="
-                      f"{optimizer.param_groups[0]['lr']:.3g}, "
+                print(f"{prefix} convergence declared at {iteration}: max lr="
+                      f"{max(float(group['lr']) for group in optimizer.param_groups):.3g}, "
                       f"{evaluations_since_best} evaluations since best", flush=True)
                 break
             if (args.regression_patience > 0
@@ -894,6 +1064,8 @@ def main():
     print(f"{prefix} {outcome} in "
           f"{time.perf_counter()-started:.1f}s; best={best_score:.6f} "
           f"at {best_iteration}", flush=True)
+    if args.require_convergence and not converged:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

@@ -91,7 +91,7 @@ def main() -> None:
                         help=("continue an exact-additive checkpoint with optimizer and "
                               "minibatch stream intact; downstream stages still rerun"))
     parser.add_argument("--stop-after", choices=(
-        "data", "initialize", "additive", "rank", "interaction", "size",
+        "data", "initialize", "additive", "rank", "interaction",
         "evaluation", "certification"), default="certification")
     args = parser.parse_args()
     if args.from_raw and args.resume_additive is not None:
@@ -105,9 +105,11 @@ def main() -> None:
         driver.run([PY, "-u", "scripts/data/01_build_base.py"])
         driver.run([PY, "-u", "scripts/data/22_basket_data.py"])
         driver.run([PY, "-u", "scripts/data/23_promo_data.py"])
-    driver.run(script("data.py", "--force"))
+    # Always fail closed on data integrity, including when reusing derived files.
+    driver.run([PY, "-u", "scripts/data/audit_preprocessing.py"])
     driver.run(script("build_affinity_partition.py"))
-    # Rebuild the ragged index after switching from commodity to affinity categories.
+    # Build the ragged index only after the training-only partition exists.  The
+    # partition builder reads baskets directly and cannot consume a stale model cache.
     driver.run(script("data.py", "--force"))
     if args.stop_after == "data":
         return
@@ -139,6 +141,7 @@ def main() -> None:
         "--validation-min-delta", 0.001,
         "--rkl-w", 10.0, "--elast-w", 20.0, "--elast-target", -0.121,
         "--pool-prod", 1.45, "--lam-centre", 1, "--seed", 29001,
+        "--rho-c-max-category-reward", 1.5,
         *(('--require-convergence',) if full else ()),
         *(('--resume', args.resume_additive)
           if args.resume_additive is not None else ()))
@@ -152,38 +155,29 @@ def main() -> None:
     if args.stop_after == "rank":
         return
 
-    interaction = ART / "interaction.pt"
+    candidate = ART / "candidate.pt"
     driver.run(script(
-        "fit_projected_fisher_interactions.py", "--parent", additive,
-        "--spectral", basis, "--contexts", 0 if full else 128,
-        "--draws", 2, "--batch", 128 if full else 16, "--rank", rank,
-        "--score-mass", 1.0, "--spectral-max", 1.0,
+        "fit_convex_natural_interactions.py", "--parent", additive,
+        "--spectral", basis, "--contexts", 12000 if full else 64,
+        "--draws", 64 if full else 4, "--batch", 96 if full else 8,
+        "--rank", rank, "--score-mass", 1.0, "--spectral-max", 1.0,
         "--minimum-crossfit-gain", 0.005 if full else -1.0,
         "--minimum-half-gain", 0.0 if full else -1e9,
-        "--output", interaction))
+        "--minimum-ess-fraction", 0.20 if full else 0.0,
+        "--minimum-ess-p01", 2.0 if full else 0.0,
+        "--output", candidate))
     if not driver.dry_run:
-        interaction_report = json.loads(interaction.with_suffix(".json").read_text())
+        interaction_report = json.loads(candidate.with_suffix(".json").read_text())
         eigenvalues = interaction_report["candidate_c_eigenvalues"]
         tolerance = max(eigenvalues) * 1e-10 if eigenvalues else 0.0
         fitted_rank = sum(value > max(tolerance, 1e-12) for value in eigenvalues)
         if fitted_rank < 1:
-            raise SystemExit("projected-Fisher solve produced no positive interaction rank")
+            raise SystemExit("natural-parameter solve produced no positive interaction rank")
         if fitted_rank != rank:
-            print(f"[pipeline] PSD solve reduced certified basis rank {rank} "
+            print(f"[pipeline] convex solve reduced certified basis rank {rank} "
                   f"to active rank {fitted_rank}")
         rank = fitted_rank
     if args.stop_after == "interaction":
-        return
-
-    candidate = ART / "candidate.pt"
-    driver.run(script(
-        "calibrate_projected_fisher_size.py", "--parent", additive,
-        "--child", interaction, "--contexts", 10000 if full else 64,
-        "--draws", 32 if full else 4, "--batch", 96 if full else 8,
-        "--minimum-crossfit-gain", 0.002 if full else -1.0,
-        "--minimum-half-gain", 0.0 if full else -1e9,
-        "--output", candidate))
-    if args.stop_after == "size":
         return
 
     # All claims use fixed panels and complete support; recommendation is read-only.
@@ -226,7 +220,9 @@ def main() -> None:
         "--rank", rank, "--screen-level", rank + 1,
         "--confirm-level", rank + 2,
         "--contexts", 0 if full else 128,
-        "--confirm-contexts", 96 if full else 8,
+        "--confirm-contexts", 384 if full else 8,
+        "--calibration-contexts", 2048 if full else 16,
+        "--chunk", 48 if full else 8,
         "--output", REPORT / "population_size.json"), allow_failure=not full)
     if args.dry_run:
         print("[pipeline] dry run complete; no stage was executed")

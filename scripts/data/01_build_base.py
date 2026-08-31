@@ -11,7 +11,8 @@ Paper setting                          dunnhumby analogue
 UPC                                    PRODUCT_ID
 "category" (unit of substitution)      COMMODITY_DESC
 "class"/"subclass" (held out)          SUB_COMMODITY_DESC / BRAND / MANUFACTURER
-trip = household x calendar day        household x DAY (BASKET_ID is 1:1 with it)
+trip = household x calendar day        checkout basket = BASKET_ID; a household-day can
+                                       contain several checkouts
 session = day (prices constant)        session = day (chain) or (store, day)
 price = daily median transacted price  weekly *modal* transacted unit price
 
@@ -149,7 +150,9 @@ def main():
     tx["hour"] = (tx.TRANS_TIME // 100 + (tx.TRANS_TIME % 100) / 60.0).astype(np.float32)
 
     # ------------------------------------------------------------------- trips
-    # A trip is a household-day (the paper's definition).  Verify BASKET_ID nests.
+    # This legacy summary is a household-day (the paper's definition), not the basket
+    # model's observational unit.  Stage 22 correctly uses BASKET_ID: 18,469 retained
+    # household-days contain multiple checkout baskets, so the two must not be conflated.
     trips = (
         tx.groupby(["household_key", "DAY"])
         .agg(

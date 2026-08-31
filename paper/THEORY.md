@@ -35,7 +35,8 @@ The logical flow is
 3. the H--S/ESP theorem computes the normalizer and its derivatives;
 4. observed sufficient statistics minus model-expected statistics give the likelihood
    score;
-5. all original incidence parameters are jointly optimized;
+5. all original non-Gram incidence parameters are fitted exactly in the additive block,
+   then the PSD interaction and confounded size directions are profiled together;
 6. the fitted joint law supplies recommendation, generation and counterfactuals.
 
 The statistical law, numerical estimator and optimizer are separate layers. Improving the
@@ -75,6 +76,19 @@ S\subseteq\mathcal A_x:
 Every observed basket used in likelihood evaluation must lie in its own assortment and
 support. Numerical difficulty is not a reason to remove a basket or product from
 \(\Omega_x^+\).
+
+For the current dunnhumby experiment there is no observed stock/assortment feed. A sale is
+evidence that an item was available, but a non-sale is not evidence that it was absent.
+Accordingly the declared experimental support is
+
+\[
+\mathcal A_x=\{1,\ldots,5455\}
+\]
+
+at every modeled store. This support is fixed from the training-defined catalogue and does
+not use held-out basket contents. A production deployment with a real stock feed should
+replace \(\mathcal A_x\) by the externally observed offered set; this changes the context
+support, not the energy law.
 
 The context \(x\) contains the household, prices, promotions, calendar, store and any
 declared history features. During simulation, every context variable must be externally
@@ -203,7 +217,62 @@ is positive semidefinite. Thus the Gaussian interaction represents attractive lo
 structure. The explicit category term can represent structured repulsion that a real
 Gaussian Gram matrix cannot.
 
-### 4.1 The empty basket
+### 4.1 Complete-support admissibility of the category coefficient
+
+The affinity partition is an estimation device, not a claim that every pair in a broad
+group is equally complementary. Because the category statistic is quadratic, a weakly
+negative coefficient on a broad group can otherwise create a remote large-basket phase
+that is almost invisible to ordinary minibatches.
+
+Let
+
+\[
+m_c=\max_x\min\{|A_x\cap c|,n_{\max}\},
+\tag{11a}
+\]
+
+where (A_x) is the offered assortment. The fitted parameter is restricted to
+
+\[
+\boxed{(-\rho_c)_+{m_c\choose2}\le B},
+\qquad B=1.5\text{ nats in the declared pipeline}.
+\tag{11b}
+\]
+
+Equivalently, for (m_c\ge2),
+
+\[
+\rho_c\ge -\frac{B}{{m_c\choose2}}.
+\tag{11c}
+\]
+
+This is an optimization-domain constraint on the coefficient already present in (8). It
+does not modify the energy, joint law, support, incidence formula, or normalizer theorem.
+A two-item group retains the old lower bound (-1.5), whereas a 120-item group has lower
+bound (-1.5/{120\choose2}). Strong attraction therefore remains available for a small
+specific bundle, but cannot be extrapolated as a complete clique across a broad group.
+
+**Proposition 1 (category support bound).** Under (11b), category (c)'s attractive
+contribution to every supported basket is at most (B).
+
+**Proof.** For every supported (S), (0\le n_c(S)\le m_c), and
+({n\choose2}) is nondecreasing for integer (n\ge0). If (ho_c\ge0), the term
+(-\rho_c{n_c(S)\choose2}\le0) is not attractive. If (ho_c<0), then
+
+\[
+-\rho_c{n_c(S)\choose2}
+\le(-\rho_c){m_c\choose2}
+\le B.
+\]
+
+This proves the claim. \(\square\)
+
+Projection is coordinate-wise clipping and costs (O(C)) after an optimizer update. At
+an active lower bound, outward Adam first moments are cleared so stale momentum does not
+keep proposing the same inadmissible move. No quadrature node or dynamic-program state is
+added.
+
+### 4.2 The empty basket
 
 If \(Z_0\) includes the empty basket, then \(E(\varnothing)=0\) and
 
@@ -563,9 +632,10 @@ For a small rank-one activation, the second-order likelihood coefficient is
 Positive eigenvectors of \(R\) are locally improving PSD Gram directions. Split-sample
 subspace agreement determines whether those directions are stable enough to initialize.
 
-This justifies a rank audit as an **initializer**. It does not justify freezing the other
-parameters after inserting \(\Phi\). The final model must jointly optimize \(\Phi\) and all
-declared incidence blocks.
+This justifies a rank audit after the exact additive optimum. It does not require a noisy
+factor-coordinate optimizer. The interaction block can instead be optimized in its
+identifiable natural parameter \(C\), while the size direction most strongly confounded
+with positive interactions is profiled in the same solve.
 
 ---
 
@@ -584,37 +654,98 @@ computes the normalizer exactly. Optimize all other declared incidence parameter
 This phase cheaply places utilities, category terms and the size potential in a sensible
 region. It is not the final interaction fit.
 
-### Phase C — interaction rank initialization
+### Phase C — interaction rank identification
 
 Estimate (38), test eigen-directions on split samples, choose the largest stable rank and
-initialize \(\Phi\) away from the singular point (37).
+obtain an orthonormal product basis \(U\). This phase selects coordinates; it does not
+assign the final interaction magnitude.
 
-This phase is not maximum likelihood either.
+### Phase D — deterministic natural-parameter likelihood
 
-### Phase D — one joint likelihood
-
-Jointly optimize
+Write the Gram matrix in the certified basis as
 
 \[
-\lambda,\alpha,\theta,\Phi,\rho_c,\rho_0,
-\gamma,\beta,w^{\mathrm{dsp}},w^{\mathrm{mlr}},
-\mu,\delta,\zeta,\xi
+K=UCU^\top,\qquad 0\preceq C\preceq \sigma_{\max}^2I.
 \tag{40}
 \]
 
-under (25). In the declared no-recency experiment, \(\psi\) remains off for distributional
-reasons; no other core block may be frozen merely for convenience.
+For a basket \(S\), define
 
-The mature Adam moments from Phase B should be transferred by parameter name. Resetting
-them makes the first joint update approximately a sign step in thousands of already fitted
-coordinates. Only the new \(\Phi\) block should start with fresh moments.
+\[
+F_U(S)=\frac12\left[
+\left(\sum_{j\in S}u_j\right)
+\left(\sum_{j\in S}u_j\right)^\top
+-\sum_{j\in S}u_ju_j^\top
+\right].
+\tag{40a}
+\]
+
+Then the original Version-4 interaction energy is exactly
+
+\[
+\sum_{j<k\,;\,j,k\in S}\phi_j^\top\phi_k
+=\operatorname{tr}\{C F_U(S)\}.
+\tag{40b}
+\]
+
+No interaction term has been removed or approximated in (40b). Only its coordinates have
+changed from a nonidentifiable factor to its PSD natural parameter.
+
+Let \(S_{md}\) be fixed exact draws from the converged additive parent for context \(m\).
+To profile the size response induced by positive interactions, use directions already
+contained in the original free size potential,
+
+\[
+\Delta\rho_0(n)=a(n/10)+c(n/10)^2.
+\tag{40c}
+\]
+
+Set
+
+\[
+h_{C,a,c}(S)=\operatorname{tr}\{CF_U(S)\}-\Delta\rho_0(|S|).
+\tag{40d}
+\]
+
+The common-random-number Monte Carlo likelihood ratio is
+
+\[
+\widehat G(C,a,c)
+=\frac1M\sum_{m=1}^M\left[
+h_{C,a,c}(S_m^{\mathrm{obs}})
+-\log\left\{\frac1D\sum_{d=1}^D
+\exp h_{C,a,c}(S_{md})\right\}
+\right].
+\tag{40e}
+\]
+
+Each summand is a linear function minus log-sum-exp, hence concave. With
+
+\[
+c\ge0,\qquad a+(n_{\max}/10)c\ge0,
+\tag{40f}
+\]
+
+the feasible set is convex and the size correction cannot make the maximum supported
+size more attractive than under its additive parent. Therefore projected ascent with
+backtracking has one global sampled target; it is not a search over \(\rho_0\)
+initializations. After solving, an eigendecomposition \(C=LL^\top\) gives
+\(\Phi=UL\), including an interaction embedding for every product.
+
+All non-Gram incidence parameters were already trained from scratch in Phase B. Holding
+them at their exact additive optimum while fitting (40e) is a block-coordinate/profile
+optimization choice, not a change to the joint law. The size block is updated jointly
+because it is the first-order nuisance direction created by a positive Gram kernel.
+Independent high-order Smolyak likelihood, rather than the sampled training objective,
+decides whether the resulting block update is accepted.
 
 ### Phase E — convergence and test
 
 Use a fixed representative validation panel for scheduling and checkpoint selection. Read
 the untouched test panel once after all modeling and estimator decisions are frozen.
 
-Calling Phases B--C “end-to-end training” without Phase D would be incorrect.
+Calling Phases B--C “end-to-end training” without fitting and certifying Phase D would be
+incorrect.
 
 ---
 
@@ -830,6 +961,39 @@ The defensible next-run schedule is:
 5. stop if quadrature score uncertainty is not smaller than the remaining learning signal.
 
 This is how speed is gained without changing the final target.
+
+### 13.4 Telescoping three-level score
+
+For a lower centre rule, write the target score exactly as
+
+\[
+g_{r+2}=g_r+(g_{r+1}-g_r)+(g_{r+2}-g_{r+1}).
+\tag{53a}
+\]
+
+Compute \(g_r\) on all \(B\) minibatch contexts and estimate the two differences on
+independently uniform subsets \(U_1,U_2\), of sizes \(m_1,m_2\):
+
+\[
+\widehat g_{r+2}
+=\bar g_r^{\,B}
++\overline{(g_{r+1}-g_r)}^{\,U_1}
++\overline{(g_{r+2}-g_{r+1})}^{\,U_2}.
+\tag{53b}
+\]
+
+By the same inclusion-probability argument as (52)--(53), each correction mean is
+conditionally unbiased for its full-minibatch counterpart. Linearity of expectation then
+gives
+
+\[
+\mathbb E[\widehat g_{r+2}\mid B]=\bar g_{r+2}^{\,B}.
+\tag{53c}
+\]
+
+This changes only the computation schedule. It does not change the Version-4 likelihood,
+the target quadrature rule, or any model parameter. The two correction sizes control
+variance and can be increased without changing the expectation.
 
 ---
 
@@ -1358,7 +1522,8 @@ The next approved run should not declare convergence from a flat noisy trace alo
 
 ### 22.3 Optimizer contract
 
-1. Phase D jointly unfreezes every declared incidence block.
+1. Phase B fits every declared non-Gram incidence block from scratch, and Phase D fits the
+   identifiable PSD interaction kernel together with its confounded size directions.
 2. Mature Adam moments are retained.
 3. Gauge transformations preserve item utilities exactly.
 4. Spectral projection uses singular-value clipping.

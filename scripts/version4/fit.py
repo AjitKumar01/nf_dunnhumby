@@ -848,9 +848,8 @@ def save_ckpt(path, m, opt, sched, it, rng, gen, best_vb, best_it, lz_strikes,
         # this model with a different normaliser than the one it was trained against --
         # recommend_pi.py hardcoded smolyak_grid(4, 8) regardless of the checkpoint.
         # The data partition is chosen by the V3_PARTITION / V3_AFFINITY environment
-        # variables and was recorded NOWHERE, so run97 (trained under V3_AFFINITY=1,
-        # 280 categories) could not be re-evaluated at all against the default build's
-        # 188 -- it failed on a rho_c shape mismatch with no hint as to why.  Record it.
+        # variables and was once recorded nowhere, so an affinity checkpoint could not
+        # be re-evaluated against a different partition.  Record its empirical dimension.
         data=dict(partition=os.environ.get("V3_PARTITION", ""),
                   affinity=os.environ.get("V3_AFFINITY", "0"),
                   n_cat=int(m.rho_c.shape[0]), n_item=int(m.lam.shape[0]),
@@ -1200,8 +1199,8 @@ def main(a):
     J, N, C, S = int(D["n_item"]), int(D["n_user"]), int(D["n_cat"]), int(D["n_store"])
     if a.require_version4:
         failures = []
-        if os.environ.get("V3_AFFINITY", "0") != "1" or C != 280:
-            failures.append("V3_AFFINITY=1 with the 280-category affinity partition")
+        if os.environ.get("V3_AFFINITY", "0") != "1":
+            failures.append("V3_AFFINITY=1 with the checksummed training-only partition")
         if a.factored_size:
             failures.append("the original joint size law (--factored-size 0)")
         if a.warm_start:
@@ -1223,9 +1222,10 @@ def main(a):
                 _rd = _resume_guard.get("data", {})
                 _rq = _resume_guard.get("quad", {})
                 _rm = _resume_guard.get("model", {})
-                if (_rd.get("affinity") != "1" or int(_rd.get("n_cat", -1)) != 280
+                if (_rd.get("affinity") != "1" or int(_rd.get("n_cat", -1)) != C
                         or int(_rd.get("n_item", -1)) != 5455):
-                    failures.append("a continuation from the affinity-280, 5,455-product universe")
+                    failures.append(
+                        f"a continuation from this affinity-{C}, 5,455-product universe")
                 if (int(_rd.get("nmax", -1)) < int(D["trip_nlines"].max())
                         or int(_rd.get("R", -1)) < int(_rd.get("nmax", -1))
                         or int(_rd.get("rho_pair_cap", -1)) != int(_rd.get("nmax", -2))):
@@ -1258,7 +1258,7 @@ def main(a):
             raise SystemExit("--require-version4 invariant failure: " + "; ".join(failures))
         _normalizer_name = ("certified adaptive sparse normalizer"
                             if a.sparse_init_artifact else "QMC normalizer")
-        log("version-4 experiment guard: PASS (fresh-lineage, affinity-280, original joint law, "
+        log(f"version-4 experiment guard: PASS (fresh-lineage, affinity-{C}, original joint law, "
             f"full catalogue/rank/support, {_normalizer_name}"
             + (", row-sparse Gram interaction" if a.phi_mask else "") + ")")
     F = Features(J, S, 712)
@@ -3708,7 +3708,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--label", default="run1")
     p.add_argument("--require-version4", type=int, default=0,
-                   help="fail unless the run is a fresh, affinity-280, full-catalogue, "
+                   help="fail unless the run is fresh, uses the checksummed affinity "
+                        "partition and full catalogue, "
                         "rank>=32, complete-support original version-4 QMC experiment")
     p.add_argument("--K", type=int, default=32)
     p.add_argument("--Kz", type=int, default=12)

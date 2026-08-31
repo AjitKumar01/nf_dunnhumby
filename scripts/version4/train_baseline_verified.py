@@ -1,5 +1,6 @@
 """Train one audited basket baseline with resumable, provenance-complete checkpoints."""
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -21,6 +22,22 @@ OUT = os.path.abspath(os.path.join(HERE, "..", "..", "out"))
 
 def log(message):
     print(f"[blv] {message}", flush=True)
+
+
+def acquire_training_lock(model, tag):
+    """Ensure exactly one writer exists for a model/tag checkpoint lineage."""
+    suffix = f"_{tag}" if tag else ""
+    path = os.path.join(OUT, f"baseline_verified_{model}{suffix}.lock")
+    stream = open(path, "a+")
+    try:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        raise SystemExit(f"another trainer holds {path}") from error
+    stream.seek(0)
+    stream.truncate()
+    stream.write(f"pid={os.getpid()}\n")
+    stream.flush()
+    return stream
 
 
 def hash_ids(ids):
@@ -193,6 +210,7 @@ def save(path, model, opt, sched, iteration, best, a, name, tr, va, te,
 
 
 def main(a):
+    training_lock = acquire_training_lock(a.model, a.tag)
     torch.set_flush_denormal(True)
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(a.seed)
@@ -356,7 +374,8 @@ if __name__ == "__main__":
     p.add_argument("--iters", type=int, default=60000)
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--lr", type=float, default=0.01)
-    p.add_argument("--lr-floor", type=float, default=0.02)
+    p.add_argument("--lr-floor", type=float, default=0.02,
+                   help="minimum learning rate as a fraction of --lr (not an absolute rate)")
     p.add_argument("--scheduler", choices=("milestone", "cosine", "plateau"),
                    default="milestone")
     p.add_argument("--lr-milestones", default="20000,26000")

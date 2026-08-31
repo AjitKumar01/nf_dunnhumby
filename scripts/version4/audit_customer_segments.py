@@ -460,7 +460,18 @@ def main():
     }
     output_path = args.output if args.output.is_absolute() else ROOT / args.output
     output_path.write_text(json.dumps(output, indent=2) + "\n")
-    print(json.dumps(output, indent=2))
+    summary = {
+        "checkpoint": output["checkpoint"],
+        "chosen_segments": output["chosen_segments"],
+        "assignments": output["assignments"],
+        "segments": [{
+            key: segment[key] for key in (
+                "segment", "label", "households", "validation_trips",
+                "test_trips", "mean_price_coefficient")
+        } for segment in output["segments"]],
+        "full_report": str(output_path),
+    }
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

@@ -96,7 +96,7 @@ def particle_delta(states, delta_slot, batches):
 def selected_trip_panel(data, count, nmax, seed):
     candidates = np.flatnonzero(
         (data["trip_split"] == 1) & (data["trip_nlines"] <= nmax)
-        & (data["trip_nlines"] >= 2))
+        & (data["trip_nlines"] >= 1))
     rng = np.random.default_rng(seed)
     return candidates[rng.permutation(len(candidates))[:count]]
 
@@ -125,10 +125,14 @@ def main():
     axis = torch.linspace(0.0, 1.0, args.levels)
     schedule = 1.0 - (1.0 - axis).pow(args.power)
     generator = torch.Generator().manual_seed(args.seed + 1)
+    print(f"[generation] starting SMC: trips={ix.B} particles={args.particles} "
+          f"levels={args.levels}", flush=True)
     started = time.perf_counter()
     smc = annealed_smc_logz(model, ix, schedule, particles=args.particles,
                             mutation_steps=1, generator=generator)
     smc_seconds = time.perf_counter() - started
+    print(f"[generation] SMC complete in {smc_seconds:.1f}s; computing audits",
+          flush=True)
     # Rao--Blackwellization gives nonzero, low-variance incidence estimates even for a
     # purchased SKU absent from a finite outer particle population.
     factual_stats = rao_blackwell_particle_statistics(model, ix, smc.states)
@@ -250,7 +254,19 @@ def main():
     args.output = args.output if args.output.is_absolute() else ROOT / args.output
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2) + "\n")
-    print(json.dumps(output, indent=2))
+    summary = {
+        key: output[key] for key in (
+            "checkpoint", "particles_per_trip", "smc_levels", "smc_seconds",
+            "smc_ess_min", "smc_ess_median", "factual_expected_size",
+            "observed_size_mean")
+    }
+    summary["counterfactuals"] = output["counterfactuals"]
+    summary["generation"] = {
+        key: value for key, value in output["generation"].items()
+        if key != "examples"
+    }
+    summary["full_report"] = str(args.output)
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

@@ -332,7 +332,7 @@ def main():
     model._poly_degree_native = True
     model._esp_native = True
     model._esp_log_blocked = True
-    if J != 5455 or C != 280 or model.R < model.nmax:
+    if J != 5455 or os.environ.get("V3_AFFINITY", "0") != "1" or model.R < model.nmax:
         raise SystemExit("artifact is not the complete-support version-4 model")
 
     features = Features(J, S, 712)

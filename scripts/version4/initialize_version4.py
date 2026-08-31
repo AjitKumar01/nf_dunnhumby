@@ -10,6 +10,7 @@ pipeline.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,7 @@ os.environ.setdefault("V3_AFFINITY", "1")
 import numpy as np
 import torch
 
-from data import build
+from data import BI, build
 from features import Features
 from fit import (Batcher, calibrate_size_ipf, initialize_size_potential,
                  initialize_taste_moments, popularity_logits)
@@ -57,8 +58,17 @@ def main() -> None:
     dimensions = tuple(int(data[key]) for key in
                        ("n_item", "n_user", "n_cat", "n_store"))
     products, households, categories, stores = dimensions
-    if products == 5455 and categories != 280:
-        raise RuntimeError("Version-4 requires the 280-row affinity partition")
+    affinity_path = Path(BI) / "items_affinity.parquet"
+    affinity_manifest_path = Path(BI) / "affinity_manifest.json"
+    if not affinity_manifest_path.exists():
+        raise RuntimeError("missing affinity_manifest.json; rebuild the training-only partition")
+    affinity_manifest = json.loads(affinity_manifest_path.read_text())
+    if (not affinity_manifest.get("training_only") or
+            int(affinity_manifest.get("n_items", -1)) != products or
+            int(affinity_manifest.get("n_groups", -1)) != categories or
+            affinity_manifest.get("partition_sha256") !=
+            hashlib.sha256(affinity_path.read_bytes()).hexdigest()):
+        raise RuntimeError("affinity partition does not match its training-only manifest")
     training = np.flatnonzero(data["trip_split"] == 0)
     model = RaggedModel(products, households, categories, K=args.K, Kz=args.Kz,
                         nmax=args.nmax, R=args.R, seed=args.seed, S=stores,

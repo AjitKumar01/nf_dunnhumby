@@ -92,42 +92,27 @@ def build(min_lines_per_store_cat=1, force=False):
     b = b.merge(it, on="item_id", how="left")
     log(f"{len(b):,} purchase rows, {J:,} products, {S} stores, {C} categories")
 
-    # ---- assortment ---------------------------------------------------------------------
-    # The inherited definition -- "store s carries product j if s sold j in training" -- is
-    # not merely selection on the outcome, it is MEASURABLY WRONG as a description of
-    # availability: 17.4% of test purchase lines, touching 51.7% of test trips, are on
-    # products the store never sold in training.  Those baskets would lie outside their own
-    # support and have likelihood zero.  Repairing that by adding the held-out purchases
-    # leaks test data into the support, so that is not an option either.
-    #
-    # The definition used here is training-only and strictly coarser:
-    #
-    #     j is available at store s  <=>  s sold something from category c(j) in training,
-    #                                     and j was sold anywhere in the chain in training.
-    #
-    # Store-specific at the category level, chain-level within a category.  It expands the
-    # support, which makes the likelihood harder rather than easier, so it is conservative
-    # for any model evaluated on it.
+    # ---- declared choice support ---------------------------------------------------------
+    # Transaction logs record purchases, not stock.  Inferring availability from a sale
+    # makes every non-sale ambiguous and, in the old pipeline, put 7,970 held-out purchase
+    # lines outside their own likelihood support.  Deleting those lines changed the target
+    # baskets.  With no stock feed, the only auditable support is the declared 5,455-product
+    # chain catalogue at every modelled store.  This is conservative: it adds alternatives
+    # to every denominator and never uses validation/test outcomes to define availability.
+    # A future real stock feed can replace this declared support without changing the model.
     tr = b[b.split == "train"]
     chain_items = np.sort(tr.item_id.unique())
-    sc = tr.groupby(["store_id", "cat_id"]).size().reset_index(name="n")
-    log(f"products sold anywhere in training: {len(chain_items):,} of {J:,}")
-    log(f"(store, category) blocks stocked in training: {len(sc):,} of {S * C:,}")
-    ci = it[it.item_id.isin(set(chain_items.tolist()))]
-    cat_items = {int(c): np.sort(g.item_id.unique()) for c, g in ci.groupby("cat_id")}
-    rows_s, rows_i = [], []
-    for st, c in zip(sc.store_id.to_numpy(), sc.cat_id.to_numpy()):
-        v = cat_items.get(int(c))
-        if v is None or len(v) == 0:
-            continue
-        rows_s.append(np.full(len(v), st, np.int64))
-        rows_i.append(v)
-    pair = pd.DataFrame({"store_id": np.concatenate(rows_s),
-                         "item_id": np.concatenate(rows_i)})
+    if len(chain_items) != J:
+        raise SystemExit(f"catalogue was not defined from training: {len(chain_items)}/{J} "
+                         "items have training support")
+    pair = pd.DataFrame({
+        "store_id": np.repeat(np.arange(S, dtype=np.int32), J),
+        "item_id": np.tile(np.arange(J, dtype=np.int32), S),
+    })
     log(f"assortment pairs (store, product): {len(pair):,} = "
         f"{len(pair) / (S * J):.1%} of the grid")
 
-    # ---- INTEGRITY: a check, not a repair -------------------------------------------------
+    # ---- INTEGRITY: a check, never a repair -----------------------------------------------
     carried = set(zip(pair.store_id.to_numpy().tolist(), pair.item_id.to_numpy().tolist()))
     for sp in ("train", "validation", "test"):
         d = b[b.split == sp]
@@ -138,15 +123,8 @@ def build(min_lines_per_store_cat=1, force=False):
         bt = d[bad].BASKET_ID.nunique() if bad.any() else 0
         log(f"  {sp:11s} lines outside the support: {int(bad.sum()):,} "
             f"({bad.mean():.2%}); trips touched {bt:,}/{nt:,}")
-        if sp == "train" and bad.any():
-            raise SystemExit("training basket outside its own support")
-    drop = np.fromiter(((int(s_), int(i_)) not in carried
-                        for s_, i_ in zip(b.store_id.to_numpy(), b.item_id.to_numpy())),
-                       bool, len(b))
-    if drop.any():
-        log(f"  dropping {int(drop.sum()):,} held-out lines still outside the support; "
-            f"reported, not hidden")
-        b = b[~drop]
+        if bad.any():
+            raise SystemExit(f"{sp} basket outside declared catalogue support")
 
     pair = pair.merge(it, on="item_id", how="left").sort_values(
         ["store_id", "cat_id", "item_id"], kind="mergesort")

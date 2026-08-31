@@ -23,6 +23,7 @@ import torch
 from torch.nn.functional import softplus
 
 from data import build
+from category_safety import category_capacities, project_category_reward_
 from features import Features
 from fit import Batcher
 from fit_interaction_particles import supported_trips
@@ -90,6 +91,10 @@ def parse_args():
     parser.add_argument("--pool-prod", type=float, default=0.0)
     parser.add_argument("--lam-centre", type=int, default=0)
     parser.add_argument("--lam-sd-max", type=float, default=0.0)
+    parser.add_argument(
+        "--rho-c-max-category-reward", type=float, default=0.0,
+        help=("if positive, constrain each existing category term to contribute at "
+              "most this many attractive nats anywhere on support 1..nmax"))
     return parser.parse_args()
 
 
@@ -207,6 +212,8 @@ def main():
     parameters = fitted_parameters(model)
     optimizer = torch.optim.AdamW(parameters, lr=args.lr,
                                   weight_decay=args.weight_decay)
+    rho_c_capacities = category_capacities(
+        data, int(data["n_cat"]), int(meta["nmax"]))
 
     start_iteration = 0
     resumed = None
@@ -219,6 +226,11 @@ def main():
         for key in ("batch", "seed"):
             if int(prior[key]) != int(getattr(args, key)):
                 raise RuntimeError(f"--{key} must remain {prior[key]} when resuming")
+        prior_reward = float(prior.get("rho_c_max_category_reward", 0.0))
+        if prior_reward != float(args.rho_c_max_category_reward):
+            raise RuntimeError(
+                "--rho-c-max-category-reward must remain "
+                f"{prior_reward:g} when resuming")
         model.load_state_dict(resumed["model"])
         optimizer.load_state_dict(resumed["optimizer"])
         start_iteration = int(resumed["iter"])
@@ -239,6 +251,14 @@ def main():
           f"lr={args.lr:g}", flush=True)
     print("[exact-additive] exact native category/cardinality DP; no quadrature, particles, "
           "ESS, retry, skip, or fallback", flush=True)
+    if args.rho_c_max_category_reward > 0:
+        initial_category_safety = project_category_reward_(
+            model, rho_c_capacities, args.rho_c_max_category_reward,
+            optimizer=optimizer)
+        print("[exact-additive] complete-support category constraint: "
+              f"max attractive reward={args.rho_c_max_category_reward:g} nats; "
+              f"initial max={initial_category_safety['maximum_reward_after']:.6f}",
+              flush=True)
     if resumed is not None:
         print(f"[exact-additive] resumed iteration {start_iteration} from {resume_path}; "
               f"optimizer and minibatch stream restored", flush=True)
@@ -370,6 +390,11 @@ def main():
                 if float(spread) > args.lam_sd_max:
                     model.lam.mul_(args.lam_sd_max / spread.clamp_min(1e-12))
         model.project_rho_c(-1.5)
+        category_safety = None
+        if args.rho_c_max_category_reward > 0:
+            category_safety = project_category_reward_(
+                model, rho_c_capacities, args.rho_c_max_category_reward,
+                optimizer=optimizer)
         if float(model.phi.detach().abs().max()) != 0.0:
             raise RuntimeError("exact additive stage changed the frozen Gram residual")
         row = {
@@ -380,6 +405,12 @@ def main():
             "elasticity": float(elasticity.detach()),
             "elasticity_penalty": float(elasticity_penalty.detach()),
             "lam_sd": float(model.lam.std().detach()),
+            "maximum_category_reward": (
+                category_safety["maximum_reward_after"]
+                if category_safety is not None else float("nan")),
+            "projected_category_coefficients": (
+                category_safety["projected_coefficients"]
+                if category_safety is not None else 0),
             "seconds": time.perf_counter() - tick,
         }
         records.append(row)
@@ -389,6 +420,8 @@ def main():
                   f"{np.mean([x['train_loglik'] for x in window]):.5f} "
                   f"grad={np.mean([x['grad_norm'] for x in window]):.3f} "
                   f"lam.sd={row['lam_sd']:.3f} "
+                  + (f"cat.max={row['maximum_category_reward']:.3f} "
+                     if category_safety is not None else "")
                   + (f"elast={row['elasticity']:+.3f} "
                      if math.isfinite(row['elasticity']) else "")
                   + f"{np.mean([x['seconds'] for x in window]):.3f}s/it", flush=True)
