@@ -165,7 +165,7 @@ def main() -> None:
 
     driver.run([PY, str(V4 / "setup_poly_degree_native.py"), "build_ext",
                 "--build-lib", str(ART / "native" / "lib"),
-                "--build-temp", str(ART / "native" / "temp")])
+                "--build-temp", str(ART / "native" / "temp"), "--force"])
     initialization = ART / "initialization.pt"
     if args.resume_additive is None:
         driver.run(script("initialize_version4.py", "--output", initialization,

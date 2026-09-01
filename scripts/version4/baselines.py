@@ -207,7 +207,11 @@ class Bernoulli(torch.nn.Module):
                 A = esp_bucketed(
                     odds.unsqueeze(0), d["st"], d["B"], degree,
                     row_size, item_pos, native=True)[0]
-            except ImportError:
+            except (ImportError, RuntimeError):
+                # A fresh clone has no extension before the pipeline build.  A worktree
+                # whose PyTorch environment changed can also contain an ABI-stale local
+                # binary.  The subtraction-free tree is exact, so falling back here
+                # preserves both the objective and gradients until --force rebuilds it.
                 A = esp_bucketed(
                     odds, d["st"], d["B"], degree,
                     row_size, item_pos, parallel=True)

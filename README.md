@@ -128,7 +128,8 @@ the old preprocessing are not treated as corrected-data comparisons.
 Install:
 
 ```bash
-python3 -m venv .venv
+python --version  # must report 3.11 or newer
+python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -186,7 +187,8 @@ Use the smoke profile before committing a long full fit:
 git clone --branch version4-household-size-rank1 --single-branch \
   https://github.com/AjitKumar01/nf_dunnhumby.git
 cd nf_dunnhumby
-python3 -m venv .venv
+python --version  # must report 3.11 or newer
+python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
