@@ -458,9 +458,11 @@ with storage $O(MJ+KM)$. For $J=20$, $n_{\max}=6$, $M=60{,}459$ and $K=21$, so e
 enumeration is practical. It would not be practical at 5,455 products; the production
 estimator remains necessary there.
 
-The final full driver completed all exact controls and both retailer worlds in 20.17
-seconds on the audited CPU machine. The experiment is intentionally cheap enough to
-rerun in continuous integration or a stakeholder demonstration.
+Two final full invocations completed all exact controls and both retailer worlds in
+20.17 and 25.28 seconds on the audited CPU machine. The scientific outputs were
+identical; the wall-clock difference reflects ordinary machine load. The experiment is
+intentionally cheap enough to rerun in continuous integration or a stakeholder
+demonstration.
 
 ---
 
