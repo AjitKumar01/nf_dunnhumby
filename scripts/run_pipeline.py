@@ -12,7 +12,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
 V4 = ROOT / "scripts" / "version4"
@@ -98,23 +97,26 @@ def script(name: str, *arguments: object) -> list[str]:
 
 
 def rank_selection(driver: Driver, parent: Path, contexts: int,
-                   *, smoke: bool = False) -> tuple[int, Path]:
+                   *, smoke: bool = False, threads: int = 8) -> tuple[int, Path]:
     if driver.dry_run:
         if smoke:
             output = ART / "interaction_basis_rank4.npz"
             driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
                               "--trips", contexts, "--draws", 2, "--rank", 4,
+                              "--threads", threads,
                               "--minimum-stability", -1.0, "--output", output))
             return 4, output
         output = ART / "interaction_basis_rank8.npz"
         driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
                           "--trips", contexts, "--draws", 2, "--rank", 8,
+                          "--threads", threads,
                           "--output", output))
         return 8, output
     maximum_rank = 4 if smoke else 8
     output = ART / f"interaction_basis_rank{maximum_rank}.npz"
     driver.run(script("build_spectral_phi_initialization.py", "--parent", parent,
                       "--trips", contexts, "--draws", 2, "--rank", maximum_rank,
+                      "--threads", threads,
                       "--minimum-stability", -1.0 if smoke else 0.5,
                       "--output", output), allow_failure=True)
     report_path = output.with_suffix(".json")
@@ -135,6 +137,13 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="print the complete command graph without executing it")
     parser.add_argument("--profile", choices=("full", "smoke"), default="full")
+    parser.add_argument(
+        "--device", choices=("auto", "cpu", "cuda", "mps"), default="auto",
+        help=("execution policy; auto preserves the exact CPU backend even when an "
+              "accelerator is present"))
+    parser.add_argument(
+        "--threads", type=int, default=0,
+        help="CPU intra-op threads; zero selects a hardware-aware value capped at 8")
     parser.add_argument("--resume-additive", type=Path,
                         help=("continue an exact-additive checkpoint with optimizer and "
                               "minibatch stream intact; downstream stages still rerun"))
@@ -144,10 +153,43 @@ def main() -> None:
     args = parser.parse_args()
     if args.from_raw and args.resume_additive is not None:
         parser.error("--from-raw cannot be combined with --resume-additive")
+    if args.threads < 0:
+        parser.error("--threads cannot be negative")
     preflight(from_raw=args.from_raw, stop_after=args.stop_after)
+    from runtime_capabilities import (detect_runtime, resolve_backend,
+                                      write_runtime_report)
     ART.mkdir(exist_ok=True)
     REPORT.mkdir(exist_ok=True)
     (ROOT / "out").mkdir(exist_ok=True)
+    capabilities = detect_runtime(ROOT)
+    try:
+        selected_device = resolve_backend(args.device, capabilities)
+    except RuntimeError as exc:
+        parser.error(str(exc))
+    cpu_threads = args.threads or capabilities.recommended_cpu_threads
+    if cpu_threads > capabilities.logical_cpu_count:
+        parser.error(
+            f"--threads={cpu_threads} exceeds the detected logical CPU count "
+            f"({capabilities.logical_cpu_count})")
+    if args.profile == "full":
+        if capabilities.memory_gib is not None and capabilities.memory_gib < 12:
+            parser.error(
+                f"full profile requires about 12 GiB RAM; detected "
+                f"{capabilities.memory_gib:g} GiB (use --profile smoke only for a "
+                "software-path check)")
+        if capabilities.workspace_free_gib < 5:
+            parser.error(
+                f"full profile requires at least 5 GiB free workspace disk; detected "
+                f"{capabilities.workspace_free_gib:g} GiB")
+    write_runtime_report(
+        ART / "runtime_capabilities.json", capabilities,
+        requested_device=args.device, selected_device=selected_device,
+        cpu_threads=cpu_threads)
+    accelerator = (f", CUDA devices={capabilities.cuda_device_count} (not eligible for "
+                   "the exact normalizer)" if capabilities.cuda_device_count else "")
+    print(f"[pipeline] backend={selected_device}, CPU threads={cpu_threads}, "
+          f"RAM={capabilities.memory_gib or 'unknown'} GiB{accelerator}", flush=True)
+    print(f"[pipeline] hardware report: {ART / 'runtime_capabilities.json'}", flush=True)
     driver = Driver(args.dry_run)
 
     if args.from_raw:
@@ -170,7 +212,7 @@ def main() -> None:
     if args.resume_additive is None:
         driver.run(script("initialize_version4.py", "--output", initialization,
                           "--manifest", ART / "initialization.json",
-                          "--household-size-rank1"))
+                          "--household-size-rank1", "--threads", cpu_threads))
     elif not initialization.exists() and not driver.dry_run:
         raise SystemExit("resume requested but artifacts/initialization.pt is missing")
     if args.stop_after == "initialize":
@@ -191,6 +233,7 @@ def main() -> None:
         "--validation-min-delta", 0.001,
         "--rkl-w", 10.0, "--elast-w", 20.0, "--elast-target", -0.121,
         "--pool-prod", 1.45, "--lam-centre", 1, "--seed", 29001,
+        "--threads", cpu_threads,
         "--rho-c-max-category-reward", 1.5,
         *(('--require-convergence',) if full else ()),
         *(('--resume', args.resume_additive)
@@ -201,7 +244,7 @@ def main() -> None:
         return
 
     rank, basis = rank_selection(driver, additive, 50000 if full else 128,
-                                  smoke=not full)
+                                  smoke=not full, threads=cpu_threads)
     if args.stop_after == "rank":
         return
 
@@ -211,6 +254,7 @@ def main() -> None:
         "--spectral", basis, "--contexts", 12000 if full else 64,
         "--draws", 64 if full else 4, "--batch", 96 if full else 8,
         "--rank", rank, "--score-mass", 1.0, "--spectral-max", 1.0,
+        "--threads", cpu_threads,
         "--minimum-crossfit-gain", 0.005 if full else -1.0,
         "--minimum-half-gain", 0.0 if full else -1e9,
         "--minimum-ess-fraction", 0.20 if full else 0.0,
@@ -237,6 +281,7 @@ def main() -> None:
         "--screen-tail-cap", 0.35,
         "--minimum-crossfit-gain", 0.0 if full else -1e9,
         "--chunk", 48 if full else 8,
+        "--threads", cpu_threads,
         "--output", candidate,
         "--report", ART / "candidate_rank1.json",
         "--population-output", REPORT / "population_size.json"))
@@ -249,6 +294,7 @@ def main() -> None:
         "--child", candidate, "--split", "validation", "--trips", 4096 if full else 16,
         "--rank", rank, "--target-level", rank + 2,
         "--audit-trips", 128 if full else 4,
+        "--threads", cpu_threads,
         *(('--maximum-audit-error-bound', 0.01, '--require-certified-gain')
           if full else ()),
         "--output", REPORT / "likelihood_validation.json"))
@@ -257,22 +303,26 @@ def main() -> None:
         "--child", candidate, "--split", "test", "--trips", 4096 if full else 16,
         "--rank", rank, "--target-level", rank + 2,
         "--audit-trips", 128 if full else 4,
+        "--threads", cpu_threads,
         *(('--maximum-audit-error-bound', 0.01, '--require-certified-gain')
           if full else ()),
         "--output", REPORT / "likelihood_test.json"))
     driver.run(script(
         "eval_smolyak_rank8_mrr.py", "--ckpt", candidate, "--split", "test",
         "--trips", 2000 if full else 16, "--rank", rank,
-        "--level", rank + 2, "--output", REPORT / "recommendation.json"))
+        "--level", rank + 2, "--threads", cpu_threads,
+        "--output", REPORT / "recommendation.json"))
     driver.run(script(
         "audit_particle_counterfactual_generation.py", "--ckpt", candidate,
         "--trips", 64 if full else 2, "--particles", 64 if full else 4,
+        "--threads", cpu_threads,
         "--output", REPORT / "generation_counterfactual.json"))
     driver.run(script(
         "audit_customer_segments.py", "--ckpt", candidate,
         "--candidate-segments", 3, 4, 5, 6,
         "--contexts-per-segment", 48 if full else 2,
         "--particles", 32 if full else 4,
+        "--threads", cpu_threads,
         "--output", REPORT / "customer_segments.json",
         "--assignments", ART / "customer_segments.npz"))
     driver.run(script(
@@ -293,6 +343,7 @@ def main() -> None:
         "--confirm-contexts", 2048 if full else 8,
         "--calibration-contexts", 2048 if full else 16,
         "--chunk", 48 if full else 8,
+        "--threads", cpu_threads,
         "--output", REPORT / "population_size.json"), allow_failure=not full)
     driver.run(script(
         "run_segment_pricing_mdp.py", "--checkpoint", candidate,
@@ -302,7 +353,7 @@ def main() -> None:
         "--particles", 32 if full else 4,
         "--levels", 17 if full else 5,
         "--context-chunk", 8 if full else 2,
-        "--threads", 8 if full else 4,
+        "--threads", cpu_threads,
         "--bundles-per-segment", 3 if full else 1,
         "--products-per-bundle", 5 if full else 3,
         "--horizon-days", 28 if full else 7,

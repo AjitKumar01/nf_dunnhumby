@@ -125,6 +125,27 @@ the old preprocessing are not treated as corrected-data comparisons.
 - at least 5 GB free disk in addition to the raw CSV bundle
 - dunnhumby *The Complete Journey* CSV files (not redistributed here)
 
+CUDA is not currently a valid backend for the certified likelihood fit. The dominant
+normalizer is an exact float64 elementary-symmetric/category-polynomial dynamic program
+with a custom probability adjoint, and its compiled implementation is CPU-only. The rank
+stage also uses SciPy sparse and convex CPU solvers. Merely moving the small dense utility
+blocks to a GPU would retain the CPU bottleneck, add transfers, and would not constitute a
+CUDA implementation of this estimator. Apple MPS is excluded for the same reason.
+
+The pipeline is nevertheless hardware-portable: `--device auto` detects CUDA/MPS, RAM,
+CPU count and PyTorch build information, selects the fastest *eligible* exact backend, and
+chooses a conservative CPU thread count. It writes the complete decision to
+`artifacts/runtime_capabilities.json`. Inspect a new machine without reading data or
+starting a fit:
+
+```bash
+python scripts/inspect_hardware.py
+```
+
+An explicit unsupported request such as `--device cuda` fails before training instead of
+falling back silently or swapping in a less accurate likelihood. `--threads N` overrides
+the automatic CPU choice when a machine-specific benchmark justifies it.
+
 Install:
 
 ```bash
