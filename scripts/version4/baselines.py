@@ -48,35 +48,58 @@ class Batches:
     def __init__(self, D, F):
         self.D, self.F = D, F
         self.C = int(D["n_cat"])
+        self.J, self.S = int(D["n_item"]), int(D["n_store"])
         self.ptr, self.items, self.lptr = (D["store_cat_ptr"], D["store_items"],
                                            D["line_ptr"])
+        # Store assortments and their category rows do not change between minibatches.
+        # Building them through C Python loops per trip and reconstructing a
+        # (trip,item)->slot dictionary over ~130k slots consumed about half of every
+        # baseline update.  Cache the local layouts and a compact inverse position map;
+        # observed features remain gathered afresh for each trip/context.
+        self.store_layout = []
+        self.store_position = np.full((self.S, self.J), -1, dtype=np.int32)
+        for store in range(self.S):
+            item_parts, row_parts, categories = [], [], []
+            row = 0
+            base = store * self.C
+            for category in range(self.C):
+                lo, hi = int(self.ptr[base + category]), int(self.ptr[base + category + 1])
+                if hi <= lo:
+                    continue
+                values = np.asarray(self.items[lo:hi], dtype=np.int64)
+                item_parts.append(values)
+                row_parts.append(np.full(len(values), row, dtype=np.int64))
+                categories.append(category)
+                row += 1
+            items = np.concatenate(item_parts)
+            row_of = np.concatenate(row_parts)
+            row_cat = np.asarray(categories, dtype=np.int64)
+            self.store_position[store, items] = np.arange(len(items), dtype=np.int32)
+            self.store_layout.append((items, row_of, row_cat))
 
     def make(self, trips):
         D, C = self.D, self.C
         it_l, slot_trip, row_of, row_trip, row_cat = [], [], [], [], []
         nrow = 0
+        stores = np.asarray(D["trip_store"][trips], dtype=np.int64)
         for bi, t in enumerate(trips):
-            s = int(D["trip_store"][t]) * C
-            for c in range(C):
-                lo, hi = int(self.ptr[s + c]), int(self.ptr[s + c + 1])
-                if hi <= lo:
-                    continue
-                it_l.append(self.items[lo:hi])
-                slot_trip.append(np.full(hi - lo, bi, np.int64))
-                row_of.append(np.full(hi - lo, nrow, np.int64))
-                row_trip.append(bi)
-                row_cat.append(c)
-                nrow += 1
+            items, local_rows, categories = self.store_layout[stores[bi]]
+            it_l.append(items)
+            slot_trip.append(np.full(len(items), bi, dtype=np.int64))
+            row_of.append(local_rows + nrow)
+            row_trip.append(np.full(len(categories), bi, dtype=np.int64))
+            row_cat.append(categories)
+            nrow += len(categories)
         item = torch.as_tensor(np.concatenate(it_l), dtype=torch.long)
         st = torch.as_tensor(np.concatenate(slot_trip), dtype=torch.long)
         # Keep the category rows as part of the batch contract.  The main model caps the
         # number of products selected from one category, so a baseline that discards this
         # structure is normalized on a different support even when it sees the same items.
-        rix = RaggedIndex(item, np.concatenate(row_of), np.asarray(row_trip, np.int64),
-                          np.asarray(row_cat, np.int64), len(trips))
+        rix = RaggedIndex(item, np.concatenate(row_of), np.concatenate(row_trip),
+                          np.concatenate(row_cat), len(trips))
         if not torch.equal(rix.item, item) or not torch.equal(rix.item_trip, st):
             raise RuntimeError("baseline assortment and ragged category index disagree")
-        store = torch.as_tensor(D["trip_store"][trips], dtype=torch.long)
+        store = torch.as_tensor(stores, dtype=torch.long)
         day = torch.as_tensor(D["trip_day"][trips], dtype=torch.long)
         week = torch.as_tensor(D["trip_week"][trips], dtype=torch.long)
         house = torch.as_tensor(D["trip_user"][trips], dtype=torch.long)
@@ -88,19 +111,20 @@ class Batches:
             a, b = int(self.lptr[t]), int(self.lptr[t + 1])
             li.append(D["line_item"][a:b])
             lt.append(np.full(b - a, bi, np.int64))
-        LI = torch.as_tensor(np.concatenate(li), dtype=torch.long)
-        LT = torch.as_tensor(np.concatenate(lt), dtype=torch.long)
+        li_array, lt_array = np.concatenate(li), np.concatenate(lt)
+        LI = torch.as_tensor(li_array, dtype=torch.long)
+        LT = torch.as_tensor(lt_array, dtype=torch.long)
         dl2, ds2, ml2 = self.F.gather(LI, store[LT], day[LT], week[LT])
         lctx = dict(dlp=dl2.double(), disp=ds2.double(), mail=ml2.double(),
                     week=(week[LT] - 1) % 52, store=store[LT])
         # position of each purchased line within its trip's slot block
-        off = torch.cat([torch.zeros(1, dtype=torch.long),
-                         torch.cumsum(torch.bincount(st, minlength=len(trips)), 0)])
-        pos = {}
-        for k in range(len(item)):
-            pos[(int(st[k]), int(item[k]))] = k
-        lslot = torch.as_tensor([pos[(int(a), int(b))] for a, b in zip(LT, LI)],
-                                dtype=torch.long)
+        sizes = np.asarray([len(self.store_layout[s][0]) for s in stores], dtype=np.int64)
+        off_array = np.concatenate([np.zeros(1, dtype=np.int64), np.cumsum(sizes)])
+        off = torch.as_tensor(off_array, dtype=torch.long)
+        local_slot = self.store_position[stores[lt_array], li_array].astype(np.int64)
+        if bool(np.any(local_slot < 0)):
+            raise RuntimeError("purchased baseline item is absent from its assortment")
+        lslot = torch.as_tensor(off_array[lt_array] + local_slot, dtype=torch.long)
         return dict(item=item, st=st, ctx=ctx, house=house, B=len(trips),
                     li=LI, lt=LT, lctx=lctx, lslot=lslot, off=off, rix=rix)
 
@@ -169,17 +193,35 @@ class Bernoulli(torch.nn.Module):
         # The degree-r coefficient then receives exp(r*M) on the log scale.
         M = seg_max(b_slot, d["st"], d["B"])
         odds = torch.exp(b_slot - M[d["st"]])
-        ix = d["rix"]
         degree = int(nmax)
-        per_row_degree = min(int(category_cap), degree)
-        e = esp_bucketed(odds, ix.row_of, ix.n_rows, per_row_degree,
-                         ix.row_size, ix.item_pos, parallel=True)
-        G = torch.zeros(d["B"] * ix.Cpad, degree + 1, dtype=b_slot.dtype,
-                        device=b_slot.device)
-        G[:, 0] = 1.0
-        G[:, :per_row_degree + 1] = G[:, :per_row_degree + 1].index_copy(
-            0, ix.flat_slot, e)
-        A = poly_tree(G.view(d["B"], ix.Cpad, degree + 1), degree)
+        if category_cap is None or int(category_cap) >= degree:
+            # With |S|<=degree, a per-category cap >=degree is algebraically redundant:
+            # prod_c prod_{j in c}(1+w_j x) = prod_j(1+w_j x).  Evaluate that product
+            # once over each trip's catalogue.  The native tree has the same
+            # subtraction-free forward polynomial and exact reverse-mode derivative as
+            # the category-factorized path, but avoids a second polynomial tree.
+            row_size = d["off"][1:] - d["off"][:-1]
+            item_pos = (torch.arange(len(d["item"]), device=b_slot.device)
+                        - d["off"][d["st"]])
+            try:
+                A = esp_bucketed(
+                    odds.unsqueeze(0), d["st"], d["B"], degree,
+                    row_size, item_pos, native=True)[0]
+            except ImportError:
+                A = esp_bucketed(
+                    odds, d["st"], d["B"], degree,
+                    row_size, item_pos, parallel=True)
+        else:
+            ix = d["rix"]
+            per_row_degree = min(int(category_cap), degree)
+            e = esp_bucketed(odds, ix.row_of, ix.n_rows, per_row_degree,
+                             ix.row_size, ix.item_pos, parallel=True)
+            G = torch.zeros(d["B"] * ix.Cpad, degree + 1, dtype=b_slot.dtype,
+                            device=b_slot.device)
+            G[:, 0] = 1.0
+            G[:, :per_row_degree + 1] = G[:, :per_row_degree + 1].index_copy(
+                0, ix.flat_slot, e)
+            A = poly_tree(G.view(d["B"], ix.Cpad, degree + 1), degree)
         degrees = torch.arange(degree + 1, dtype=b_slot.dtype, device=b_slot.device)
         log_terms = torch.log(A.clamp_min(1e-300)) + M[:, None] * degrees[None, :]
         log_norm = torch.logsumexp(log_terms[:, 1:], dim=1)

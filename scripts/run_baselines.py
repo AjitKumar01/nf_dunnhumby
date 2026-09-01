@@ -14,6 +14,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 V4 = ROOT / "scripts" / "version4"
 PY = sys.executable
+ALL_MODELS = ("multinomial", "bernoulli", "dpp", "ndpp", "shopper")
+
+
+def parse_models(raw: str):
+    models = tuple(part.strip().lower() for part in raw.split(",") if part.strip())
+    if not models:
+        raise argparse.ArgumentTypeError("--models must select at least one baseline")
+    unknown = sorted(set(models) - set(ALL_MODELS))
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown baseline(s): {', '.join(unknown)}")
+    if len(models) != len(set(models)):
+        raise argparse.ArgumentTypeError("--models contains a duplicate baseline")
+    return models
 
 
 def acquire_single_runner_lock(profile: str):
@@ -56,6 +70,10 @@ def main():
                         help="fail-closed safety ceiling for the converged profile")
     parser.add_argument("--shopper-orders", type=int, default=8192,
                         help="ordering samples used for final SHOPPER set likelihood")
+    parser.add_argument(
+        "--models", type=parse_models, default=ALL_MODELS,
+        help=("comma-separated baseline subset; for the external comparison use "
+              "bernoulli,dpp,ndpp"))
     args = parser.parse_args()
     runner_lock = None if args.dry_run else acquire_single_runner_lock(args.profile)
     environment = os.environ.copy()
@@ -70,7 +88,7 @@ def main():
            ("pipeline_converged" if converged else "pipeline1000"))
     eval_every = 1 if smoke else (500 if converged else 200)
     if not args.skip_training:
-        for model in ("multinomial", "bernoulli", "dpp", "ndpp", "shopper"):
+        for model in args.models:
             command = [
                 PY, "-u", V4 / "train_baseline_verified.py",
                 "--model", model, "--tag", tag,
@@ -81,6 +99,11 @@ def main():
                 "--eval-chunk", 2 if smoke else 8,
                 "--eval-orders", 8 if smoke else 512,
             ]
+            # These rank/cardinality kernels are small enough that the runtime default of
+            # 15 threads spends more time at OpenMP barriers than doing arithmetic.
+            # A frozen benchmark on the reference 15-core CPU selects four for all three
+            # exact-normalizer families without changing their arithmetic.
+            command.extend(["--threads", 4])
             if converged:
                 command.extend([
                     "--scheduler", "plateau", "--require-convergence",
@@ -109,9 +132,13 @@ def main():
         "--iteration", iterations, "--baseline-tag", tag,
         "--shopper-orders", 8 if smoke else args.shopper_orders,
         "--maximum-trips", 16 if smoke else 0,
-        "--output", ("reports/baselines_converged" if converged else
-                     ("reports/baselines_smoke" if smoke else "reports/baselines")),
+        "--models", ",".join(args.models),
     ]
+    output = ("reports/baselines_converged" if converged else
+              ("reports/baselines_smoke" if smoke else "reports/baselines"))
+    if args.models != ALL_MODELS:
+        output += "_" + "_".join(args.models)
+    audit.extend(["--output", output])
     if converged or smoke:
         # Converged models stop at different terminal updates. Score only the
         # validation-selected checkpoints carrying a passed certificate.

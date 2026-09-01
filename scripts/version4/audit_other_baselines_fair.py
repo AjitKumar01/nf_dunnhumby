@@ -17,6 +17,20 @@ from features import Features
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.abspath(os.path.join(HERE, "..", "..", "out"))
+ALL_MODELS = ("multinomial", "bernoulli", "dpp", "ndpp", "shopper")
+
+
+def parse_models(raw):
+    models = tuple(part.strip().lower() for part in raw.split(",") if part.strip())
+    if not models:
+        raise argparse.ArgumentTypeError("--models must select at least one baseline")
+    unknown = sorted(set(models) - set(ALL_MODELS))
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown baseline(s): {', '.join(unknown)}")
+    if len(models) != len(set(models)):
+        raise argparse.ArgumentTypeError("--models contains a duplicate baseline")
+    return models
 
 
 def sha256(path):
@@ -205,7 +219,7 @@ def main(args):
                   convergence_required=bool(args.require_converged),
                   full=summarize(full_joint, lines), baselines={})
     arrays = dict(trips=trips, lines=lines, full=full_joint)
-    for name in ("multinomial", "bernoulli", "dpp", "ndpp", "shopper"):
+    for name in args.models:
         suffix = f"_{args.baseline_tag}" if args.baseline_tag else ""
         best_suffix = "_best" if args.checkpoint_kind == "best" else ""
         path = os.path.join(
@@ -266,6 +280,8 @@ if __name__ == "__main__":
     p.add_argument("--checkpoint-kind", choices=("last", "best"), default="last")
     p.add_argument("--require-converged", action="store_true")
     p.add_argument("--baseline-tag", default="")
+    p.add_argument("--models", type=parse_models, default=ALL_MODELS,
+                   help="comma-separated subset of verified baselines to score")
     p.add_argument("--shopper-orders", type=int, default=8192)
     p.add_argument("--seed", type=int, default=20260821)
     p.add_argument("--chunk", type=int, default=8)

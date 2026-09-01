@@ -1,4 +1,5 @@
 """Small-support exact checks for the headline basket baselines."""
+import argparse
 import math
 import unittest
 
@@ -8,6 +9,7 @@ from baselines import Bernoulli
 from baselines2 import Multinomial, NDPP, Shopper
 from ragged import RaggedIndex
 from train_baseline_verified import PlateauConvergence
+from audit_other_baselines_fair import parse_models
 
 
 torch.set_default_dtype(torch.float64)
@@ -63,6 +65,24 @@ class BaselineExactness(unittest.TestCase):
         want = m.idx.lam[0] + m.idx.lam[3] - torch.log(normalizer)
         self.assertAlmostEqual(float(m.loglik(d, nmax=2, category_cap=2).detach()),
                                float(want.detach()), places=12)
+
+    def test_bernoulli_direct_and_category_factorizations_have_same_gradient(self):
+        # One product per category makes category_cap=1 redundant.  The cap-1 call takes
+        # the legacy category-factorized path while cap=2 takes the direct catalogue ESP.
+        # Equality of values and every parameter derivative establishes that the fast
+        # path is an algebraic refactor, not a baseline approximation.
+        m = Bernoulli(4, 1, 1, K=2, Kp=1)
+        zero_index(m.idx)
+        with torch.no_grad():
+            m.idx.lam.copy_(torch.tensor([0.3, -0.7, 1.1, -0.2]))
+        d = batch([0, 1, 2, 3], [0, 1, 2, 3], [0, 3])
+        category = m.loglik(d, nmax=2, category_cap=1)
+        category_grad = torch.autograd.grad(category, tuple(m.parameters()))
+        direct = m.loglik(d, nmax=2, category_cap=2)
+        direct_grad = torch.autograd.grad(direct, tuple(m.parameters()))
+        self.assertTrue(torch.allclose(category, direct, atol=1e-12, rtol=1e-12))
+        for expected, got in zip(category_grad, direct_grad):
+            self.assertTrue(torch.allclose(expected, got, atol=1e-11, rtol=1e-11))
 
     def test_multinomial_respects_category_cap(self):
         # Three products in category 0 and one in category 1.  At n=2 and cap=1 exactly
@@ -141,6 +161,18 @@ class BaselineConvergenceRule(unittest.TestCase):
         rule.observe(-9.98, 30, 10, 1000, 1e-4, 1e-4)
         self.assertEqual(rule.floor_evals_since_improvement, 0)
         self.assertFalse(rule.converged)
+
+
+class BaselineSelection(unittest.TestCase):
+    def test_external_subset_is_explicit_and_ordered(self):
+        self.assertEqual(parse_models("bernoulli,dpp,ndpp"),
+                         ("bernoulli", "dpp", "ndpp"))
+
+    def test_rejects_unknown_and_duplicate_models(self):
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_models("bernoulli,unknown")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_models("dpp,dpp")
 
 
 if __name__ == "__main__":

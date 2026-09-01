@@ -75,7 +75,79 @@ The interaction-minus-additive MRR gain is
 \([-0.000064,0.002394]\). Total recommendation quality is useful, but this panel does not
 establish a separate interaction-only recommendation improvement at the 5% level.
 
-## 5. Population basket-size certification
+## 5. Interaction-embedding audit
+
+Embedding axes are rotationally unidentified, so the audit uses row norms and the Gram
+matrix, not coordinate labels. For products \(i,j\), the identified pair-specific
+coefficient is
+
+\[
+\gamma_{ij}=\phi_i^\top\phi_j-
+\rho_{c(i)}\mathbf 1\{c(i)=c(j)\}.
+\]
+
+For a background basket \(T\), the full energy cross-difference additionally contains
+the common term \(-\Delta^2\rho_0(|T|)\). Thus \(\gamma_{ij}\) orders product-specific
+interaction effects at a fixed background size but is not, by itself, the complete energy
+contrast.
+
+The fitted checkpoint has active rank 5. All five singular values equal the declared
+spectral cap of 1. The rank-5 split-half mean squared subspace overlap is \(0.516813\),
+and 919/1,963/3,954 products carry 90%/95%/99% of squared row-norm mass. Saturation and
+moderate subspace stability make the ranking useful for candidate retrieval, but prevent
+strong claims about precise product-level magnitudes.
+
+The 2,000 strongest cross-affinity pairs were selected from training parameters only and
+then evaluated on all 23,340 test baskets. The null randomly allocates the observed
+product-incidence stubs to the observed basket-size sequence, preserving marginal product
+frequency and basket-size moments. Controls were matched using training product frequency
+and household support.
+
+| Panel | Observed co-incidences | Null expectation | Aggregate lift | Fraction above null |
+|---|---:|---:|---:|---:|
+| Top Gram pairs | 29,911 | 24,589.4 | 1.216 | 67.95% |
+| Matched controls | 27,908 | 27,959.4 | 0.998 | 32.70% |
+
+Examples with both a positive model coefficient and held-out excess co-incidence include
+bananas--strawberries, cucumbers--green peppers, cucumbers--broccoli, premium hot-dog
+meat--hot-dog buns, and premium meat--hamburger buns. Individual counterexamples also
+exist: the high-scoring extra-large-eggs--bananas pair has 280 observed co-incidences
+versus 317.6 expected. The conclusion is therefore aggregate: the Gram kernel contains
+held-out complement information, but every SKU pair is a hypothesis requiring support,
+replication and ultimately randomized promotion validation. The configuration lift is
+not the model odds multiplier and neither quantity is a causal effect.
+
+The reproducible entry point is
+`scripts/version4/audit_interaction_embeddings.py`; it writes the detailed JSON and
+Markdown reports under `reports/`.
+
+## 6. Converged external baselines
+
+Bernoulli, DPP and NDPP were trained from independent fresh lineages with validation-only
+checkpoint selection. Each had to complete at least two epoch-equivalents, reach its
+learning-rate floor, and satisfy the stale-validation convergence certificate before test
+scoring. The selected checkpoints were evaluated on the identical locked 4,096-trip test
+manifest used by the main model.
+
+| Model | Selected update | Terminal convergence update | Test nats/basket | Main-model paired gain |
+|---|---:|---:|---:|---:|
+| Version-4 rank-one | -- | -- | \(-46.064895\) | -- |
+| Bernoulli | 52,000 | 56,000 | \(-48.316937\) | \(2.252042\pm0.098425\) |
+| DPP | 46,500 | 52,000 | \(-48.326534\) | \(2.261638\pm0.097672\) |
+| NDPP | 55,500 | 59,000 | \(-47.877142\) | \(1.812247\pm0.092393\) |
+
+The main model is statistically better than all three; NDPP is the strongest external
+baseline. The Bernoulli model receives the same observed contextual utility families but
+fits fresh weights and contains no interaction, category, total-size or household-size
+block from the Version-4 checkpoint. DPP and NDPP are normalized over all nonempty sizes;
+their certified maximum probability bounds above size 120 are \(7.1\times10^{-29}\) and
+\(6.7\times10^{-26}\), so this support distinction cannot explain the result.
+
+The exact additive parent and multinomial are treated as ablations rather than external
+competitors. SHOPPER is excluded from this headline because its sequential posterior and
+ordering-marginalization protocol is not matched to these three direct-likelihood fits.
+
+## 7. Population basket-size certification
 
 The cheap q6 rule screened all 160,007 modeled contexts. It estimated observed/model mean
 sizes \(7.64925/7.59039\) and observed/model \(N\ge60\) rates
@@ -95,7 +167,7 @@ All four declared population gates pass. The mean absolute q6--q7 expected-size 
 does not pass. Safety is based on q7 confirmation and conservative coverage envelopes,
 not on pretending q6 is exact.
 
-## 6. Generation and counterfactuals
+## 8. Generation and counterfactuals
 
 Generation produced no unavailable products and no duplicate items. Minimum normalized
 SMC ESS was \(0.99938\), and the price audit showed the required monotone direction.
@@ -113,7 +185,7 @@ panel is deliberately balanced and has a different empirical context distributio
 does mean that segment-level rollout claims need a larger, distribution-weighted
 generation audit before deployment.
 
-## 7. Promotion-policy experiment
+## 9. Promotion-policy experiment
 
 The three-segment, 28-day budget-constrained environment reweights common factual SMC
 particles under 10% and 20% five-SKU discounts. It optimizes a paired 95% lower-confidence
@@ -127,7 +199,7 @@ on an arriving nonempty trip and does not contain visit probability, quantities,
 wholesale costs, inventory or causal treatment identification. Full details are in
 [SEGMENT_PROMOTION_MDP.md](SEGMENT_PROMOTION_MDP.md).
 
-## 8. Decision
+## 10. Decision
 
 The pipeline passes its declared technical likelihood, numerical and population-tail
 certification. It is the accepted implementation for continued research and controlled

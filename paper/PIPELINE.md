@@ -302,6 +302,21 @@ The final accepted artifact is `artifacts/candidate_rank1.pt`; the complete log 
 `artifacts/pipeline_household_rank1_full.log`. The immutable result record is
 [RANK1_PIPELINE_RESULTS.md](RANK1_PIPELINE_RESULTS.md).
 
+The post-fit interaction audit uses only the invariant Gram matrix. Its 2,000 strongest
+training-selected cross-affinity pairs have held-out configuration lift \(1.216\), versus
+\(0.998\) for training-frequency/household-support matched controls. This establishes
+aggregate predictive structure in the interaction kernel, not causal SKU-level
+complementarity; individual pairs still require held-out support and experimentation.
+
+The declared external comparison then trained Bernoulli, DPP and NDPP from independent
+fresh lineages to their convergence certificates. On the identical locked 4,096-trip test
+manifest, their scores were \(-48.316937\), \(-48.326534\), and \(-47.877142\) nats/basket.
+The main model's paired gains were respectively
+\(2.252042\pm0.098425\), \(2.261638\pm0.097672\), and
+\(1.812247\pm0.092393\) nats/basket. The exact additive parent and multinomial remain
+ablations; SHOPPER remains a separate sequential/posterior protocol rather than part of
+this three-model external headline.
+
 Passing the technical gates means the implementation is numerically usable for declared
 full-support likelihood and constrained model rollouts. It does not establish causal
 promotion effects, profit calibration, quantities, inventory transitions or visit

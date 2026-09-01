@@ -65,7 +65,8 @@ model derivation is in [`paper/THEORY.md`](paper/THEORY.md), and estimator detai
 The completed corrected-data fit and its fail-closed production decision are reported in
 [`paper/CORRECTED_PIPELINE_RESULTS.md`](paper/CORRECTED_PIPELINE_RESULTS.md).
 The completed rank-one successor, including its locked likelihood, recommendation,
-generation and population-certification results, is reported in
+generation, external-baseline, interaction-embedding and population-certification results,
+is reported in
 [`paper/RANK1_PIPELINE_RESULTS.md`](paper/RANK1_PIPELINE_RESULTS.md).
 The exact-enumeration interaction recovery benchmark and its real-data diagnosis are in
 [`paper/SYNTHETIC_INTERACTION_AUDIT.md`](paper/SYNTHETIC_INTERACTION_AUDIT.md).
@@ -85,6 +86,21 @@ q8 numerical-error upper bounds are \(0.000318\) and \(0.000468\) nats respectiv
 the positive likelihood gains are not quadrature artifacts. Locked test MRR is
 \(0.09525\pm0.00607\). The interaction-only MRR gain is positive but its 95% interval
 still crosses zero.
+
+The three declared external baselines were then trained from fresh lineages to their
+validation convergence certificates and scored on the identical locked 4,096-trip test
+manifest. The model gains \(2.25204\pm0.09842\) nats over Bernoulli,
+\(2.26164\pm0.09767\) over DPP, and \(1.81225\pm0.09239\) over NDPP. These are paired
+standard errors; all three likelihood advantages are statistically clear. Multinomial and
+the exact additive parent are retained as ablations, while SHOPPER is not included in this
+external headline because its posterior/sequential fitting protocol is not matched to the
+three direct-likelihood baselines.
+
+An orientation-invariant audit also finds held-out structure in the interaction kernel.
+The 2,000 strongest training-selected cross-affinity Gram pairs have 29,911 test
+co-incidences versus 24,589.4 under a frequency-and-size configuration null (lift 1.216),
+whereas matched controls have lift 0.998. This supports aggregate interaction information,
+not causal or uniformly reliable SKU-level complement claims.
 
 The former parent pipeline's localized extreme-basket failure is resolved: the complete
 160,007-context q6 screen and 2,048-context q7 confirmation find no context with majority
@@ -209,6 +225,8 @@ output is not statistically valid and must never be used for reporting results.
 | `reports/customer_segments.json` | segment structure, generation, and price response |
 | `reports/population_size.json` | full-population size/tail certification |
 | `reports/segment_promotion_mdp.json` | three-segment finite-horizon promotion policy and action-response audit |
+| `reports/interaction_embedding_audit.{json,md}` | invariant Gram scores, held-out co-incidence audit and complement candidates |
+| `reports/baselines_converged_bernoulli_dpp_ndpp.json` | locked paired external-baseline likelihood comparison and convergence certificates |
 
 The population audit checkpoints its screen under
 `reports/population_size.screen-<digest>.*`. An interruption resumes at the last durable
@@ -229,9 +247,37 @@ available product is ranked by its exact conditional add-one energy. `MRR` avera
 \(r\leq k\), otherwise zero. The normalizer cancels in this conditional ranking, so MRR
 does not use or tune the Smolyak level.
 
+## Inspecting learned complements
+
+The embedding columns may rotate without changing the model, so individual coordinates
+must not be named or interpreted. The invariant pair-specific coefficient is
+
+\[
+\gamma_{ij}=\phi_i^\top\phi_j-
+\rho_{c(i)}\mathbf 1\{c(i)=c(j)\}.
+\]
+
+The full energy cross-difference also contains the common size-curvature term
+\(-\Delta^2\rho_0(|T|)\); it does not change pair ordering at a fixed background size.
+
+Recreate the structural and held-out audit with:
+
+```bash
+python scripts/version4/audit_interaction_embeddings.py
+```
+
+Products are selected using the fitted training parameters only. Test baskets validate
+the selected panel against a configuration null and matched controls; test outcomes never
+select candidates. Positive scores are predictive complement hypotheses after the other
+energy terms are held fixed. They are not causal cross-price estimates, so promotion use
+still requires a randomized experiment.
+
 ## External baseline suite
 
-The repository includes independently trainable implementations of five basket models:
+The repository includes independently trainable implementations of five basket models.
+For the declared external comparison, Bernoulli, DPP and NDPP are competitors; the
+multinomial and exact additive laws are ablations, and SHOPPER remains available as a
+separate protocol comparison.
 
 | Baseline | Normalized basket law |
 |---|---|
@@ -257,16 +303,43 @@ checkpoint on the main model's locked test trips:
 
 ```bash
 python scripts/run_baselines.py --profile converged \
-  2>&1 | tee artifacts/baselines_converged.log
+  --models bernoulli,dpp,ndpp \
+  2>&1 | tee artifacts/baselines_external_converged.log
 ```
+
+The completed comparison is:
+
+| Model | Selected / terminal update | Test nats/basket | Main-model paired gain |
+|---|---:|---:|---:|
+| Version-4 rank-one | -- | \(-46.064895\) | -- |
+| Bernoulli | 52,000 / 56,000 | \(-48.316937\) | \(2.252042\pm0.098425\) |
+| DPP | 46,500 / 52,000 | \(-48.326534\) | \(2.261638\pm0.097672\) |
+| NDPP | 55,500 / 59,000 | \(-47.877142\) | \(1.812247\pm0.092393\) |
+
+All rows use manifest SHA-256
+`60e591ee6da37ad2e22a9e0ce1eb6896eac384158c5e7f96337bba465bb97caf`.
+DPP and NDPP place at most \(7.1\times10^{-29}\) and \(6.7\times10^{-26}\) probability
+above size 120 under their certified bounds, so their support difference is numerically
+irrelevant here. The Bernoulli utility receives the same observed contextual feature
+families but fresh parameters; it does not load the Version-4 checkpoint, Gram embedding,
+category coefficient, size potential, or household-size correction.
+
+The baseline implementation caches static store-assortment layouts and uses four CPU
+threads for these small rank/cardinality kernels. When the Bernoulli category cap is at
+least the global size cap, it evaluates
+\(\prod_j(1+w_jx)\) directly instead of redundantly multiplying category polynomials:
+\(\prod_c\prod_{j\in c}(1+w_jx)=\prod_j(1+w_jx)\). A unit test checks both likelihood and
+every parameter gradient against the category-factorized path. These are exact runtime
+refactors, not changes to a baseline objective.
 
 The 60,000-update setting is only a safety ceiling. Reaching it without satisfying the
 certificate exits nonzero and produces no test comparison. An interrupted fresh lineage
 can resume without resetting its optimizer, validation state, or random streams:
 
 ```bash
-python scripts/run_baselines.py --profile converged --resume-training \
-  2>&1 | tee -a artifacts/baselines_converged.log
+python scripts/run_baselines.py --profile converged \
+  --models bernoulli,dpp,ndpp --resume-training \
+  2>&1 | tee -a artifacts/baselines_external_converged.log
 ```
 
 The historical equal-update experiment remains reproducible with
@@ -276,7 +349,8 @@ The historical equal-update experiment remains reproducible with
 For a quick installation check, `--profile smoke` trains each model for two updates and
 scores only the first 16 locked trips. Its relaxed certificate exercises the control flow
 only and must not be reported as model quality. The converged comparison writes
-`reports/baselines_converged.json` plus `reports/baselines_converged_per_trip.npz`; the JSON
+`reports/baselines_converged_bernoulli_dpp_ndpp.json` plus its `_per_trip.npz` companion;
+the JSON
 records checkpoint hashes, selected and terminal iterations, convergence certificates,
 manifest hash, likelihoods, paired standard errors, and support diagnostics.
 

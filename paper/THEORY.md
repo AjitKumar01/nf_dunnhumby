@@ -252,7 +252,59 @@ is positive semidefinite. Thus the Gaussian interaction represents attractive lo
 structure. The explicit category term can represent structured repulsion that a real
 Gaussian Gram matrix cannot.
 
-### 4.1 Complete-support admissibility of the category coefficient
+### 4.1 Identified pair-specific complement coefficient
+
+The coordinates of an interaction vector are not individually identified. For every
+orthogonal matrix \(Q\), replacing \(\Phi\) by \(\Phi Q\) leaves
+
+\[
+(\Phi Q)(\Phi Q)^\top=\Phi\Phi^\top
+\tag{11a}
+\]
+
+and hence the complete basket law unchanged. Interpretation must therefore use the Gram
+matrix \(K=\Phi\Phi^\top\), not labels assigned to its axes.
+
+Let \(T\) be a background basket containing neither product \(i\) nor \(j\), and put
+\(t=|T|\). The exact energy cross-difference is
+
+\[
+\begin{aligned}
+\Delta_{ij}E(T;x)
+&=E(T\cup\{i,j\};x)-E(T\cup\{i\};x)
+-E(T\cup\{j\};x)+E(T;x)\\
+&=K_{ij}-\rho_{c(i)}\mathbf 1\{c(i)=c(j)\}
+-\Delta^2\rho_0(t),
+\end{aligned}
+\tag{11b}
+\]
+
+where
+
+\[
+\Delta^2\rho_0(t)=\rho_0(t+2)-2\rho_0(t+1)+\rho_0(t).
+\tag{11c}
+\]
+
+The last term is common to every candidate product pair at the same background size. The
+identified *pair-specific* coefficient is therefore
+
+\[
+\boxed{
+\gamma_{ij}=K_{ij}-\rho_{c(i)}\mathbf 1\{c(i)=c(j)\}
+=\phi_i^\top\phi_j-\rho_{c(i)}\mathbf 1\{c(i)=c(j)\}.
+}
+\tag{11d}
+\]
+
+For products in different affinity groups, \(K_{ij}>0\) is the model's direct complement
+coefficient. At fixed background size, it multiplies pair-specific conditional odds
+relative to the common size curvature by \(\exp(K_{ij})\). For products in the same group,
+the explicit category coefficient must be included; reporting \(K_{ij}\) alone would
+misstate the Version-4 law. This is a predictive association parameter. Neither a
+positive Gram entry nor observed co-incidence identifies a causal cross-price response.
+
+### 4.2 Complete-support admissibility of the category coefficient
 
 The affinity partition is an estimation device, not a claim that every pair in a broad
 group is equally complementary. Because the category statistic is quadratic, a weakly
@@ -263,7 +315,7 @@ Let
 
 \[
 m_c=\max_x\min\{|A_x\cap c|,n_{\max}\},
-\tag{11a}
+\tag{11e}
 \]
 
 where (A_x) is the offered assortment. The fitted parameter is restricted to
@@ -271,14 +323,14 @@ where (A_x) is the offered assortment. The fitted parameter is restricted to
 \[
 \boxed{(-\rho_c)_+{m_c\choose2}\le B},
 \qquad B=1.5\text{ nats in the declared pipeline}.
-\tag{11b}
+\tag{11f}
 \]
 
 Equivalently, for (m_c\ge2),
 
 \[
 \rho_c\ge -\frac{B}{{m_c\choose2}}.
-\tag{11c}
+\tag{11g}
 \]
 
 This is an optimization-domain constraint on the coefficient already present in Eq. (8). It
@@ -287,7 +339,7 @@ A two-item group retains the old lower bound \(-1.5\), whereas a 120-item group 
 bound \(-1.5/{120\choose2}\). Strong attraction therefore remains available for a small
 specific bundle, but cannot be extrapolated as a complete clique across a broad group.
 
-**Proposition 1 (category support bound).** Under Eq. (11b), category \(c\)'s attractive
+**Proposition 1 (category support bound).** Under Eq. (11f), category \(c\)'s attractive
 contribution to every supported basket is at most \(B\).
 
 **Proof.** For every supported \(S\), \(0\le n_c(S)\le m_c\), and

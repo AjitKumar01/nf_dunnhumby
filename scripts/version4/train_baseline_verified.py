@@ -211,6 +211,8 @@ def save(path, model, opt, sched, iteration, best, a, name, tr, va, te,
 
 def main(a):
     training_lock = acquire_training_lock(a.model, a.tag)
+    if a.threads > 0:
+        torch.set_num_threads(a.threads)
     torch.set_flush_denormal(True)
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(a.seed)
@@ -397,6 +399,8 @@ if __name__ == "__main__":
     p.add_argument("--eval-chunk", type=int, default=8)
     p.add_argument("--eval-initial", type=int, default=1,
                    help="score the raw/resumed checkpoint before any updates")
+    p.add_argument("--threads", type=int, default=0,
+                   help="PyTorch intra-op threads; zero keeps the runtime default")
     p.add_argument("--score-test", action="store_true",
                    help="diagnostic only; normal pipeline keeps test locked for final audit")
     p.add_argument("--seed", type=int, default=0)
