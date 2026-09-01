@@ -197,8 +197,10 @@ The candidate must pass:
 - SMC validity: no duplicates or unavailable products and adequate ESS;
 - monotone uniform-price counterfactual response;
 - segment-specific generation and price-response diagnostics;
+- an orientation-invariant Gram/complement audit on held-out baskets;
 - \(q=r+1\) screening over every supported training context and \(q=r+2\)
-  confirmation of the highest-risk size laws.
+  confirmation of the highest-risk size laws; and
+- after tail certification, the three-segment budget-constrained promotion-policy audit.
 
 The population gate rejects a candidate when its mean tail probability is incompatible
 with observed \(N\geq60\) frequency or when a context with observed size below 40 assigns

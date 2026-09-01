@@ -119,8 +119,10 @@ the old preprocessing are not treated as corrected-data comparisons.
 ## Requirements
 
 - Python 3.11 or newer
+- macOS or Linux (Windows users should use WSL)
 - a C++ compiler compatible with the active Python installation
 - about 12 GB free RAM for the full-population stages
+- at least 5 GB free disk in addition to the raw CSV bundle
 - dunnhumby *The Complete Journey* CSV files (not redistributed here)
 
 Install:
@@ -145,6 +147,10 @@ export NF_RAW_DIR="/absolute/path/to/dunnhumby_The-Complete-Journey CSV/"
 Derived files under `data/` and `basket_input/` are deliberately ignored by Git because
 the source-data license does not permit redistribution.
 
+The pipeline accepts the original release files only. Before training, the preprocessing
+audit checks their locked SHA-256 digests; a modified, partially extracted, or different
+release fails closed instead of silently producing a different cohort.
+
 The cohort is defined using training weeks 9--82 only: the top 5,455 products by training
 line frequency, followed by households with 20--300 training shopping days. Validation is
 weeks 83--90 and test is weeks 91--101. Weeks outside 9--101 are excluded because the
@@ -166,8 +172,39 @@ Print the exact command graph without training:
 python scripts/run_pipeline.py --from-raw --dry-run
 ```
 
-The dry run is the recommended first command after cloning. It verifies paths and shows
-every stage, fixed panel size, rank gate, quadrature level, and output location.
+The dry run is the recommended first command after cloning. Its preflight checks the
+Python version, required modules, compiler, raw input filenames, and—when the raw rebuild
+flag is omitted—the required derived files. It then shows every stage, fixed panel size,
+rank gate, quadrature level, and output location. It does not compile the extension, hash
+the raw files, or fit a model.
+
+## Fresh-clone integration check
+
+Use the smoke profile before committing a long full fit:
+
+~~~bash
+git clone --branch version4-household-size-rank1 --single-branch \
+  https://github.com/AjitKumar01/nf_dunnhumby.git
+cd nf_dunnhumby
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+export NF_RAW_DIR="/absolute/path/to/dunnhumby_The-Complete-Journey CSV/"
+pytest -q
+python scripts/run_pipeline.py --from-raw --profile smoke \
+  2>&1 | tee artifacts/pipeline_smoke.log
+~~~
+
+This exact clean-clone workflow was executed on 2026-09-01. It rebuilt the corrected
+5,455-product data from the three raw CSVs, passed the preprocessing audit, compiled the
+native extension, initialized a fresh model, and exercised additive fitting, rank
+selection, interaction and household-size fitting, likelihood, recommendation,
+counterfactual generation, customer segmentation, complement auditing, population-tail
+screening, and the promotion MDP. The smoke model is deliberately undertrained: its
+statistical certification may fail and its scores must not be reported as research
+results. A zero process exit means the software path completed, not that the smoke model
+passed production gates.
 
 ## Full end-to-end execution
 
@@ -204,10 +241,12 @@ python scripts/run_pipeline.py --stop-after rank
 python scripts/run_pipeline.py --stop-after evaluation
 ```
 
-`--profile smoke` uses tiny panels, fixes rank 4, and relaxes statistical fit gates solely
-to exercise every code path. It still writes the population-tail report but does not fail
-the integration test when that report rejects the deliberately undertrained model. Smoke
-output is not statistically valid and must never be used for reporting results.
+`--profile smoke` uses tiny panels, starts with a maximum basis rank of 4, and relaxes
+statistical fit gates solely to exercise every model-pipeline code path. The convex solve
+may reduce the active rank. Smoke still writes the population-tail and promotion-policy
+reports but does not fail the integration test when the tail report rejects the
+deliberately undertrained model. Smoke output is not statistically valid and must never be
+used for reporting results.
 
 ## Outputs and logs
 
@@ -238,6 +277,11 @@ the pipeline exit nonzero, while preserving the reports and candidate for diagno
 means the fitted law is not safe for production simulation; it is not an estimator crash.
 Only the smoke profile converts that statistical rejection into a successful integration
 exit, because smoke is deliberately too small to certify a model.
+
+The main command runs the complete Version-4 model fit and its declared evaluations.
+Converged external competitors are intentionally a second command because they are three
+additional long fits and are not required to obtain the model checkpoint. Run the
+external suite from the later section when reproducing the comparison table.
 
 ## Reading the recommendation metrics
 

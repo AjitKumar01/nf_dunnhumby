@@ -181,6 +181,7 @@ def pair_record(pair, position, metadata, observed, expected, lift, rho):
 
 def markdown(result):
     structure = result["structure"]
+    selection = result["selection"]
     heldout = result["heldout_cross_affinity_audit"]
     lines = [
         "# Interaction-embedding audit",
@@ -212,16 +213,19 @@ def markdown(result):
         f"{structure['products_for_cumulative_row_mass']['0.9']}/"
         f"{structure['products_for_cumulative_row_mass']['0.95']}/"
         f"{structure['products_for_cumulative_row_mass']['0.99']}.",
-        f"- Rank-5 split-half mean squared subspace overlap: "
-        f"{structure['rank5_split_half_overlap']:.6f}.",
+        f"- Rank-{structure['stability_rank']} split-half mean squared subspace overlap: "
+        f"{structure['split_half_overlap']:.6f}.",
         "",
-        "All five singular values are at the declared spectral cap. Pair ordering is",
-        "therefore useful for hypotheses, but magnitude saturation and moderate subspace",
-        "stability prevent product-level causal or high-confidence claims.",
+        (f"All {structure['active_rank']} active singular values are at the declared "
+         "spectral cap." if structure["spectral_cap_saturated"] else
+         "Not every active singular value is at the declared spectral cap."),
+        "Pair ordering is useful for hypotheses, but magnitude and subspace stability",
+        "must be retained when judging product-level claims.",
         "",
         "## Held-out aggregate check",
         "",
-        "The 2,000 strongest cross-affinity pairs were selected from training parameters",
+        f"The {selection['top_cross_affinity_pairs']:,} strongest cross-affinity pairs "
+        "were selected from training parameters",
         "only. Test co-incidence is compared with a configuration null preserving product",
         "frequency and the observed basket-size sequence, plus training-frequency/household-",
         "support matched control pairs.",
@@ -290,8 +294,19 @@ def main(args):
         heldout["observed"][:cut], heldout["expected"][:cut], heldout["lift"][:cut])
     control_summary = summarize_pair_panel(
         heldout["observed"][cut:], heldout["expected"][cut:], heldout["lift"][cut:])
-    spectral_path = ROOT / "artifacts/interaction_basis_rank8.json"
+    if args.spectral_report is not None:
+        spectral_path = (args.spectral_report if args.spectral_report.is_absolute()
+                         else ROOT / args.spectral_report)
+    else:
+        candidates = sorted((ROOT / "artifacts").glob("interaction_basis_rank*.json"))
+        if not candidates:
+            raise RuntimeError("no spectral report found; pass --spectral-report")
+        spectral_path = candidates[-1]
     spectral = json.loads(spectral_path.read_text())
+    stability_profiles = spectral["rank_stability"]
+    stability_rank = rank if str(rank) in stability_profiles else int(
+        spectral["selected_rank"])
+    stability = stability_profiles[str(stability_rank)]
     singular = np.linalg.svd(phi, compute_uv=False)
     row_mass = np.square(phi).sum(1)
     listed = min(args.listed_pairs, len(pairs))
@@ -332,11 +347,12 @@ def main(args):
             "active_singular_values": singular.tolist(),
             "row_norm_quantiles": quantiles(np.sqrt(row_mass)),
             "products_for_cumulative_row_mass": cumulative_mass_counts(row_mass),
-            "rank5_split_half_overlap": float(
-                spectral["rank_stability"][str(rank)][
-                    "split_half_mean_squared_subspace_overlap"]),
-            "rank5_split_half_cosines": spectral["rank_stability"][str(rank)][
-                "split_half_subspace_cosines"],
+            "spectral_report": str(spectral_path),
+            "stability_rank": stability_rank,
+            "stability_applies_exactly_to_active_rank": stability_rank == rank,
+            "split_half_overlap": float(
+                stability["split_half_mean_squared_subspace_overlap"]),
+            "split_half_cosines": stability["split_half_subspace_cosines"],
             "spectral_cap_saturated": bool(np.allclose(singular, 1.0, atol=1e-8)),
         },
         "selection": {
@@ -359,7 +375,8 @@ def main(args):
         "limitations": [
             "embedding axes are not identified; only Gram coefficients are interpreted",
             "spectral-cap saturation limits magnitude interpretation",
-            "rank-5 split-half stability supports the subspace only moderately",
+            (f"rank-{stability_rank} split-half stability is the relevant basis "
+             "diagnostic"),
             "configuration lift controls frequency and size, not every household/context covariate",
             "pair scores and held-out co-incidence are predictive, not causal cross-price effects",
         ],
@@ -384,6 +401,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path,
                         default=Path("artifacts/candidate_rank1.pt"))
+    parser.add_argument("--spectral-report", type=Path,
+                        help="rank-stability JSON used to construct the interaction basis")
     parser.add_argument("--minimum-training-lines", type=int, default=100)
     parser.add_argument("--pairs", type=int, default=2000)
     parser.add_argument("--listed-pairs", type=int, default=20)

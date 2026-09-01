@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +18,52 @@ PY = sys.executable
 V4 = ROOT / "scripts" / "version4"
 ART = ROOT / "artifacts"
 REPORT = ROOT / "reports"
+RAW_DEFAULT = (ROOT.parent / "dunnhumby_The-Complete-Journey" /
+               "dunnhumby_The-Complete-Journey CSV")
+
+
+def preflight(*, from_raw: bool, stop_after: str) -> None:
+    if sys.version_info < (3, 11):
+        raise SystemExit("Python 3.11 or newer is required")
+    modules = ("numpy", "pandas", "pyarrow", "scipy", "sklearn", "torch", "setuptools")
+    missing_modules = [name for name in modules
+                       if importlib.util.find_spec(name) is None]
+    if missing_modules:
+        raise SystemExit(
+            "missing Python dependencies: " + ", ".join(missing_modules)
+            + "; run python -m pip install -r requirements.txt")
+
+    raw = Path(os.environ.get("NF_RAW_DIR", RAW_DEFAULT)).expanduser()
+    missing_raw = [raw / name for name in (
+        "transaction_data.csv", "product.csv", "causal_data.csv")
+        if not (raw / name).is_file()]
+    if missing_raw:
+        raise SystemExit(
+            "raw dunnhumby input is incomplete; set NF_RAW_DIR to the directory "
+            "containing transaction_data.csv, product.csv and causal_data.csv; missing: "
+            + ", ".join(map(str, missing_raw)))
+
+    if not from_raw:
+        required = (
+            ROOT / "data" / "tx.parquet",
+            ROOT / "data" / "price_week.parquet",
+            ROOT / "data" / "price_store_week.parquet",
+            ROOT / "basket_input" / "meta.json",
+            ROOT / "basket_input" / "items.parquet",
+            ROOT / "basket_input" / "baskets.parquet",
+            ROOT / "basket_input" / "promo.npz",
+        )
+        missing_derived = [path for path in required if not path.is_file()]
+        if missing_derived:
+            raise SystemExit(
+                "derived data are incomplete; rerun with --from-raw; missing: "
+                + ", ".join(map(str, missing_derived)))
+
+    if stop_after != "data" and not any(
+            shutil.which(name) for name in ("c++", "clang++", "g++")):
+        raise SystemExit(
+            "no C++ compiler was found on PATH; install a compiler compatible with "
+            "the active Python/PyTorch environment")
 
 
 def command_text(command: list[str]) -> str:
@@ -96,6 +144,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.from_raw and args.resume_additive is not None:
         parser.error("--from-raw cannot be combined with --resume-additive")
+    preflight(from_raw=args.from_raw, stop_after=args.stop_after)
     ART.mkdir(exist_ok=True)
     REPORT.mkdir(exist_ok=True)
     (ROOT / "out").mkdir(exist_ok=True)
@@ -226,6 +275,13 @@ def main() -> None:
         "--particles", 32 if full else 4,
         "--output", REPORT / "customer_segments.json",
         "--assignments", ART / "customer_segments.npz"))
+    driver.run(script(
+        "audit_interaction_embeddings.py", "--checkpoint", candidate,
+        "--spectral-report", basis.with_suffix(".json"),
+        "--minimum-training-lines", 100 if full else 1,
+        "--pairs", 2000 if full else 32,
+        "--listed-pairs", 20 if full else 5,
+        "--output", REPORT / "interaction_embedding_audit.json"))
     if args.stop_after == "evaluation":
         return
 
@@ -238,6 +294,21 @@ def main() -> None:
         "--calibration-contexts", 2048 if full else 16,
         "--chunk", 48 if full else 8,
         "--output", REPORT / "population_size.json"), allow_failure=not full)
+    driver.run(script(
+        "run_segment_pricing_mdp.py", "--checkpoint", candidate,
+        "--assignments", ART / "customer_segments.npz",
+        "--segment-report", REPORT / "customer_segments.json",
+        "--contexts-per-segment", 64 if full else 2,
+        "--particles", 32 if full else 4,
+        "--levels", 17 if full else 5,
+        "--context-chunk", 8 if full else 2,
+        "--threads", 8 if full else 4,
+        "--bundles-per-segment", 3 if full else 1,
+        "--products-per-bundle", 5 if full else 3,
+        "--horizon-days", 28 if full else 7,
+        "--budget-bins", 4000 if full else 200,
+        "--minimum-budget-utilization", 0.95 if full else 0.90,
+        "--output", REPORT / "segment_promotion_mdp.json"))
     if args.dry_run:
         print("[pipeline] dry run complete; no stage was executed")
     elif full:
