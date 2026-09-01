@@ -80,6 +80,27 @@ The complete downstream theory—exact conditional draws, interaction-tempered S
 normalizer and consistency guarantees, Rao--Blackwell incidences, recommendation,
 counterfactual reweighting, segmentation, calibration, quantity boundaries and the MDP—is
 in [`paper/INFERENCE_AND_SIMULATION.md`](paper/INFERENCE_AND_SIMULATION.md).
+The complete small-retailer synthetic experiment—explicit no-purchase opportunities,
+exact basket enumeration, randomized promotions, quantities, costs, counterfactuals and
+oracle policy regret—is in
+[`paper/SYNTHETIC_RETAILER_EXPERIMENT.md`](paper/SYNTHETIC_RETAILER_EXPERIMENT.md).
+
+## Synthetic retailer demonstration
+
+The synthetic driver needs no dunnhumby files. It runs an exact no-interaction control,
+a well-specified complete retailer and a deliberately misspecified retailer:
+
+```bash
+python scripts/run_synthetic_experiment.py --profile full --threads 8 \
+  2>&1 | tee artifacts/synthetic_experiment_full.log
+```
+
+The experiment contains explicit customer-day no-purchase outcomes, randomized logged
+offers, store choice, the Version-4 basket law, shifted-negative-binomial quantities,
+costs and a 28-day promotion budget. Every one of the 60,459 supported baskets in the
+20-product retailer worlds is enumerated, so their likelihood and basket counterfactuals
+have no numerical-integration error. Synthetic results validate recovery under declared
+truth; they do not replace real held-out evaluation or randomized commercial trials.
 
 ## Current empirical status
 
