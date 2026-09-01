@@ -309,13 +309,141 @@ well-specified world are visible rather than hidden.
 
 ---
 
-## 6. Time and memory complexity
+## 6. Cross-world results and statistical interpretation
+
+The table below separates recovery under the fitted family from robustness when the
+truth contains omitted structure.
+
+| Quantity | Well-specified | Misspecified | Interpretation |
+|---|---:|---:|---|
+| Opportunities | 43,200 | 43,200 | Identical observation budget |
+| Test trips | 895 | 830 | Purchase incidence differs through the simulated truth |
+| Interaction gain (nats/trip) | $0.23210\pm0.02794$ | $0.11631\pm0.01968$ | Positive paired held-out gain in both worlds |
+| Lower endpoint of 95% interval | 0.17734 | 0.07773 | Neither gain is explained by test-trip variation alone |
+| Gram-kernel correlation | 0.9764 | 0.9313 | Pairwise interaction geometry remains recoverable |
+| Interaction MRR | 0.3379 | 0.3490 | Recommendation is conditional and is not directly comparable across worlds |
+| Interaction minus additive MRR | 0.01677 | 0.01244 | Interactions improve hidden-item ranking |
+| Generation size TV | 0.03464 | 0.07108 | Omitted structure visibly worsens generation |
+| Counterfactual size MAE | 0.02801 | 0.01494 | Aggregate size can remain accurate despite local misspecification |
+| Policy fraction of oracle value | 0.9011 | 0.7857 | Policy is more sensitive than predictive averages |
+
+The likelihood uncertainty is paired. If $S_i$ is locked test basket $i$, define
+
+\[
+D_i=\log p_{\mathrm{int}}(S_i\mid x_i)
+-\log p_{\mathrm{add}}(S_i\mid x_i).
+\tag{SR.12}
+\]
+
+The reported standard error is
+
+\[
+\operatorname{se}(\bar D)
+=\frac{\operatorname{sd}(D_1,\ldots,D_m)}{\sqrt m}.
+\tag{SR.13}
+\]
+
+This is more informative than subtracting two independent marginal standard errors,
+because both models score exactly the same test baskets. In the well-specified world the
+95% interval is $[0.17734,0.28685]$ nats/trip; in the misspecified world it is
+$[0.07773,0.15490]$. The interaction improvement is therefore statistically resolved in
+both experiments. The exact zero-interaction controls in Section 3 are the complementary
+specificity check: when the data-generating kernel is zero, the more flexible model does
+not obtain a positive held-out gain.
+
+The kernel comparison uses $K=\Phi\Phi^\top$, not the coordinates of $\Phi$. This is
+necessary because replacing $\Phi$ by $\Phi R$ for any orthogonal matrix $R$ leaves all
+basket energies unchanged. A coordinate-wise embedding correlation would incorrectly
+penalize an equivalent rotation; the Gram correlation measures the identifiable object.
+
+The recommendation result answers a narrower question than likelihood. For every test
+basket one product is hidden and all eligible products are ranked by their conditional
+add-one energy. The partition function cancels in this ranking. Consequently, higher MRR
+shows that the learned interaction geometry helps conditional completion, while the
+likelihood result additionally certifies normalized probability over the complete
+basket support.
+
+Generation is evaluated on the same held-out contexts rather than by drawing arbitrary
+segments or prices. The total-variation and Jensen--Shannon statistics compare the full
+empirical and generated basket-size distributions; item-incidence RMSE compares all 20
+marginal product probabilities. These are distributional checks, not just visual samples.
+
+## 7. Why policy-value calibration remains a separate problem
+
+The policy layer consumes several learned objects at once. For segment $g$ and action
+$a$, its one-opportunity value estimate is
+
+\[
+\widehat V(g,a)
+=\widehat v(g,a)
+\sum_j \widehat\pi_j(g,a)
+\widehat q_j(g,a)\,[p_j(a)-c_j],
+\tag{SR.14}
+\]
+
+where $\hat v$ is purchase-arrival probability, $\hat\pi_j$ is basket incidence and
+$\hat q_j$ is expected purchased quantity. Small errors in these three factors can align
+and become a much larger error in incremental profit
+
+\[
+\widehat\Delta V(g,a)=\widehat V(g,a)-\widehat V(g,0).
+\tag{SR.15}
+\]
+
+Subtraction makes the problem harder: the incremental signal can be much smaller than
+either absolute value. Maximization then introduces a winner's-curse effect because the
+budget solver deliberately selects actions with the largest estimated gains.
+
+The observed calibration evidence is:
+
+| Policy quantity | Well-specified | Misspecified |
+|---|---:|---:|
+| Estimated value of selected policy | 398.697 | 411.460 |
+| Oracle value of selected policy | 160.389 | 140.094 |
+| Oracle-optimal value | 177.985 | 178.306 |
+| Optimism factor, estimate / realized | 2.486 | 2.937 |
+| Action-value correlation | 0.519 | 0.448 |
+| Action-value MAE | 6.062 | 4.610 |
+| Oracle regret | 17.596 | 38.212 |
+| Budget violation | 0 | 0 |
+
+Thus two statements coexist:
+
+1. the selected policy has positive oracle value and respects the budget; and
+2. its own numerical profit forecast is not calibrated.
+
+The second problem is **not automatically solved by PPO, SAC or another policy optimizer**.
+Those algorithms optimize rewards supplied by an environment. If the learned environment
+overstates a promotion effect, a more powerful optimizer can exploit that error more
+aggressively. In the present experiment the state transition is deliberately simple and
+daily rewards are conditionally independent apart from the remaining budget. The finite
+dynamic program therefore solves the declared optimization problem exactly; replacing it
+with PPO or SAC would add approximation error without repairing the value model.
+
+RL becomes appropriate after the retailer model contains genuine sequential state, for
+example inventory depletion, promotion carryover, changing customer recency, stockouts,
+competitor response or long-run retention. Even then, causal value calibration remains a
+prerequisite. The appropriate development order is:
+
+1. estimate action effects from logged randomized propensities;
+2. use held-out inverse-propensity or doubly robust policy-value estimates;
+3. propagate uncertainty and optimize a lower confidence bound rather than a raw mean;
+4. validate the shortlisted policy in a controlled retailer experiment; and
+5. introduce constrained offline RL or model-based control only when sequential effects
+   are present and identifiable.
+
+For this synthetic audit, oracle regret is therefore the decision-quality metric and the
+uncalibrated point estimate is reported as a diagnostic. For real deployment, a policy
+must not be advertised with a monetary return until randomized or otherwise causally
+identified data calibrates that return.
+
+## 8. Time and memory complexity
 
 Let
 
 \[
 M=\sum_{n=1}^{n_{\max}}{J\choose n}
-\tag{SR.12}
+\tag{SR.16}
 \]
 
 be the enumerated support and $K=GA$ the segment-action contexts. One exact basket
@@ -323,7 +451,7 @@ likelihood evaluation costs
 
 \[
 O\!\left(MJ(K+r)\right),
-\tag{SR.13}
+\tag{SR.17}
 \]
 
 with storage $O(MJ+KM)$. For $J=20$, $n_{\max}=6$, $M=60{,}459$ and $K=21$, so exact
@@ -336,7 +464,12 @@ rerun in continuous integration or a stakeholder demonstration.
 
 ---
 
-## 7. Reproduction
+## 9. Independent synthetic pipeline and reproduction
+
+The synthetic pipeline is intentionally independent of `scripts/run_pipeline.py`. It
+does not read raw dunnhumby data, load a production checkpoint, reuse a real-data split or
+write into the real pipeline's checkpoint lineage. Its seeds, support, actions, splits and
+output reports are declared by `scripts/run_synthetic_experiment.py`.
 
 Run the complete experiment:
 
@@ -366,7 +499,7 @@ The source entry points are:
 
 ---
 
-## 8. Decision
+## 10. Decision
 
 The experiment establishes that the application can, under observed opportunities and
 randomized offers:
