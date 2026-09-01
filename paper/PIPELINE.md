@@ -325,3 +325,6 @@ promotion effects, profit calibration, quantities, inventory transitions or visi
 response. The finite-horizon promotion environment in
 [SEGMENT_PROMOTION_MDP.md](SEGMENT_PROMOTION_MDP.md) is therefore an experiment-design
 tool, not an autonomous pricing system.
+The exact conditional sampler, positive SMC bridge, counterfactual identity,
+Rao--Blackwell incidence estimator, segmentation geometry and restricted Bellman problem
+are derived in [INFERENCE_AND_SIMULATION.md](INFERENCE_AND_SIMULATION.md).

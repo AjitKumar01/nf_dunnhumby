@@ -11,6 +11,11 @@ The current experiment uses a 28-day horizon and the three locked customer segme
 The action design is based only on training outcomes. Held-out test contexts are used to
 estimate action response.
 
+The underlying sampling, counterfactual density-ratio, segment-distance,
+Bellman-optimality and budget-rounding propositions are derived in
+[INFERENCE_AND_SIMULATION.md](INFERENCE_AND_SIMULATION.md). This document specializes
+those results to the measured three-segment experiment.
+
 ## 2. State and action spaces
 
 The state on promotion day \(t\) is

@@ -1,7 +1,7 @@
 # Version-4 basket model: end-to-end theory for review
 
 Status: **current theory and empirical contract**
-Date: 2026-08-31
+Date: 2026-09-01
 
 The foundational basket law is the one stated in [model.html](model.html) and
 [version4.html](version4.html). The HTML files also contain historical empirical material,
@@ -1388,6 +1388,12 @@ monotone function of joint likelihood.
 
 ## 19. Basket generation
 
+This section gives the generating-law decomposition. The sampler actually used by the
+pipeline—interaction tempering, exact conditional category/cardinality draws, positive
+SMC resampling, Hubbard--Stratonovich blocked mutation, finite-particle guarantees,
+counterfactual reweighting and diagnostics—is derived in
+[INFERENCE_AND_SIMULATION.md](INFERENCE_AND_SIMULATION.md).
+
 The augmented latent density corresponding to (18) is
 
 \[
@@ -1449,6 +1455,10 @@ Steps 1--4 after \(z\) are exact and retain complete declared support.
 
 ### 19.1 The outer \(z\) draw is a separate numerical problem
 
+Step 4 belongs to the complete theoretical factorization. The selected fresh pipeline
+currently fits and certifies Steps 1--3 only; its quantity parameters are not trained or
+authorized for unit-sales claims.
+
 Signed Smolyak weights do not define a probability distribution and must never be treated
 as posterior resampling probabilities. Importance resampling for (73) is asymptotically
 exact as proposal count grows, but finite-sample correctness depends on global mode
@@ -1462,6 +1472,10 @@ Consequently:
 - MCMC targeting (73) is valid only with convergence diagnostics; and
 - generated size, incidence, pair, category and tail moments must be compared with the
   model moments and held-out data.
+
+The selected implementation satisfies the positivity requirement by starting from exact
+draws at the no-Gram bridge and moving to the full interaction law with positive-weight
+SMC. It never interprets signed Smolyak nodes as sampling probabilities.
 
 ---
 

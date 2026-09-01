@@ -543,8 +543,11 @@ rejuvenation kernels, the normalizer estimator is unbiased under the standard SM
 construction, and a central-limit error decreases as \(O(N^{-1/2})\) for fixed bridge
 schedule under regularity. Adaptive temperatures control local weight variance. The price
 is \(K\) transitions per context and a mixing problem in basket space. This is slower but
-more robust to multiple modes than a single local quadrature. It is a reference/fallback
-candidate, not yet a demonstrated fast trainer.
+more robust to multiple modes than a single local quadrature. It is the implemented
+positive basket generator and scalar-normalizer fallback, not the selected likelihood
+trainer. Its exact H--S conditionals, reverse dynamic program, unbiased-normalizer result
+and finite-particle limitations are proved in
+[INFERENCE_AND_SIMULATION.md](INFERENCE_AND_SIMULATION.md).
 
 ### 8.4 Tempered MCMC negative phases
 

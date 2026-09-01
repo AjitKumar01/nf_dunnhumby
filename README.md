@@ -76,6 +76,10 @@ and unchanged sampling recursion are derived in
 The finite-horizon, budget-constrained three-segment promotion environment and its
 limitations are documented in
 [`paper/SEGMENT_PROMOTION_MDP.md`](paper/SEGMENT_PROMOTION_MDP.md).
+The complete downstream theory—exact conditional draws, interaction-tempered SMC,
+normalizer and consistency guarantees, Rao--Blackwell incidences, recommendation,
+counterfactual reweighting, segmentation, calibration, quantity boundaries and the MDP—is
+in [`paper/INFERENCE_AND_SIMULATION.md`](paper/INFERENCE_AND_SIMULATION.md).
 
 ## Current empirical status
 
